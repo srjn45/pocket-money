@@ -1,0 +1,77 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Ignored default folder with query files
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, e.g. out.out
+*.out
+
+# Dependency directories (only if you aren't using Go Modules)
+# vendor/
+
+# Dependencies
+node_modules/
+**/node_modules/
+.npm
+*.log
+
+# Build outputs
+dist/
+build/
+out/
+
+# Dependency directories
+jspm_packages/
+
+# Expo
+.expo/
+.expo-shared/
+web-build/
+
+# React Native / Android / iOS
+android/
+ios/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Native build artifacts
+*.apk
+*.aab
+*.app
+*.ipa
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OSX
+.DS_Store
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# JetBrains (GoLand/WebStorm)
+.idea/

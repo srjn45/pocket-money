@@ -1,17 +1,78 @@
 # Pocket Money
 
-Pocket Money is an MVP product that lets families or small groups track chores, assign monetary values to them, record who completed which chores (ledger), approve or reject entries, and record cash settlements—all from a single app that runs on Android, iOS, and Web. The backend runs on a home/LAN server; all clients connect to it over the network.
+A family-oriented chore tracking and pocket money management app.
 
-## Licensing
+## Overview
 
-This project is **dual-licensed**:
+Pocket Money helps families track chores completed by children and manage their earnings. Parents (heads) can:
+- Create groups for their family
+- Define chores with monetary values
+- Review and approve completed chores
+- Record cash payouts (settlements)
 
-- **Non-commercial use is free.** You may use, modify, and distribute the software for personal use, hobby projects, education, charities, and other non-commercial purposes under the [PolyForm Noncommercial License 1.0.0](LICENSE). See [LICENSE](LICENSE) for full terms.
+Children (members) can:
+- Log completed chores
+- View their earnings balance
+- Track their settlement history
 
-- **Commercial or production use requires a paid license.** If you want to use Pocket Money in a for-profit product, in production for a business, or as part of a paid offering, you need a commercial license from the copyright holder. See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) for details and how to obtain one.
+## Project Structure
 
-## Documentation
+This is a monorepo containing:
 
-- [Product Requirements (PRD)](docs/prd.md)
-- [Technical Plan](docs/plan.md)
-- [RFC](docs/rfc.md)
+```
+pocket-money/
+├── backend/           # Go API server
+│   ├── cmd/server/   # Main entry point
+│   ├── internal/     # Application code
+│   ├── migrations/   # Database migrations
+│   └── README.md     # Backend documentation
+├── app/              # React Native (Expo) app
+│   ├── app/          # Screens and routes
+│   ├── src/          # Shared code
+│   └── README.md     # App documentation
+└── docs/             # Project documentation
+```
+
+## Quick Start
+
+### Backend
+
+```bash
+cd backend
+
+# Set environment variables
+export DATABASE_URL="postgres://user:pass@localhost:5432/pocket_money"
+export JWT_SECRET="your-secret"
+
+# Run the server
+make run
+```
+
+### Mobile App
+
+```bash
+cd app
+
+# Install dependencies
+npm install
+
+# Set API URL (use your server's LAN IP)
+export EXPO_PUBLIC_API_URL="http://192.168.1.x:8080/api/v1"
+
+# Start Expo
+npm start
+```
+
+## Tech Stack
+
+- **Backend**: Go, Gin, PostgreSQL, golang-migrate
+- **Mobile**: React Native, Expo, TypeScript, expo-router
+- **Auth**: JWT bearer tokens
+
+## License
+
+This project uses dual licensing:
+- **Non-commercial use**: [PolyForm Noncommercial License 1.0.0](LICENSE)
+- **Commercial use**: Contact the copyright holder for a commercial license
+
+See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) for details.

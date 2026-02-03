@@ -1,0 +1,29 @@
+# Project Tech Stack
+- Frontend: React Native (Expo SDK), TypeScript, Expo Router, Lucide React Native.
+- Backend: Go (Golang), Gin or Echo framework, GORM or pgx.
+- Database: PostgreSQL.
+- State Management: React Query (TanStack) for server state, Zustand for local state.
+
+# Coding Standards - Frontend (React Native & Expo)
+- Use functional components with TypeScript interfaces for props.
+- Navigation: Use Expo Router (file-based routing) exclusively.
+- Styling: Use StyleSheet.create or Tailwind (NativeWind) if installed; ensure safe-area-context is respected.
+- Optimization: Use `expo-image` for high-performance images and `React.memo` for list items.
+- Always prefer Expo SDK modules (e.g., expo-location, expo-secure-store) over generic RN libraries.
+
+# Coding Standards - Backend (Go)
+- Architecture: Use a clean "Handlers/Services/Repositories" or "Controller/Model" structure.
+- Error Handling: Handle errors at every step; return clear JSON error responses with proper HTTP status codes.
+- Concurrency: Use goroutines and channels only where necessary for performance; ensure context (ctx) is passed.
+- Database: Use prepared statements or an ORM (GORM) with snake_case for DB columns and PascalCase for Go structs.
+- API Design: Follow RESTful principles; use JSON for all request/response bodies.
+
+# Full-Stack Integration
+- Base URL: Use environment variables for the API Base URL (never hardcode).
+- Type Safety: Ensure Go structs match the TypeScript interfaces used in the frontend.
+- Dates: Use RFC3339 (ISO 8601) format for all date-time exchanges.
+
+# Developer Guidelines
+- Before writing code, briefly explain the logic or structure change.
+- Prioritize "Live Soon" by choosing simpler, robust solutions over complex over-engineered patterns.
+- Keep the terminal active: Ask to run `go run main.go` or `npx expo start` to verify changes.
