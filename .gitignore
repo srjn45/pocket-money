@@ -19,8 +19,11 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, e.g. out.out
+# Output of the go coverage tool
 *.out
+coverage.out
+coverage.html
+*.coverprofile
 
 # Dependency directories (only if you aren't using Go Modules)
 # vendor/
@@ -35,6 +38,7 @@ node_modules/
 dist/
 build/
 out/
+backend/bin/
 
 # Dependency directories
 jspm_packages/

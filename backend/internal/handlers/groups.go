@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
 	"github.com/srjn45/pocket-money/backend/internal/auth"
 	"github.com/srjn45/pocket-money/backend/internal/db"
 	"github.com/srjn45/pocket-money/backend/internal/models"

@@ -10,11 +10,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/srjn45/pocket-money/backend/internal/db"
 	"github.com/srjn45/pocket-money/backend/internal/handlers"
 	"github.com/srjn45/pocket-money/backend/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func setupAuthTestRouter(t *testing.T) (*gin.Engine, func()) {
@@ -25,13 +26,17 @@ func setupAuthTestRouter(t *testing.T) (*gin.Engine, func()) {
 		t.Skipf("Skipping test: could not connect to test database: %v", err)
 	}
 
+	// Full reset to ensure clean state (drops schema + data)
+	_ = testutil.ResetTestDB(pool)
+
 	// Run migrations
 	dbURL := testutil.GetTestDatabaseURL()
 	err = db.RunMigrations(dbURL)
 	require.NoError(t, err)
 
 	userRepo := db.NewUserRepo(pool)
-	authHandler := handlers.NewAuthHandler(userRepo)
+	jwtSecret := "test-jwt-secret-for-integration-tests"
+	authHandler := handlers.NewAuthHandler(userRepo, jwtSecret)
 
 	router := gin.New()
 	router.POST("/api/v1/auth/register", authHandler.Register)

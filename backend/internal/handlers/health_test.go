@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/srjn45/pocket-money/backend/internal/handlers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/srjn45/pocket-money/backend/internal/handlers"
 )
 
 func setupTestRouter() *gin.Engine {

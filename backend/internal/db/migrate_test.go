@@ -6,10 +6,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/srjn45/pocket-money/backend/internal/db"
-	"github.com/srjn45/pocket-money/backend/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/srjn45/pocket-money/backend/internal/db"
+	"github.com/srjn45/pocket-money/backend/testutil"
 )
 
 func TestMigrations_UpAndDown(t *testing.T) {

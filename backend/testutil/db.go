@@ -54,12 +54,39 @@ func NewTestPool() (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// CleanupTestDB cleans up all tables in the test database
+// CleanupTestDB cleans up all data in the test database (truncates tables)
 func CleanupTestDB(pool *pgxpool.Pool) error {
+	ctx := context.Background()
+
+	// Truncate all tables in reverse order of dependencies (preserves schema)
+	tables := []string{
+		"invite_tokens",
+		"settlements",
+		"ledger_entries",
+		"chores",
+		"group_members",
+		"groups",
+		"users",
+	}
+
+	for _, table := range tables {
+		_, err := pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table))
+		if err != nil {
+			// Table might not exist yet, that's OK
+			continue
+		}
+	}
+
+	return nil
+}
+
+// ResetTestDB drops all tables and types in the test database (full reset)
+func ResetTestDB(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 
 	// Drop all tables in reverse order of dependencies
 	tables := []string{
+		"schema_migrations",
 		"invite_tokens",
 		"settlements",
 		"ledger_entries",

@@ -82,5 +82,9 @@ func GetUserID(c *gin.Context) (string, bool) {
 	if !exists {
 		return "", false
 	}
-	return userID.(string), true
+	userIDStr, ok := userID.(string)
+	if !ok {
+		return "", false
+	}
+	return userIDStr, true
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/srjn45/pocket-money/backend/internal/auth"
 	"github.com/srjn45/pocket-money/backend/internal/config"
 	"github.com/srjn45/pocket-money/backend/internal/db"

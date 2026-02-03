@@ -1,0 +1,52 @@
+run:
+  timeout: 5m
+  go: "1.24"
+  tests: true
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Examine Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # State of the art linter
+    - unused        # Check for unused code
+    - gofmt         # Check formatting
+    - goimports     # Check imports
+    - misspell      # Find misspelled words
+    - bodyclose     # Check HTTP response body is closed
+    - nilerr        # Find returning nil after checking err != nil
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/srjn45/pocket-money
+  
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+    # Ignore certain functions
+    exclude-functions:
+      - (io.Closer).Close
+      - (*github.com/golang-migrate/migrate/v4.Migrate).Close
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Struct field alignment optimization - not critical
+      - shadow          # Variable shadowing - too strict for Gin handlers
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 50
+  max-same-issues: 3
+  
+  exclude-rules:
+    # Ignore certain linters in test files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - bodyclose
+    # Ignore goimports for files with standard library grouping
+    - path: internal/db/
+      linters:
+        - goimports

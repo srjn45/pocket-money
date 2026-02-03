@@ -1,0 +1,48 @@
+services:
+  # PostgreSQL database for development
+  postgres:
+    image: postgres:15-alpine
+    container_name: pocket_money_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: pocket
+      POSTGRES_PASSWORD: pocket
+      POSTGRES_DB: pocket_money
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pocket -d pocket_money"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pocket_network
+
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pocket_money_backend
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://pocket:pocket@postgres:5432/pocket_money?sslmode=disable
+      JWT_SECRET: dev-secret-key-change-in-production
+      PORT: "8080"
+      CORS_ORIGINS: "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pocket_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  pocket_network:
+    driver: bridge
