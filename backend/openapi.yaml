@@ -1,0 +1,1546 @@
+openapi: 3.0.3
+info:
+  title: Pocket Money API
+  description: Backend API for managing chores, ledger entries, and settlements in family groups
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.pocket-money.example.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Auth
+    description: Authentication and user management
+  - name: Groups
+    description: Group management and membership
+  - name: Chores
+    description: Chore management
+  - name: Ledger
+    description: Ledger entries and balance tracking
+  - name: Settlements
+    description: Settlement management
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the API
+      operationId: health
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      description: Creates a new user account
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Bad request (validation error or email already exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login user
+      description: Authenticates a user and returns a JWT token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user
+      description: Returns the currently authenticated user's information
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups:
+    get:
+      tags:
+        - Groups
+      summary: List user's groups
+      description: Returns all groups the authenticated user is a member of
+      operationId: listGroups
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Groups
+      summary: Create a new group
+      description: Creates a new group with the authenticated user as head
+      operationId: createGroup
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupResponse'
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}:
+    get:
+      tags:
+        - Groups
+      summary: Get group details
+      description: Returns detailed information about a group including members and chores count
+      operationId: getGroup
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Group details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetailResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/members:
+    get:
+      tags:
+        - Groups
+      summary: List group members
+      description: Returns all members of a group
+      operationId: listMembers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/invite:
+    post:
+      tags:
+        - Groups
+      summary: Create group invite
+      description: Creates an invite token for joining the group (head only)
+      operationId: createInvite
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteRequest'
+      responses:
+        '201':
+          description: Invite created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can create invites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/join:
+    post:
+      tags:
+        - Groups
+      summary: Join group
+      description: Joins a group using an invite token
+      operationId: joinGroup
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinRequest'
+      responses:
+        '200':
+          description: Successfully joined group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupResponse'
+        '400':
+          description: Invalid token, token expired, or already a member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/chores:
+    get:
+      tags:
+        - Chores
+      summary: List chores
+      description: Returns all chores for a group
+      operationId: listChores
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of chores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChoreResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Chores
+      summary: Create chore
+      description: Creates a new chore for the group (head only)
+      operationId: createChore
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChoreRequest'
+      responses:
+        '201':
+          description: Chore created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChoreResponse'
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can create chores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/chores/{id}:
+    patch:
+      tags:
+        - Chores
+      summary: Update chore
+      description: Updates a chore (head only)
+      operationId: updateChore
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Chore ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateChoreRequest'
+      responses:
+        '200':
+          description: Chore updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChoreResponse'
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can update chores or cannot modify system chore
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Chore not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Chores
+      summary: Delete chore
+      description: Soft deletes a chore (head only)
+      operationId: deleteChore
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Chore ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Chore deleted successfully
+        '400':
+          description: Invalid chore ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can delete chores or cannot delete system chore
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Chore not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/ledger:
+    get:
+      tags:
+        - Ledger
+      summary: List ledger entries
+      description: Returns ledger entries for a group. Members see only their entries, head sees all.
+      operationId: listLedger
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          description: Filter by status
+          schema:
+            type: string
+            enum: [approved, pending_approval, rejected]
+        - name: user_id
+          in: query
+          required: false
+          description: Filter by user ID (head only)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerResponse'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Ledger
+      summary: Create ledger entry
+      description: Creates a new ledger entry. Members create pending entries for themselves, head can create approved entries for any member.
+      operationId: createLedger
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLedgerRequest'
+      responses:
+        '201':
+          description: Ledger entry created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerResponse'
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Permission denied (e.g., only head can create settlement entries)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ledger/{id}/approve:
+    post:
+      tags:
+        - Ledger
+      summary: Approve ledger entry
+      description: Approves a pending ledger entry (head only)
+      operationId: approveLedger
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Ledger entry ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerResponse'
+        '400':
+          description: Entry is not pending approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can approve entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ledger/{id}/reject:
+    post:
+      tags:
+        - Ledger
+      summary: Reject ledger entry
+      description: Rejects a pending ledger entry (head only)
+      operationId: rejectLedger
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Ledger entry ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerResponse'
+        '400':
+          description: Entry is not pending approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can reject entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/pending:
+    get:
+      tags:
+        - Ledger
+      summary: List pending entries
+      description: Returns all pending ledger entries for a group (head only)
+      operationId: listPending
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of pending entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can view pending entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/balance:
+    get:
+      tags:
+        - Ledger
+      summary: Get group balances
+      description: Returns balance for each member in the group
+      operationId: getBalance
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of member balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BalanceResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/settlements:
+    get:
+      tags:
+        - Settlements
+      summary: List settlements
+      description: Returns all settlements for a group
+      operationId: listSettlements
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of settlements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SettlementResponse'
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Settlements
+      summary: Create settlement
+      description: Creates a new settlement record (head only)
+      operationId: createSettlement
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSettlementRequest'
+      responses:
+        '201':
+          description: Settlement created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+        '400':
+          description: Bad request (validation error or invalid date format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only group head can create settlements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login endpoint
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+      required:
+        - error
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+        password:
+          type: string
+          minLength: 6
+          description: User's password (minimum 6 characters)
+        name:
+          type: string
+          description: User's full name
+        dob:
+          type: string
+          format: date
+          nullable: true
+          description: Date of birth (YYYY-MM-DD)
+        sex:
+          type: string
+          nullable: true
+          description: User's sex
+      required:
+        - email
+        - password
+        - name
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+        password:
+          type: string
+          description: User's password
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT authentication token
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      required:
+        - token
+        - user
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        email:
+          type: string
+          format: email
+          description: User's email address
+        name:
+          type: string
+          description: User's full name
+        dob:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date of birth
+        sex:
+          type: string
+          nullable: true
+          description: User's sex
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+      required:
+        - id
+        - email
+        - name
+        - created_at
+
+    CreateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Group name
+      required:
+        - name
+
+    GroupResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Group ID
+        name:
+          type: string
+          description: Group name
+        head_user_id:
+          type: string
+          format: uuid
+          description: ID of the group head (admin)
+        created_at:
+          type: string
+          format: date-time
+          description: Group creation timestamp
+      required:
+        - id
+        - name
+        - head_user_id
+        - created_at
+
+    GroupDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Group ID
+        name:
+          type: string
+          description: Group name
+        head_user_id:
+          type: string
+          format: uuid
+          description: ID of the group head (admin)
+        created_at:
+          type: string
+          format: date-time
+          description: Group creation timestamp
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberResponse'
+          description: List of group members
+        chores_count:
+          type: integer
+          description: Number of chores in the group
+      required:
+        - id
+        - name
+        - head_user_id
+        - created_at
+        - members
+        - chores_count
+
+    MemberResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        name:
+          type: string
+          description: User's full name
+        email:
+          type: string
+          format: email
+          description: User's email address
+        role:
+          type: string
+          enum: [head, member]
+          description: User's role in the group
+        joined_at:
+          type: string
+          format: date-time
+          description: Timestamp when user joined the group
+      required:
+        - user_id
+        - name
+        - email
+        - role
+        - joined_at
+
+    InviteRequest:
+      type: object
+      properties:
+        expires_in_days:
+          type: integer
+          minimum: 1
+          default: 7
+          description: Number of days until invite expires
+
+    InviteResponse:
+      type: object
+      properties:
+        invite_url:
+          type: string
+          description: Full invite URL
+        token:
+          type: string
+          description: Invite token
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiration timestamp
+      required:
+        - invite_url
+        - token
+        - expires_at
+
+    JoinRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Invite token
+      required:
+        - token
+
+    CreateChoreRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Chore name
+        description:
+          type: string
+          nullable: true
+          description: Chore description
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Amount earned for completing the chore
+      required:
+        - name
+        - amount
+
+    UpdateChoreRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+          description: Chore name
+        description:
+          type: string
+          nullable: true
+          description: Chore description
+        amount:
+          type: number
+          format: double
+          nullable: true
+          description: Amount earned for completing the chore
+
+    ChoreResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Chore ID
+        group_id:
+          type: string
+          format: uuid
+          description: Group ID
+        name:
+          type: string
+          description: Chore name
+        description:
+          type: string
+          nullable: true
+          description: Chore description
+        amount:
+          type: number
+          format: double
+          description: Amount earned for completing the chore
+        is_system:
+          type: boolean
+          description: Whether this is a system-generated chore (e.g., Settlement)
+        created_at:
+          type: string
+          format: date-time
+          description: Chore creation timestamp
+      required:
+        - id
+        - group_id
+        - name
+        - amount
+        - is_system
+        - created_at
+
+    CreateLedgerRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Target user ID (optional, only head can specify, defaults to self)
+        chore_id:
+          type: string
+          format: uuid
+          description: Chore ID
+        amount:
+          type: number
+          format: double
+          nullable: true
+          description: Custom amount (required only for system chores like Settlement)
+      required:
+        - chore_id
+
+    LedgerResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Ledger entry ID
+        group_id:
+          type: string
+          format: uuid
+          description: Group ID
+        user_id:
+          type: string
+          format: uuid
+          description: User who earned the amount
+        chore_id:
+          type: string
+          format: uuid
+          description: Chore ID
+        amount:
+          type: number
+          format: double
+          description: Amount earned
+        status:
+          type: string
+          enum: [approved, pending_approval, rejected]
+          description: Entry status
+        created_by_user_id:
+          type: string
+          format: uuid
+          description: User who created the entry
+        approved_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: User who approved the entry
+        rejected_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: User who rejected the entry
+        created_at:
+          type: string
+          format: date-time
+          description: Entry creation timestamp
+      required:
+        - id
+        - group_id
+        - user_id
+        - chore_id
+        - amount
+        - status
+        - created_by_user_id
+        - created_at
+
+    BalanceResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        name:
+          type: string
+          description: User's full name
+        balance:
+          type: number
+          format: double
+          description: User's current balance (sum of approved ledger entries minus settlements)
+      required:
+        - user_id
+        - name
+        - balance
+
+    CreateSettlementRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User ID receiving the settlement
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Settlement amount
+        date:
+          type: string
+          format: date
+          description: Settlement date (YYYY-MM-DD)
+        note:
+          type: string
+          nullable: true
+          description: Optional note about the settlement
+      required:
+        - user_id
+        - amount
+        - date
+
+    SettlementResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Settlement ID
+        group_id:
+          type: string
+          format: uuid
+          description: Group ID
+        user_id:
+          type: string
+          format: uuid
+          description: User who received the settlement
+        amount:
+          type: number
+          format: double
+          description: Settlement amount
+        date:
+          type: string
+          format: date-time
+          description: Settlement date
+        note:
+          type: string
+          nullable: true
+          description: Optional note about the settlement
+        created_at:
+          type: string
+          format: date-time
+          description: Settlement record creation timestamp
+      required:
+        - id
+        - group_id
+        - user_id
+        - amount
+        - date
+        - created_at

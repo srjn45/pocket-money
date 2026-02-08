@@ -21,7 +21,7 @@ export default function ChoresScreen() {
   const [saving, setSaving] = useState(false);
 
   const loadData = async () => {
-    if (!id) return;
+    if (!id || !user?.id) return;
     try {
       setError('');
       const [choresData, groupData] = await Promise.all([
@@ -41,7 +41,7 @@ export default function ChoresScreen() {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -108,28 +108,44 @@ export default function ChoresScreen() {
     ]);
   };
 
-  const renderChore = ({ item }: { item: Chore }) => (
-    <TouchableOpacity 
-      style={styles.choreCard}
-      onPress={() => isHead && openModal(item)}
-      disabled={!isHead}
-    >
-      <View style={styles.choreInfo}>
-        <Text style={styles.choreName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.choreDescription}>{item.description}</Text>
-        )}
-      </View>
-      <View style={styles.choreRight}>
-        <Text style={styles.choreAmount}>${item.amount.toFixed(2)}</Text>
-        {isHead && (
-          <TouchableOpacity onPress={() => handleDelete(item)}>
-            <Ionicons name="trash-outline" size={20} color="#ff3b30" />
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const renderChore = ({ item }: { item: Chore }) => {
+    const isSystemChore = item.is_system;
+    const canEdit = isHead && !isSystemChore;
+    
+    return (
+      <TouchableOpacity 
+        style={[styles.choreCard, isSystemChore && styles.systemChoreCard]}
+        onPress={() => canEdit && openModal(item)}
+        disabled={!canEdit}
+      >
+        <View style={styles.choreInfo}>
+          <View style={styles.choreHeader}>
+            <Text style={styles.choreName}>{item.name}</Text>
+            {isSystemChore && (
+              <View style={styles.systemBadge}>
+                <Text style={styles.systemBadgeText}>System</Text>
+              </View>
+            )}
+          </View>
+          {item.description && (
+            <Text style={styles.choreDescription}>{item.description}</Text>
+          )}
+        </View>
+        <View style={styles.choreRight}>
+          {isSystemChore ? (
+            <Text style={styles.choreAmountVariable}>Variable</Text>
+          ) : (
+            <Text style={styles.choreAmount}>${item.amount.toFixed(2)}</Text>
+          )}
+          {canEdit && (
+            <TouchableOpacity onPress={() => handleDelete(item)}>
+              <Ionicons name="trash-outline" size={20} color="#ff3b30" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -264,13 +280,35 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
+  systemChoreCard: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
   choreInfo: {
     flex: 1,
+  },
+  choreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   choreName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+  systemBadge: {
+    backgroundColor: '#6c757d',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  systemBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   choreDescription: {
     fontSize: 14,
@@ -286,6 +324,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#34c759',
+  },
+  choreAmountVariable: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6c757d',
+    fontStyle: 'italic',
   },
   empty: {
     flex: 1,

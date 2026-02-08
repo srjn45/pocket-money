@@ -1,0 +1,25 @@
+## BUGS
+
+ - whenever user is unauthorised we should redirect to login page
+ - on logout redirect to login page
+ - groups are getting created but chores tab not working
+   - expectation head should be able to create/delete(soft-delete) chores
+   - settlement should be a default chore in every group (cannot be deleted or modified) 
+ - ledger tab not working
+   - head user role
+      - head user should be able to create ledger
+      - head user should see ledgers per member
+      - no need to see balance for head himself as he is the one that always pays to members so we only need to track per member
+      - ledger entry for settlement can only be done by head user
+      - ledger entry for settlement chore will also accept custom amount in the input which will be saved in the ledger table
+      - for all other chores the chores configured amount will be used in the ledger entry
+   - member
+      - all the members have ledger against the head
+      - every member shoould see their own ledger
+      - member user can add ledger entry that'll be in pending_approval state
+   - no need for separate settlement tab
+      - settlement will be a default chore in every group that head will use to mark the payouts to the member
+   - no need for pending tab
+      - show the pending entries in ledger with option to approve or reject it
+      - rejected ledger should be displayed in strike through
+      - approved ledger should be included in total sum 

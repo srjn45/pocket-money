@@ -7,7 +7,7 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace('/');
+    // Auth guard in _layout.tsx will handle redirect
   };
 
   return (

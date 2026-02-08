@@ -45,6 +45,7 @@ export interface Chore {
   name: string;
   description?: string;
   amount: number;
+  is_system: boolean;
   created_at: string;
 }
 
@@ -182,12 +183,15 @@ export const choresApi = {
 
 // Ledger API
 export const ledgerApi = {
-  list: (groupId: string, status?: string) => {
-    const params = status ? `?status=${status}` : '';
-    return request<LedgerEntry[]>(`/groups/${groupId}/ledger${params}`);
+  list: (groupId: string, options?: { status?: string; user_id?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.status) params.append('status', options.status);
+    if (options?.user_id) params.append('user_id', options.user_id);
+    const queryString = params.toString();
+    return request<LedgerEntry[]>(`/groups/${groupId}/ledger${queryString ? `?${queryString}` : ''}`);
   },
   
-  create: (groupId: string, data: { user_id?: string; chore_id: string; amount: number }) =>
+  create: (groupId: string, data: { user_id?: string; chore_id: string; amount?: number }) =>
     request<LedgerEntry>(`/groups/${groupId}/ledger`, { method: 'POST', body: JSON.stringify(data) }),
   
   approve: (id: string) =>

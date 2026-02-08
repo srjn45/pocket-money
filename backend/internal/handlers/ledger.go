@@ -33,7 +33,7 @@ func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreR
 type CreateLedgerRequest struct {
 	UserID  *uuid.UUID `json:"user_id"` // Optional, only head can specify
 	ChoreID uuid.UUID  `json:"chore_id" binding:"required"`
-	Amount  float64    `json:"amount" binding:"required,gt=0"`
+	Amount  *float64   `json:"amount"` // Required only for system chores (Settlement)
 }
 
 // LedgerResponse represents a ledger entry in API responses
@@ -59,6 +59,7 @@ type BalanceResponse struct {
 
 // ListLedger returns ledger entries for a group
 // GET /api/v1/groups/:id/ledger
+// Query params: status (optional), user_id (optional - for head to filter by member)
 func (h *LedgerHandler) ListLedger(c *gin.Context) {
 	userIDStr, exists := auth.GetUserID(c)
 	if !exists {
@@ -79,8 +80,8 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 		return
 	}
 
-	// Check if user is a member
-	_, err = h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
+	// Check if user is a member and get role
+	member, err := h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
@@ -101,7 +102,24 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 		status = &s
 	}
 
-	entries, err := h.ledgerRepo.ListForGroup(c.Request.Context(), groupID, status)
+	// Parse optional user_id filter
+	var filterUserID *uuid.UUID
+	if member.Role == models.RoleHead {
+		// Head can filter by any member
+		if userIDFilter := c.Query("user_id"); userIDFilter != "" {
+			parsedUserID, err := uuid.Parse(userIDFilter)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+				return
+			}
+			filterUserID = &parsedUserID
+		}
+	} else {
+		// Members can only see their own entries
+		filterUserID = &userID
+	}
+
+	entries, err := h.ledgerRepo.ListForGroupWithUser(c.Request.Context(), groupID, status, filterUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list ledger entries"})
 		return
@@ -180,6 +198,24 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		return
 	}
 
+	// Determine amount based on chore type
+	var amount float64
+	if chore.IsSystem {
+		// System chores (Settlement) require custom amount and can only be created by head
+		if member.Role != models.RoleHead {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only group head can create settlement entries"})
+			return
+		}
+		if req.Amount == nil || *req.Amount <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "amount is required for settlement entries"})
+			return
+		}
+		amount = *req.Amount
+	} else {
+		// Regular chores use the chore's configured amount
+		amount = chore.Amount
+	}
+
 	var targetUserID uuid.UUID
 	var status models.LedgerStatus
 	var approvedByUserID *uuid.UUID
@@ -210,7 +246,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		approvedByUserID = nil
 	}
 
-	entry, err := h.ledgerRepo.Create(c.Request.Context(), groupID, targetUserID, req.ChoreID, userID, req.Amount, status, approvedByUserID)
+	entry, err := h.ledgerRepo.Create(c.Request.Context(), groupID, targetUserID, req.ChoreID, userID, amount, status, approvedByUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ledger entry"})
 		return

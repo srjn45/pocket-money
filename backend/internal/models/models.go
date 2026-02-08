@@ -52,12 +52,14 @@ type GroupMember struct {
 
 // Chore represents a task/chore that can be completed for money
 type Chore struct {
-	ID          uuid.UUID `json:"id"`
-	GroupID     uuid.UUID `json:"group_id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	Amount      float64   `json:"amount"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          uuid.UUID  `json:"id"`
+	GroupID     uuid.UUID  `json:"group_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description,omitempty"`
+	Amount      float64    `json:"amount"`
+	IsSystem    bool       `json:"is_system"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // LedgerEntry represents a record of a completed chore

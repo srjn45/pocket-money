@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, Modal, Alert } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, Modal, Alert, TextInput } from 'react-native';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { ledgerApi, choresApi, groupsApi, LedgerEntry, Chore, Member } from '../../../../src/api';
+import { ledgerApi, choresApi, groupsApi, LedgerEntry, Chore, Member, Balance } from '../../../../src/api';
 import { useAuth } from '../../../../src/auth-context';
 
 export default function LedgerScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, member_id, member_name } = useLocalSearchParams<{ id: string; member_id?: string; member_name?: string }>();
   const { user } = useAuth();
+  const router = useRouter();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [chores, setChores] = useState<Chore[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberBalance, setMemberBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -19,22 +21,37 @@ export default function LedgerScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedChore, setSelectedChore] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<string>('');
+  const [customAmount, setCustomAmount] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Determine which user's ledger to show
+  const targetUserId = member_id || user?.id;
+  const targetUserName = member_name || user?.name;
 
   const loadData = async () => {
-    if (!id) return;
+    if (!id || !user?.id) {
+      return;
+    }
     try {
       setError('');
-      const [entriesData, choresData, groupData] = await Promise.all([
-        ledgerApi.list(id),
+      const [entriesData, choresData, groupData, balanceData] = await Promise.all([
+        ledgerApi.list(id, { user_id: member_id }),
         choresApi.list(id),
         groupsApi.get(id),
+        ledgerApi.getBalance(id),
       ]);
+      
+      const currentMember = groupData.members.find((m: Member) => m.user_id === user?.id);
+      const headStatus = currentMember?.role === 'head';
       setEntries(entriesData || []);
       setChores(choresData || []);
       setMembers(groupData.members || []);
-      const currentMember = groupData.members.find((m: Member) => m.user_id === user?.id);
-      setIsHead(currentMember?.role === 'head');
+      setIsHead(headStatus);
+
+      // Get balance for the target user
+      const userBalance = balanceData?.find((b: Balance) => b.user_id === targetUserId);
+      setMemberBalance(userBalance?.balance ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load ledger');
     } finally {
@@ -45,18 +62,24 @@ export default function LedgerScreen() {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, member_id, user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadData();
-  }, [id]);
+  }, [id, member_id]);
 
   const openModal = () => {
-    setSelectedChore(chores[0]?.id || '');
-    setSelectedMember(isHead ? members[0]?.user_id || '' : user?.id || '');
+    // Default to first non-system chore, or system chore if head
+    const defaultChore = chores.find(c => !c.is_system) || chores[0];
+    setSelectedChore(defaultChore?.id || '');
+    setSelectedMember(member_id || user?.id || '');
+    setCustomAmount('');
     setModalVisible(true);
   };
+
+  const selectedChoreObj = chores.find(c => c.id === selectedChore);
+  const isSystemChore = selectedChoreObj?.is_system || false;
 
   const handleCreate = async () => {
     if (!id || !selectedChore) return;
@@ -64,12 +87,21 @@ export default function LedgerScreen() {
     const chore = chores.find(c => c.id === selectedChore);
     if (!chore) return;
 
+    // Validate amount for system chores
+    if (chore.is_system) {
+      const amount = parseFloat(customAmount);
+      if (isNaN(amount) || amount <= 0) {
+        Alert.alert('Error', 'Please enter a valid amount for settlement');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await ledgerApi.create(id, {
         user_id: isHead ? selectedMember : undefined,
         chore_id: selectedChore,
-        amount: chore.amount,
+        amount: chore.is_system ? parseFloat(customAmount) : undefined,
       });
       setModalVisible(false);
       loadData();
@@ -80,12 +112,37 @@ export default function LedgerScreen() {
     }
   };
 
-  const getStatusStyle = (status: LedgerEntry['status']) => {
-    switch (status) {
-      case 'approved': return styles.approved;
-      case 'pending_approval': return styles.pending;
-      case 'rejected': return styles.rejected;
+  const handleApprove = async (entryId: string) => {
+    setProcessingId(entryId);
+    try {
+      await ledgerApi.approve(entryId);
+      loadData();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to approve entry');
+    } finally {
+      setProcessingId(null);
     }
+  };
+
+  const handleReject = async (entryId: string) => {
+    Alert.alert('Reject Entry', 'Are you sure you want to reject this entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: async () => {
+          setProcessingId(entryId);
+          try {
+            await ledgerApi.reject(entryId);
+            loadData();
+          } catch (err) {
+            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to reject entry');
+          } finally {
+            setProcessingId(null);
+          }
+        },
+      },
+    ]);
   };
 
   const getChoreByID = (choreId: string) => chores.find(c => c.id === choreId);
@@ -94,25 +151,80 @@ export default function LedgerScreen() {
   const renderEntry = ({ item }: { item: LedgerEntry }) => {
     const chore = getChoreByID(item.chore_id);
     const member = getMemberByID(item.user_id);
+    const isRejected = item.status === 'rejected';
+    const isPending = item.status === 'pending_approval';
+    const isProcessing = processingId === item.id;
+    const isSettlement = chore?.is_system;
     
     return (
-      <View style={styles.entryCard}>
+      <View style={[styles.entryCard, isRejected && styles.rejectedCard]}>
         <View style={styles.entryInfo}>
-          <Text style={styles.entryChore}>{chore?.name || 'Unknown Chore'}</Text>
-          <Text style={styles.entryMember}>{member?.name || 'Unknown'}</Text>
+          <Text style={[styles.entryChore, isRejected && styles.strikethrough]}>
+            {isSettlement ? '💰 Settlement' : chore?.name || 'Unknown Chore'}
+          </Text>
+          {!member_id && (
+            <Text style={[styles.entryMember, isRejected && styles.strikethrough]}>
+              {member?.name || 'Unknown'}
+            </Text>
+          )}
           <Text style={styles.entryDate}>
             {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
         <View style={styles.entryRight}>
-          <Text style={styles.entryAmount}>${item.amount.toFixed(2)}</Text>
-          <View style={[styles.statusBadge, getStatusStyle(item.status)]}>
-            <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
-          </View>
+          <Text style={[
+            styles.entryAmount,
+            isSettlement ? styles.settlementAmount : styles.earnedAmount,
+            isRejected && styles.strikethrough
+          ]}>
+            {isSettlement ? '-' : '+'}${item.amount.toFixed(2)}
+          </Text>
+          
+          {isPending && isHead ? (
+            <View style={styles.actions}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.approveButton]}
+                onPress={() => handleApprove(item.id)}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={() => handleReject(item.id)}
+                disabled={isProcessing}
+              >
+                <Ionicons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={[styles.statusBadge, getStatusStyle(item.status)]}>
+              <Text style={styles.statusText}>
+                {item.status === 'pending_approval' ? 'pending' : item.status}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     );
   };
+
+  const getStatusStyle = (status: LedgerEntry['status']) => {
+    switch (status) {
+      case 'approved': return styles.approved;
+      case 'pending_approval': return styles.pending;
+      case 'rejected': return styles.rejected;
+    }
+  };
+
+  // Filter chores for the modal
+  const availableChores = isHead 
+    ? chores  // Head can see all chores including Settlement
+    : chores.filter(c => !c.is_system);  // Members can only see regular chores
 
   if (isLoading) {
     return (
@@ -123,107 +235,140 @@ export default function LedgerScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity style={styles.addButton} onPress={openModal}>
-        <Ionicons name="add" size={24} color="#fff" />
-        <Text style={styles.addButtonText}>Add Entry</Text>
-      </TouchableOpacity>
-
-      {entries.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="wallet-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No ledger entries yet</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={entries}
-          renderItem={renderEntry}
-          keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          contentContainerStyle={styles.list}
-        />
+    <>
+      {member_id && (
+        <Stack.Screen options={{ title: `${member_name}'s Ledger` }} />
       )}
+      <View style={styles.container}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Entry</Text>
+        {/* Balance Header */}
+        {memberBalance !== null && (
+          <View style={styles.balanceHeader}>
+            <Text style={styles.balanceLabel}>
+              {member_id ? `${member_name}'s Balance` : 'Your Balance'}
+            </Text>
+            <Text style={[styles.balanceAmount, memberBalance >= 0 ? styles.earnedAmount : styles.settlementAmount]}>
+              ${Math.abs(memberBalance).toFixed(2)}
+            </Text>
+            {memberBalance > 0 && <Text style={styles.balanceNote}>owed to you</Text>}
+            {memberBalance < 0 && <Text style={styles.balanceNote}>overpaid</Text>}
+          </View>
+        )}
 
-            {chores.length === 0 ? (
-              <Text style={styles.noChores}>No chores available. Create chores first.</Text>
-            ) : (
-              <>
-                <Text style={styles.label}>Select Chore</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={selectedChore}
-                    onValueChange={setSelectedChore}
-                  >
-                    {chores.map(chore => (
-                      <Picker.Item 
-                        key={chore.id} 
-                        label={`${chore.name} - $${chore.amount}`} 
-                        value={chore.id} 
+        <TouchableOpacity style={styles.addButton} onPress={openModal}>
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text style={styles.addButtonText}>Add Entry</Text>
+        </TouchableOpacity>
+
+        {entries.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="wallet-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>No ledger entries yet</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={entries}
+            renderItem={renderEntry}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            contentContainerStyle={styles.list}
+          />
+        )}
+
+        <Modal visible={modalVisible} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Add Entry</Text>
+
+              {availableChores.length === 0 ? (
+                <Text style={styles.noChores}>No chores available. Create chores first.</Text>
+              ) : (
+                <>
+                  <Text style={styles.label}>Select Chore</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={selectedChore}
+                      onValueChange={setSelectedChore}
+                    >
+                      {availableChores.map(chore => (
+                        <Picker.Item 
+                          key={chore.id} 
+                          label={chore.is_system ? `${chore.name} (Custom amount)` : `${chore.name} - $${chore.amount}`}
+                          value={chore.id} 
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+
+                  {isSystemChore && (
+                    <>
+                      <Text style={styles.label}>Settlement Amount</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={customAmount}
+                        onChangeText={setCustomAmount}
+                        keyboardType="decimal-pad"
+                        placeholder="Enter amount"
+                        placeholderTextColor="#999"
                       />
-                    ))}
-                  </Picker>
-                </View>
+                    </>
+                  )}
 
-                {isHead && (
-                  <>
-                    <Text style={styles.label}>Select Member</Text>
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={selectedMember}
-                        onValueChange={setSelectedMember}
-                      >
-                        {members.map(member => (
-                          <Picker.Item 
-                            key={member.user_id} 
-                            label={member.name} 
-                            value={member.user_id} 
-                          />
-                        ))}
-                      </Picker>
-                    </View>
-                  </>
-                )}
+                  {isHead && !member_id && (
+                    <>
+                      <Text style={styles.label}>Select Member</Text>
+                      <View style={styles.pickerContainer}>
+                        <Picker
+                          selectedValue={selectedMember}
+                          onValueChange={setSelectedMember}
+                        >
+                          {members.filter(m => m.role !== 'head').map(member => (
+                            <Picker.Item 
+                              key={member.user_id} 
+                              label={member.name} 
+                              value={member.user_id} 
+                            />
+                          ))}
+                        </Picker>
+                      </View>
+                    </>
+                  )}
 
-                {!isHead && (
-                  <Text style={styles.noteText}>
-                    Your entry will be submitted for approval
-                  </Text>
-                )}
-              </>
-            )}
+                  {!isHead && (
+                    <Text style={styles.noteText}>
+                      Your entry will be submitted for approval
+                    </Text>
+                  )}
+                </>
+              )}
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleCreate}
-                disabled={saving || chores.length === 0}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Add</Text>
-                )}
-              </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton]}
+                  onPress={handleCreate}
+                  disabled={saving || availableChores.length === 0}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Add</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
+    </>
   );
 }
 
@@ -241,6 +386,27 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
     padding: 16,
     textAlign: 'center',
+  },
+  balanceHeader: {
+    backgroundColor: '#fff',
+    padding: 20,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  balanceAmount: {
+    fontSize: 36,
+    fontWeight: '700',
+  },
+  balanceNote: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
   addButton: {
     flexDirection: 'row',
@@ -267,6 +433,15 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  rejectedCard: {
+    backgroundColor: '#fafafa',
+    opacity: 0.7,
   },
   entryInfo: {
     flex: 1,
@@ -286,13 +461,41 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 4,
   },
+  strikethrough: {
+    textDecorationLine: 'line-through',
+    color: '#999',
+  },
   entryRight: {
     alignItems: 'flex-end',
+    justifyContent: 'space-between',
   },
   entryAmount: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  earnedAmount: {
     color: '#34c759',
+  },
+  settlementAmount: {
+    color: '#ff3b30',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  approveButton: {
+    backgroundColor: '#34c759',
+  },
+  rejectButton: {
+    backgroundColor: '#ff3b30',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -351,6 +554,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
+    marginBottom: 16,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
     marginBottom: 16,
   },
   noChores: {

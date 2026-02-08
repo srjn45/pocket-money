@@ -17,6 +17,7 @@
 - Concurrency: Use goroutines and channels only where necessary for performance; ensure context (ctx) is passed.
 - Database: Use prepared statements or an ORM (GORM) with snake_case for DB columns and PascalCase for Go structs.
 - API Design: Follow RESTful principles; use JSON for all request/response bodies.
+- Prefer readable code over comments
 
 # Full-Stack Integration
 - Base URL: Use environment variables for the API Base URL (never hardcode).

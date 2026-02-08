@@ -48,6 +48,7 @@ type ChoreResponse struct {
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
 	Amount      float64   `json:"amount"`
+	IsSystem    bool      `json:"is_system"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -98,6 +99,7 @@ func (h *ChoreHandler) ListChores(c *gin.Context) {
 			Name:        ch.Name,
 			Description: ch.Description,
 			Amount:      ch.Amount,
+			IsSystem:    ch.IsSystem,
 			CreatedAt:   ch.CreatedAt,
 		})
 	}
@@ -161,6 +163,7 @@ func (h *ChoreHandler) CreateChore(c *gin.Context) {
 		Name:        chore.Name,
 		Description: chore.Description,
 		Amount:      chore.Amount,
+		IsSystem:    chore.IsSystem,
 		CreatedAt:   chore.CreatedAt,
 	})
 }
@@ -222,6 +225,10 @@ func (h *ChoreHandler) UpdateChore(c *gin.Context) {
 
 	updatedChore, err := h.choreRepo.Update(c.Request.Context(), choreID, req.Name, req.Description, req.Amount)
 	if err != nil {
+		if errors.Is(err, db.ErrSystemChore) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot modify system chore"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update chore"})
 		return
 	}
@@ -232,6 +239,7 @@ func (h *ChoreHandler) UpdateChore(c *gin.Context) {
 		Name:        updatedChore.Name,
 		Description: updatedChore.Description,
 		Amount:      updatedChore.Amount,
+		IsSystem:    updatedChore.IsSystem,
 		CreatedAt:   updatedChore.CreatedAt,
 	})
 }
@@ -286,6 +294,10 @@ func (h *ChoreHandler) DeleteChore(c *gin.Context) {
 	}
 
 	if err := h.choreRepo.Delete(c.Request.Context(), choreID); err != nil {
+		if errors.Is(err, db.ErrSystemChore) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete system chore"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete chore"})
 		return
 	}

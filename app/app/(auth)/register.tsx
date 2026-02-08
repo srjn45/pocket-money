@@ -3,6 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import { Link, router } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
 
+const isValidEmail = (email: string) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
 export default function RegisterScreen() {
   const { register } = useAuth();
   const [name, setName] = useState('');
@@ -15,6 +19,11 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     if (!name || !email || !password) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid email address');
       return;
     }
 

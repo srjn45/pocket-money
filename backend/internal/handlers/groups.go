@@ -20,13 +20,15 @@ import (
 type GroupHandler struct {
 	groupRepo  *db.GroupRepo
 	inviteRepo *db.InviteRepo
+	choreRepo  *db.ChoreRepo
 }
 
 // NewGroupHandler creates a new GroupHandler
-func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo) *GroupHandler {
+func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo, choreRepo *db.ChoreRepo) *GroupHandler {
 	return &GroupHandler{
 		groupRepo:  groupRepo,
 		inviteRepo: inviteRepo,
+		choreRepo:  choreRepo,
 	}
 }
 
@@ -95,6 +97,15 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member"})
 		return
+	}
+
+	// Create default Settlement chore (system chore for payouts)
+	settlementDesc := "Cash payout to member"
+	_, err = h.choreRepo.CreateWithSystem(c.Request.Context(), group.ID, "Settlement", &settlementDesc, 0, true)
+	if err != nil {
+		// Log error but don't fail group creation
+		// The settlement chore can be created manually if needed
+		fmt.Printf("Warning: failed to create settlement chore for group %s: %v\n", group.ID, err)
 	}
 
 	c.JSON(http.StatusCreated, GroupResponse{

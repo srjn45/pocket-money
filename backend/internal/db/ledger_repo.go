@@ -85,26 +85,31 @@ func (r *LedgerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.LedgerE
 
 // ListForGroup retrieves all ledger entries for a group with optional status filter
 func (r *LedgerRepo) ListForGroup(ctx context.Context, groupID uuid.UUID, status *models.LedgerStatus) ([]*models.LedgerEntry, error) {
-	var query string
-	var args []interface{}
+	return r.ListForGroupWithUser(ctx, groupID, status, nil)
+}
+
+// ListForGroupWithUser retrieves ledger entries for a group with optional status and user filters
+func (r *LedgerRepo) ListForGroupWithUser(ctx context.Context, groupID uuid.UUID, status *models.LedgerStatus, userID *uuid.UUID) ([]*models.LedgerEntry, error) {
+	query := `
+		SELECT id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id, rejected_by_user_id, created_at
+		FROM ledger_entries
+		WHERE group_id = $1
+	`
+	args := []interface{}{groupID}
+	argNum := 2
 
 	if status != nil {
-		query = `
-			SELECT id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id, rejected_by_user_id, created_at
-			FROM ledger_entries
-			WHERE group_id = $1 AND status = $2
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{groupID, *status}
-	} else {
-		query = `
-			SELECT id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id, rejected_by_user_id, created_at
-			FROM ledger_entries
-			WHERE group_id = $1
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{groupID}
+		query += fmt.Sprintf(" AND status = $%d", argNum)
+		args = append(args, *status)
+		argNum++
 	}
+
+	if userID != nil {
+		query += fmt.Sprintf(" AND user_id = $%d", argNum)
+		args = append(args, *userID)
+	}
+
+	query += " ORDER BY created_at DESC"
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -168,23 +173,22 @@ func (r *LedgerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status mode
 }
 
 // GetBalanceForGroup calculates the balance for each member in a group
-// Balance = sum(approved ledger entries) - sum(settlements)
+// Balance = sum(approved regular chore entries) - sum(approved settlement entries)
+// Settlement entries are identified by chore.is_system = true
 func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) ([]*models.Balance, error) {
 	query := `
 		WITH ledger_totals AS (
-			SELECT user_id, COALESCE(SUM(amount), 0) as total
-			FROM ledger_entries
-			WHERE group_id = $1 AND status = 'approved'
-			GROUP BY user_id
-		),
-		settlement_totals AS (
-			SELECT user_id, COALESCE(SUM(amount), 0) as total
-			FROM settlements
-			WHERE group_id = $1
-			GROUP BY user_id
+			SELECT 
+				le.user_id,
+				COALESCE(SUM(CASE WHEN c.is_system = false THEN le.amount ELSE 0 END), 0) as earned,
+				COALESCE(SUM(CASE WHEN c.is_system = true THEN le.amount ELSE 0 END), 0) as settled
+			FROM ledger_entries le
+			INNER JOIN chores c ON le.chore_id = c.id
+			WHERE le.group_id = $1 AND le.status = 'approved'
+			GROUP BY le.user_id
 		),
 		all_members AS (
-			SELECT gm.user_id, u.name
+			SELECT gm.user_id, u.name, gm.role
 			FROM group_members gm
 			INNER JOIN users u ON gm.user_id = u.id
 			WHERE gm.group_id = $1
@@ -192,11 +196,11 @@ func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) 
 		SELECT 
 			am.user_id, 
 			am.name,
-			COALESCE(lt.total, 0) - COALESCE(st.total, 0) as balance
+			am.role,
+			COALESCE(lt.earned, 0) - COALESCE(lt.settled, 0) as balance
 		FROM all_members am
 		LEFT JOIN ledger_totals lt ON am.user_id = lt.user_id
-		LEFT JOIN settlement_totals st ON am.user_id = st.user_id
-		ORDER BY am.name
+		ORDER BY am.role DESC, am.name
 	`
 
 	rows, err := r.pool.Query(ctx, query, groupID)
@@ -208,10 +212,14 @@ func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) 
 	var balances []*models.Balance
 	for rows.Next() {
 		balance := &models.Balance{}
-		if err := rows.Scan(&balance.UserID, &balance.Name, &balance.Balance); err != nil {
+		var role string
+		if err := rows.Scan(&balance.UserID, &balance.Name, &role, &balance.Balance); err != nil {
 			return nil, fmt.Errorf("failed to scan balance: %w", err)
 		}
-		balances = append(balances, balance)
+		// Skip head user from balance list (head doesn't have balance)
+		if role != "head" {
+			balances = append(balances, balance)
+		}
 	}
 
 	return balances, nil

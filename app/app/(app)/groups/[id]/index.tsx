@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, Alert } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, Alert, Share, Platform } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { groupsApi, ledgerApi, GroupDetail, Balance, Member } from '../../../../src/api';
@@ -9,6 +9,7 @@ import { useAuth } from '../../../../src/auth-context';
 export default function GroupOverviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const router = useRouter();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -18,7 +19,7 @@ export default function GroupOverviewScreen() {
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const loadData = async () => {
-    if (!id) return;
+    if (!id || !user?.id) return;
     try {
       setError('');
       const [groupData, balanceData] = await Promise.all([
@@ -39,7 +40,7 @@ export default function GroupOverviewScreen() {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -51,8 +52,19 @@ export default function GroupOverviewScreen() {
     setInviteLoading(true);
     try {
       const invite = await groupsApi.createInvite(id);
-      await Clipboard.setStringAsync(invite.invite_url);
-      Alert.alert('Invite Created', 'Invite link copied to clipboard!');
+      
+      if (Platform.OS === 'web') {
+        // Web: Copy to clipboard
+        await Clipboard.setStringAsync(invite.invite_url);
+        Alert.alert('Invite Created', 'Invite link copied to clipboard!');
+      } else {
+        // Mobile: Native share
+        await Share.share({
+          message: `Join my group "${group?.name}" on Pocket Money!\n\n${invite.invite_url}`,
+          url: invite.invite_url,  // iOS only
+          title: 'Join My Group',
+        });
+      }
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create invite');
     } finally {
@@ -60,13 +72,37 @@ export default function GroupOverviewScreen() {
     }
   };
 
-  const renderBalance = ({ item }: { item: Balance }) => (
-    <View style={styles.balanceCard}>
-      <Text style={styles.memberName}>{item.name}</Text>
-      <Text style={[styles.balance, item.balance >= 0 ? styles.positive : styles.negative]}>
-        ${item.balance.toFixed(2)}
-      </Text>
-    </View>
+  const handleMemberPress = (memberId: string, memberName: string) => {
+    // Navigate to ledger screen filtered by this member
+    router.push({
+      pathname: `/(app)/groups/${id}/ledger`,
+      params: { member_id: memberId, member_name: memberName },
+    });
+  };
+
+  const renderMember = ({ item }: { item: Balance }) => (
+    <TouchableOpacity 
+      style={styles.memberCard}
+      onPress={() => handleMemberPress(item.user_id, item.name)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.memberInfo}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {item.name.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <Text style={styles.memberName}>{item.name}</Text>
+      </View>
+      <View style={styles.balanceContainer}>
+        <Text style={[styles.balance, item.balance >= 0 ? styles.positive : styles.negative]}>
+          ${Math.abs(item.balance).toFixed(2)}
+        </Text>
+        {item.balance > 0 && <Text style={styles.balanceLabel}>owed</Text>}
+        {item.balance < 0 && <Text style={styles.balanceLabel}>overpaid</Text>}
+        <Ionicons name="chevron-forward" size={20} color="#ccc" />
+      </View>
+    </TouchableOpacity>
   );
 
   if (isLoading) {
@@ -83,7 +119,7 @@ export default function GroupOverviewScreen() {
 
       <View style={styles.header}>
         <Text style={styles.membersCount}>
-          {group?.members.length || 0} members
+          {balances.length} {balances.length === 1 ? 'member' : 'members'}
         </Text>
         {isHead && (
           <TouchableOpacity 
@@ -103,16 +139,19 @@ export default function GroupOverviewScreen() {
         )}
       </View>
 
-      <Text style={styles.sectionTitle}>Balances</Text>
+      <Text style={styles.sectionTitle}>Members & Balances</Text>
+      <Text style={styles.sectionSubtitle}>Tap a member to view their ledger</Text>
 
       {balances.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No balance data yet</Text>
+          <Ionicons name="people-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No members yet</Text>
+          <Text style={styles.emptySubtext}>Invite members to get started</Text>
         </View>
       ) : (
         <FlatList
           data={balances}
-          renderItem={renderBalance}
+          renderItem={renderMember}
           keyExtractor={(item) => item.user_id}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -166,29 +205,68 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 16,
     color: '#333',
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   list: {
     padding: 16,
-    paddingTop: 0,
+    paddingTop: 8,
   },
-  balanceCard: {
+  memberCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  memberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
   },
   memberName: {
     fontSize: 16,
+    fontWeight: '500',
     color: '#333',
+  },
+  balanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   balance: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  balanceLabel: {
+    fontSize: 12,
+    color: '#666',
   },
   positive: {
     color: '#34c759',
@@ -197,11 +275,20 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
   },
   empty: {
+    flex: 1,
     padding: 32,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: '#666',
+    marginTop: 4,
   },
 });
