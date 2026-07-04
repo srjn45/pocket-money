@@ -1,22 +1,13 @@
-import { useEffect } from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '../../src/auth-context';
 
 export default function AppLayout() {
   const { token, user, isLoading } = useAuth();
-  const router = useRouter();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isLoading && !token) {
-      router.replace('/(auth)/login');
-    }
-  }, [token, isLoading, router]);
-
-  // Don't render anything while checking auth or loading user data
-  // IMPORTANT: Wait for both token AND user to be loaded to avoid race conditions
+  // Render gate: hold spinner while auth hydrates or token/user absent.
+  // Redirect is handled by the root AuthGate in app/_layout.tsx.
   if (isLoading || !token || !user) {
     return (
       <View style={styles.loading}>
