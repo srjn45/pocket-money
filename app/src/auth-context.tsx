@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authApi, User, setOnUnauthorized } from './api';
 import { getToken, setToken, clearToken } from './storage';
 
@@ -19,18 +19,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const logout = async () => {
+  // useCallback with stable deps ensures setOnUnauthorized always holds the current logout.
+  const logout = useCallback(async () => {
     await clearToken();
     setTokenState(null);
     setUser(null);
-  };
+  }, []);
 
-  // Set up unauthorized handler
+  // Re-register whenever logout identity changes (guards against stale closure).
   useEffect(() => {
     setOnUnauthorized(() => {
       logout();
     });
-  }, []);
+  }, [logout]);
 
   const loadMe = async () => {
     try {

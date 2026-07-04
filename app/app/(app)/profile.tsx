@@ -7,7 +7,7 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
-    // Auth guard in _layout.tsx will handle redirect
+    // Root AuthGate in app/_layout.tsx reacts to token=null and redirects to login.
   };
 
   return (
