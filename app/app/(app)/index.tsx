@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, SectionList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, TextInput, Modal, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { groupsApi, ledgerApi, Group } from '../../src/api';
 import { useAuth } from '../../src/auth-context';
+import { useGroups, useJoinGroup } from '../../src/hooks/useGroups';
+import { qk } from '../../src/query-keys';
 
 interface GroupWithDetails extends Group {
   memberCount?: number;
@@ -13,67 +16,70 @@ interface GroupWithDetails extends Group {
 
 export default function DashboardScreen() {
   const { user } = useAuth();
-  const [headGroups, setHeadGroups] = useState<GroupWithDetails[]>([]);
-  const [memberGroups, setMemberGroups] = useState<GroupWithDetails[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const qc = useQueryClient();
   const [joinModalVisible, setJoinModalVisible] = useState(false);
   const [inviteToken, setInviteToken] = useState('');
-  const [joining, setJoining] = useState(false);
 
-  const loadGroups = async () => {
-    try {
-      setError('');
-      const data = await groupsApi.list();
-      
-      // Fetch details for each group
-      const groupsWithDetails = await Promise.all(
-        (data || []).map(async (group) => {
-          const isHead = group.head_user_id === user?.id;
-          try {
-            const [detail, balance] = await Promise.all([
-              groupsApi.get(group.id),
-              ledgerApi.getBalance(group.id),
-            ]);
-            
-            const memberCount = detail.members.length;
-            let totalBalance = 0;
-            
-            if (isHead) {
-              // Sum all member balances (total owed to members)
-              totalBalance = balance.reduce((sum, b) => sum + b.balance, 0);
-            } else {
-              // Find current user's balance
-              const userBalance = balance.find(b => b.user_id === user?.id);
-              totalBalance = userBalance?.balance ?? 0;
-            }
-            
-            return { ...group, memberCount, totalBalance, userRole: isHead ? 'head' : 'member' } as GroupWithDetails;
-          } catch {
-            return { ...group, userRole: isHead ? 'head' : 'member' } as GroupWithDetails;
-          }
-        })
-      );
-      
-      setHeadGroups(groupsWithDetails.filter(g => g.userRole === 'head'));
-      setMemberGroups(groupsWithDetails.filter(g => g.userRole === 'member'));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load groups');
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const groupsQuery = useGroups();
+  const groups = groupsQuery.data ?? [];
 
-  useEffect(() => {
-    loadGroups();
-  }, []);
+  const detailQueries = useQueries({
+    queries: groups.map(g => ({
+      queryKey: qk.group(g.id),
+      queryFn: () => groupsApi.get(g.id),
+    })),
+  });
+
+  const balanceQueries = useQueries({
+    queries: groups.map(g => ({
+      queryKey: qk.balance(g.id),
+      queryFn: () => ledgerApi.getBalance(g.id),
+    })),
+  });
+
+  const isLoading =
+    groupsQuery.isLoading ||
+    (groups.length > 0 && (
+      detailQueries.some(q => q.isLoading) ||
+      balanceQueries.some(q => q.isLoading)
+    ));
+
+  const isRefetching =
+    groupsQuery.isRefetching ||
+    detailQueries.some(q => q.isRefetching) ||
+    balanceQueries.some(q => q.isRefetching);
+
+  const error = groupsQuery.error instanceof Error ? groupsQuery.error.message : '';
 
   const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadGroups();
-  }, []);
+    qc.invalidateQueries({ queryKey: qk.groups() });
+    groups.forEach(g => {
+      qc.invalidateQueries({ queryKey: qk.group(g.id) });
+      qc.invalidateQueries({ queryKey: qk.balance(g.id) });
+    });
+  }, [qc, groups]);
+
+  const enrichedGroups: GroupWithDetails[] = groups.map((group, i) => {
+    const isHead = group.head_user_id === user?.id;
+    const detail = detailQueries[i]?.data;
+    const balance = balanceQueries[i]?.data ?? [];
+
+    const memberCount = detail?.members.length;
+    let totalBalance = 0;
+    if (isHead) {
+      totalBalance = balance.reduce((sum, b) => sum + b.balance, 0);
+    } else {
+      const userBalance = balance.find(b => b.user_id === user?.id);
+      totalBalance = userBalance?.balance ?? 0;
+    }
+
+    return { ...group, memberCount, totalBalance, userRole: isHead ? 'head' : 'member' };
+  });
+
+  const headGroups = enrichedGroups.filter(g => g.userRole === 'head');
+  const memberGroups = enrichedGroups.filter(g => g.userRole === 'member');
+
+  const joinMutation = useJoinGroup();
 
   const handleJoinGroup = async () => {
     if (!inviteToken.trim()) {
@@ -81,29 +87,24 @@ export default function DashboardScreen() {
       return;
     }
 
-    // Extract token from URL if full URL is pasted
     let token = inviteToken.trim();
     const tokenMatch = token.match(/token=([^&]+)/);
     if (tokenMatch) {
       token = tokenMatch[1];
     }
 
-    setJoining(true);
     try {
-      await groupsApi.join(token);
+      await joinMutation.mutateAsync(token);
       setJoinModalVisible(false);
       setInviteToken('');
-      loadGroups();
       Alert.alert('Success', 'You have joined the group!');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to join group');
-    } finally {
-      setJoining(false);
     }
   };
 
   const renderHeadGroup = ({ item }: { item: GroupWithDetails }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.groupCard}
       onPress={() => router.push(`/(app)/groups/${item.id}`)}
     >
@@ -124,7 +125,7 @@ export default function DashboardScreen() {
   );
 
   const renderMemberGroup = ({ item }: { item: GroupWithDetails }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.groupCard}
       onPress={() => router.push(`/(app)/groups/${item.id}`)}
     >
@@ -159,14 +160,14 @@ export default function DashboardScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.actions}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
           onPress={() => router.push('/(app)/groups/create')}
         >
           <Ionicons name="add-circle" size={24} color="#007AFF" />
           <Text style={styles.actionText}>Create Group</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
           onPress={() => setJoinModalVisible(true)}
         >
@@ -185,14 +186,14 @@ export default function DashboardScreen() {
         <SectionList
           sections={[
             { title: 'Groups You Manage', data: headGroups, renderItem: renderHeadGroup },
-            { title: 'Groups You\'re In', data: memberGroups, renderItem: renderMemberGroup },
+            { title: "Groups You're In", data: memberGroups, renderItem: renderMemberGroup },
           ].filter(s => s.data.length > 0)}
           keyExtractor={(item) => item.id}
           renderSectionHeader={({ section }) => (
             <Text style={styles.sectionTitle}>{section.title}</Text>
           )}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />
           }
           contentContainerStyle={styles.list}
           stickySectionHeadersEnabled={false}
@@ -206,7 +207,7 @@ export default function DashboardScreen() {
             <Text style={styles.modalSubtitle}>
               Paste the invite link or token
             </Text>
-            
+
             <TextInput
               style={styles.input}
               placeholder="Invite link or token"
@@ -229,9 +230,9 @@ export default function DashboardScreen() {
               <TouchableOpacity
                 style={[styles.modalButton, styles.joinButton]}
                 onPress={handleJoinGroup}
-                disabled={joining}
+                disabled={joinMutation.isPending}
               >
-                {joining ? (
+                {joinMutation.isPending ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.joinButtonText}>Join</Text>
