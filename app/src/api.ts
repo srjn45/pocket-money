@@ -1,93 +1,25 @@
 import Constants from 'expo-constants';
 import { getToken, clearToken } from './storage';
+import type { components } from './api-types.gen';
+
+type Schemas = components['schemas'];
 
 // Get API URL from environment or use default
-const BASE_URL = Constants.expoConfig?.extra?.apiUrl || 
-  process.env.EXPO_PUBLIC_API_URL || 
+const BASE_URL = Constants.expoConfig?.extra?.apiUrl ||
+  process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:8080/api/v1';
 
-export interface ApiError {
-  error: string;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  dob?: string;
-  sex?: string;
-  created_at: string;
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  head_user_id: string;
-  created_at: string;
-}
-
-export interface Member {
-  user_id: string;
-  name: string;
-  email: string;
-  role: 'head' | 'member';
-  joined_at: string;
-}
-
-export interface GroupDetail extends Group {
-  members: Member[];
-  chores_count: number;
-}
-
-export interface Chore {
-  id: string;
-  group_id: string;
-  name: string;
-  description?: string;
-  amount: number;
-  is_system: boolean;
-  created_at: string;
-}
-
-export interface LedgerEntry {
-  id: string;
-  group_id: string;
-  user_id: string;
-  chore_id: string;
-  amount: number;
-  status: 'approved' | 'pending_approval' | 'rejected';
-  created_by_user_id: string;
-  approved_by_user_id?: string;
-  rejected_by_user_id?: string;
-  created_at: string;
-}
-
-export interface Balance {
-  user_id: string;
-  name: string;
-  balance: number;
-}
-
-export interface Settlement {
-  id: string;
-  group_id: string;
-  user_id: string;
-  amount: number;
-  date: string;
-  note?: string;
-  created_at: string;
-}
-
-export interface InviteResponse {
-  invite_url: string;
-  token: string;
-  expires_at: string;
-}
-
-export interface LoginResponse {
-  token: string;
-  user: User;
-}
+export type ApiError      = Schemas['ErrorResponse'];
+export type User          = Schemas['UserResponse'];
+export type Group         = Schemas['GroupResponse'];
+export type GroupDetail   = Schemas['GroupDetailResponse'];
+export type Member        = Schemas['MemberResponse'];
+export type Chore         = Schemas['ChoreResponse'];
+export type LedgerEntry   = Schemas['LedgerResponse'];
+export type Balance       = Schemas['BalanceResponse'];
+export type Settlement    = Schemas['SettlementResponse'];
+export type InviteResponse = Schemas['InviteResponse'];
+export type LoginResponse  = Schemas['LoginResponse'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -100,7 +32,7 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = await getToken();
-  
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
@@ -150,20 +82,20 @@ export const authApi = {
 // Groups API
 export const groupsApi = {
   list: () => request<Group[]>('/groups'),
-  
+
   create: (data: { name: string }) =>
     request<Group>('/groups', { method: 'POST', body: JSON.stringify(data) }),
-  
+
   get: (id: string) => request<GroupDetail>(`/groups/${id}`),
-  
+
   getMembers: (id: string) => request<Member[]>(`/groups/${id}/members`),
-  
+
   createInvite: (id: string, expiresInDays?: number) =>
-    request<InviteResponse>(`/groups/${id}/invite`, { 
-      method: 'POST', 
-      body: JSON.stringify({ expires_in_days: expiresInDays || 7 }) 
+    request<InviteResponse>(`/groups/${id}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ expires_in_days: expiresInDays || 7 })
     }),
-  
+
   join: (token: string) =>
     request<Group>('/groups/join', { method: 'POST', body: JSON.stringify({ token }) }),
 };
@@ -171,13 +103,13 @@ export const groupsApi = {
 // Chores API
 export const choresApi = {
   list: (groupId: string) => request<Chore[]>(`/groups/${groupId}/chores`),
-  
+
   create: (groupId: string, data: { name: string; description?: string; amount: number }) =>
     request<Chore>(`/groups/${groupId}/chores`, { method: 'POST', body: JSON.stringify(data) }),
-  
+
   update: (id: string, data: { name?: string; description?: string; amount?: number }) =>
     request<Chore>(`/chores/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  
+
   delete: (id: string) => request<void>(`/chores/${id}`, { method: 'DELETE' }),
 };
 
@@ -190,25 +122,25 @@ export const ledgerApi = {
     const queryString = params.toString();
     return request<LedgerEntry[]>(`/groups/${groupId}/ledger${queryString ? `?${queryString}` : ''}`);
   },
-  
+
   create: (groupId: string, data: { user_id?: string; chore_id: string; amount?: number }) =>
     request<LedgerEntry>(`/groups/${groupId}/ledger`, { method: 'POST', body: JSON.stringify(data) }),
-  
+
   approve: (id: string) =>
     request<LedgerEntry>(`/ledger/${id}/approve`, { method: 'POST' }),
-  
+
   reject: (id: string) =>
     request<LedgerEntry>(`/ledger/${id}/reject`, { method: 'POST' }),
-  
+
   listPending: (groupId: string) => request<LedgerEntry[]>(`/groups/${groupId}/pending`),
-  
+
   getBalance: (groupId: string) => request<Balance[]>(`/groups/${groupId}/balance`),
 };
 
 // Settlements API
 export const settlementsApi = {
   list: (groupId: string) => request<Settlement[]>(`/groups/${groupId}/settlements`),
-  
+
   create: (groupId: string, data: { user_id: string; amount: number; date: string; note?: string }) =>
     request<Settlement>(`/groups/${groupId}/settlements`, { method: 'POST', body: JSON.stringify(data) }),
 };

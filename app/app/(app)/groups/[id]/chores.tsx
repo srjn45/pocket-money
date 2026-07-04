@@ -1,56 +1,41 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, TextInput, Modal, Alert, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { choresApi, groupsApi, Chore, Member } from '../../../../src/api';
+import { Chore } from '../../../../src/api';
 import { useAuth } from '../../../../src/auth-context';
+import { useChores, useCreateChore, useUpdateChore, useDeleteChore } from '../../../../src/hooks/useChores';
+import { useGroup } from '../../../../src/hooks/useGroup';
 
 export default function ChoresScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const [chores, setChores] = useState<Chore[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [isHead, setIsHead] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [choreName, setChoreName] = useState('');
   const [choreDescription, setChoreDescription] = useState('');
   const [choreAmount, setChoreAmount] = useState('');
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const loadData = async () => {
-    if (!id || !user?.id) {
-      setIsLoading(false);
-      return;
-    }
-    try {
-      setError('');
-      const [choresData, groupData] = await Promise.all([
-        choresApi.list(id),
-        groupsApi.get(id),
-      ]);
-      setChores(choresData || []);
-      const currentMember = groupData.members.find((m: Member) => m.user_id === user?.id);
-      setIsHead(currentMember?.role === 'head');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chores');
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
+  const choresQuery = useChores(id ?? '');
+  const groupQuery = useGroup(id ?? '');
+
+  const chores = choresQuery.data ?? [];
+  const isHead = groupQuery.data?.members.find(m => m.user_id === user?.id)?.role === 'head';
+
+  const isLoading = choresQuery.isLoading || groupQuery.isLoading;
+  const isRefetching = choresQuery.isRefetching || groupQuery.isRefetching;
+  const error = choresQuery.error instanceof Error ? choresQuery.error.message
+    : groupQuery.error instanceof Error ? groupQuery.error.message : '';
+
+  const onRefresh = () => {
+    choresQuery.refetch();
+    groupQuery.refetch();
   };
 
-  useEffect(() => {
-    loadData();
-  }, [id, user?.id]);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadData();
-  }, [id]);
+  const createChoreMutation = useCreateChore(id ?? '');
+  const updateChoreMutation = useUpdateChore(id ?? '');
+  const deleteChoreMutation = useDeleteChore(id ?? '');
 
   const openModal = (chore?: Chore) => {
     if (chore) {
@@ -73,6 +58,8 @@ export default function ChoresScreen() {
     return choreName.trim().length > 0 && choreAmount.trim().length > 0 && !isNaN(parsed) && parsed > 0;
   };
 
+  const saving = createChoreMutation.isPending || updateChoreMutation.isPending;
+
   const handleSave = async () => {
     if (!id) return;
     const trimmedName = choreName.trim();
@@ -87,28 +74,25 @@ export default function ChoresScreen() {
       return;
     }
 
-    setSaving(true);
     setFormError('');
     try {
       if (editingChore) {
-        await choresApi.update(editingChore.id, {
+        await updateChoreMutation.mutateAsync({
+          id: editingChore.id,
           name: trimmedName,
           description: choreDescription.trim() || undefined,
           amount: parsedAmount,
         });
       } else {
-        await choresApi.create(id, {
+        await createChoreMutation.mutateAsync({
           name: trimmedName,
           description: choreDescription.trim() || undefined,
           amount: parsedAmount,
         });
       }
       setModalVisible(false);
-      loadData();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save chore');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -116,7 +100,6 @@ export default function ChoresScreen() {
     const msg = `Delete "${chore.name}"? This can't be undone.`;
     let confirmed: boolean;
     if (Platform.OS === 'web') {
-      // react-native-web runs in browser; window.confirm is available at runtime
       confirmed = (globalThis as unknown as { confirm: (m: string) => boolean }).confirm(msg);
     } else {
       confirmed = await new Promise<boolean>((resolve) => {
@@ -128,10 +111,15 @@ export default function ChoresScreen() {
     }
     if (!confirmed) return;
     try {
-      await choresApi.delete(chore.id);
-      loadData();
+      await deleteChoreMutation.mutateAsync(chore.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete chore');
+      const errMsg = err instanceof Error ? err.message : 'Failed to delete chore';
+      // Alert.alert is a no-op on react-native-web, so mirror the confirm() pattern above.
+      if (Platform.OS === 'web') {
+        (globalThis as unknown as { alert: (m: string) => void }).alert(errMsg);
+      } else {
+        Alert.alert('Error', errMsg);
+      }
     }
   };
 
@@ -208,7 +196,7 @@ export default function ChoresScreen() {
           renderItem={renderChore}
           keyExtractor={(item) => item.id}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />
           }
           contentContainerStyle={styles.list}
         />

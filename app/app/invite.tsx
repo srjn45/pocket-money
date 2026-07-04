@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { groupsApi } from '../src/api';
 import { useAuth } from '../src/auth-context';
 import { setPendingInviteToken } from '../src/storage';
+import { useJoinGroup } from '../src/hooks/useGroups';
 
 export default function InviteScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const { user, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const joinMutation = useJoinGroup();
 
   useEffect(() => {
     const handleInvite = async () => {
@@ -22,15 +23,13 @@ export default function InviteScreen() {
       }
 
       if (!user) {
-        // Not logged in, save token and redirect to login
         await setPendingInviteToken(token);
         router.replace('/(auth)/login');
         return;
       }
 
-      // User is logged in, try to join
       try {
-        const group = await groupsApi.join(token);
+        const group = await joinMutation.mutateAsync(token);
         router.replace(`/(app)/groups/${group.id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to join group');
