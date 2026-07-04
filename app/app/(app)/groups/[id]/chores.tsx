@@ -113,7 +113,13 @@ export default function ChoresScreen() {
     try {
       await deleteChoreMutation.mutateAsync(chore.id);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete chore');
+      const errMsg = err instanceof Error ? err.message : 'Failed to delete chore';
+      // Alert.alert is a no-op on react-native-web, so mirror the confirm() pattern above.
+      if (Platform.OS === 'web') {
+        (globalThis as unknown as { alert: (m: string) => void }).alert(errMsg);
+      } else {
+        Alert.alert('Error', errMsg);
+      }
     }
   };
 
