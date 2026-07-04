@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, TextInput, Modal, Alert, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { choresApi, groupsApi, Chore, Member } from '../../../../src/api';
@@ -19,9 +19,13 @@ export default function ChoresScreen() {
   const [choreAmount, setChoreAmount] = useState('');
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const loadData = async () => {
-    if (!id || !user?.id) return;
+    if (!id || !user?.id) {
+      setIsLoading(false);
+      return;
+    }
     try {
       setError('');
       const [choresData, groupData] = await Promise.all([
@@ -60,60 +64,83 @@ export default function ChoresScreen() {
       setChoreDescription('');
       setChoreAmount('');
     }
+    setFormError('');
     setModalVisible(true);
   };
 
+  const isFormValid = () => {
+    const parsed = parseFloat(choreAmount);
+    return choreName.trim().length > 0 && choreAmount.trim().length > 0 && !isNaN(parsed) && parsed > 0;
+  };
+
   const handleSave = async () => {
-    if (!id || !choreName.trim() || !choreAmount) return;
+    if (!id) return;
+    const trimmedName = choreName.trim();
+    const parsedAmount = parseFloat(choreAmount);
+
+    if (!trimmedName) {
+      setFormError('Chore name is required.');
+      return;
+    }
+    if (!choreAmount.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFormError('Amount must be a number greater than 0.');
+      return;
+    }
 
     setSaving(true);
+    setFormError('');
     try {
       if (editingChore) {
         await choresApi.update(editingChore.id, {
-          name: choreName.trim(),
+          name: trimmedName,
           description: choreDescription.trim() || undefined,
-          amount: parseFloat(choreAmount),
+          amount: parsedAmount,
         });
       } else {
         await choresApi.create(id, {
-          name: choreName.trim(),
+          name: trimmedName,
           description: choreDescription.trim() || undefined,
-          amount: parseFloat(choreAmount),
+          amount: parsedAmount,
         });
       }
       setModalVisible(false);
       loadData();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save chore');
+      setFormError(err instanceof Error ? err.message : 'Failed to save chore');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = (chore: Chore) => {
-    Alert.alert('Delete Chore', `Are you sure you want to delete "${chore.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await choresApi.delete(chore.id);
-            loadData();
-          } catch (err) {
-            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete chore');
-          }
-        },
-      },
-    ]);
+  const handleDelete = async (chore: Chore) => {
+    const msg = `Delete "${chore.name}"? This can't be undone.`;
+    let confirmed: boolean;
+    if (Platform.OS === 'web') {
+      // react-native-web runs in browser; window.confirm is available at runtime
+      confirmed = (globalThis as unknown as { confirm: (m: string) => boolean }).confirm(msg);
+    } else {
+      confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert('Delete Chore', msg, [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+    }
+    if (!confirmed) return;
+    try {
+      await choresApi.delete(chore.id);
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete chore');
+    }
   };
 
   const renderChore = ({ item }: { item: Chore }) => {
     const isSystemChore = item.is_system;
     const canEdit = isHead && !isSystemChore;
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.choreCard, isSystemChore && styles.systemChoreCard]}
         onPress={() => canEdit && openModal(item)}
         disabled={!canEdit}
@@ -127,7 +154,10 @@ export default function ChoresScreen() {
               </View>
             )}
           </View>
-          {item.description && (
+          {isSystemChore && (
+            <Text style={styles.systemChoreCaption}>Used to record payouts — can't be edited or deleted</Text>
+          )}
+          {!isSystemChore && item.description && (
             <Text style={styles.choreDescription}>{item.description}</Text>
           )}
         </View>
@@ -135,7 +165,7 @@ export default function ChoresScreen() {
           {isSystemChore ? (
             <Text style={styles.choreAmountVariable}>Variable</Text>
           ) : (
-            <Text style={styles.choreAmount}>${item.amount.toFixed(2)}</Text>
+            <Text style={styles.choreAmount}>₹{item.amount.toFixed(2)}</Text>
           )}
           {canEdit && (
             <TouchableOpacity onPress={() => handleDelete(item)}>
@@ -170,6 +200,7 @@ export default function ChoresScreen() {
         <View style={styles.empty}>
           <Ionicons name="list-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>No chores yet</Text>
+          {isHead && <Text style={styles.emptyHint}>Add chores your family can earn money for</Text>}
         </View>
       ) : (
         <FlatList
@@ -190,11 +221,13 @@ export default function ChoresScreen() {
               {editingChore ? 'Edit Chore' : 'Add Chore'}
             </Text>
 
+            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
             <TextInput
               style={styles.input}
               placeholder="Chore name"
               value={choreName}
-              onChangeText={setChoreName}
+              onChangeText={(v) => { setChoreName(v); setFormError(''); }}
             />
 
             <TextInput
@@ -206,9 +239,9 @@ export default function ChoresScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="Amount"
+              placeholder="Amount (₹)"
               value={choreAmount}
-              onChangeText={setChoreAmount}
+              onChangeText={(v) => { setChoreAmount(v); setFormError(''); }}
               keyboardType="decimal-pad"
             />
 
@@ -220,9 +253,9 @@ export default function ChoresScreen() {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
+                style={[styles.modalButton, styles.saveButton, (!isFormValid() || saving) && styles.saveButtonDisabled]}
                 onPress={handleSave}
-                disabled={saving}
+                disabled={!isFormValid() || saving}
               >
                 {saving ? (
                   <ActivityIndicator color="#fff" />
@@ -252,6 +285,11 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
     padding: 16,
     textAlign: 'center',
+  },
+  formError: {
+    color: '#ff3b30',
+    fontSize: 14,
+    marginBottom: 12,
   },
   addButton: {
     flexDirection: 'row',
@@ -310,6 +348,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
   },
+  systemChoreCaption: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   choreDescription: {
     fontSize: 14,
     color: '#666',
@@ -341,6 +385,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#666',
     marginTop: 16,
+  },
+  emptyHint: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -386,6 +436,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#007AFF',
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
   },
   saveButtonText: {
     color: '#fff',
