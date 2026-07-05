@@ -25,6 +25,8 @@ tags:
     description: Ledger entries and balance tracking
   - name: Allowances
     description: Recurring monthly pocket money configuration and history
+  - name: Loans
+    description: Loan requests, approval, and EMI repayment
 
 paths:
   /health:
@@ -1054,6 +1056,316 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/groups/{id}/loans:
+    get:
+      tags:
+        - Loans
+      summary: List loans for a group
+      description: Head sees all loans; member sees only their own.
+      operationId: listLoans
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Group ID
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+            nullable: true
+          description: Filter by borrower user ID (head only)
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [requested, active, rejected, closed]
+            nullable: true
+          description: Filter by loan status
+      responses:
+        '200':
+          description: Loan list (empty array when none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanResponse'
+        '400':
+          description: Invalid filter parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Loans
+      summary: Create a loan or loan request
+      description: >
+        Member creates a `requested` loan for themselves;
+        head creates a pre-approved `active` loan for a member.
+        Disbursement is not a ledger entry; repayment is via monthly EMI debits.
+      operationId: createLoan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Group ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLoanRequest'
+      responses:
+        '201':
+          description: Loan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Target user not a member (head-created loans)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/loans/{id}/approve:
+    post:
+      tags:
+        - Loans
+      summary: Approve a loan request
+      description: >
+        Head only. Transitions `requested` → `active`; may override principal/installments;
+        sets start_period to next calendar month.
+      operationId: approveLoan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Loan ID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveLoanRequest'
+      responses:
+        '200':
+          description: Loan approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller is not the group head
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Loan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Loan is not pending approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/loans/{id}/reject:
+    post:
+      tags:
+        - Loans
+      summary: Reject a loan request
+      description: Head only. Transitions `requested` → `rejected`.
+      operationId: rejectLoan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Loan ID
+      responses:
+        '200':
+          description: Loan rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller is not the group head
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Loan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Loan is not pending approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/loans/{id}/close:
+    post:
+      tags:
+        - Loans
+      summary: Early payoff — close an active loan
+      description: >
+        Head only. Posts one final EMI debit for the outstanding amount
+        (principal − Σ posted EMIs) and sets status to `closed`.
+      operationId: closeLoan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Loan ID
+      responses:
+        '200':
+          description: Loan closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller is not the group head
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Loan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Loan is not active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1545,4 +1857,104 @@ components:
         - effective_from
         - created_by
         - created_at
+
+    CreateLoanRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Borrower. Required when the head creates a pre-approved loan; ignored/self for member requests.
+        principal:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Loan principal in minor units (paise). > 0.
+        installments:
+          type: integer
+          minimum: 1
+          description: Number of monthly installments. > 0.
+        note:
+          type: string
+          nullable: true
+      required:
+        - principal
+        - installments
+
+    ApproveLoanRequest:
+      type: object
+      properties:
+        principal:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        installments:
+          type: integer
+          minimum: 1
+          nullable: true
+      description: Optional overrides applied before approval; emi_amount is recomputed.
+
+    LoanResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        group_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        principal:
+          type: integer
+          format: int64
+          description: Minor units
+        installments:
+          type: integer
+        emi_amount:
+          type: integer
+          format: int64
+          description: ceil(principal/installments), minor units
+        start_period:
+          type: string
+          nullable: true
+          description: 'YYYY-MM; null until active'
+        status:
+          type: string
+          enum: [requested, active, rejected, closed]
+        note:
+          type: string
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+        decided_by:
+          type: string
+          format: uuid
+          nullable: true
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        installments_posted:
+          type: integer
+          description: Count of posted EMI entries
+        outstanding:
+          type: integer
+          format: int64
+          description: principal − Σ posted EMIs, minor units
+      required:
+        - id
+        - group_id
+        - user_id
+        - principal
+        - installments
+        - emi_amount
+        - status
+        - requested_at
+        - installments_posted
+        - outstanding
 

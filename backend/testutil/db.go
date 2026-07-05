@@ -62,7 +62,11 @@ func CleanupTestDB(pool *pgxpool.Pool) error {
 	// settlements is omitted: migration 012 drops it. Any per-table error (e.g. a
 	// table not existing yet) is swallowed below. Note: Postgres TRUNCATE has no
 	// IF EXISTS form, so the table names must all exist post-migration.
+	// loans is placed before ledger_entries: ledger_entries.loan_id references loans,
+	// so TRUNCATE loans CASCADE also truncates ledger_entries. Since ledger_entries
+	// is in the list anyway, the net effect is correct regardless of order.
 	tables := []string{
+		"loans",
 		"allowances",
 		"invite_tokens",
 		"ledger_entries",
@@ -89,8 +93,10 @@ func ResetTestDB(pool *pgxpool.Pool) error {
 
 	// Drop all tables in reverse order of dependencies.
 	// settlements included for pre-012 state compatibility (IF EXISTS is safe).
+	// loans must come before ledger_entries (FK ledger_entries.loan_id → loans).
 	tables := []string{
 		"schema_migrations",
+		"loans",
 		"allowances",
 		"invite_tokens",
 		"settlements",
@@ -108,8 +114,8 @@ func ResetTestDB(pool *pgxpool.Pool) error {
 		}
 	}
 
-	// Drop custom types (include v2 enum types)
-	types := []string{"ledger_entry_type", "ledger_direction", "ledger_status", "member_role"}
+	// Drop custom types (include v2 enum types and loan_status added in 011)
+	types := []string{"loan_status", "ledger_entry_type", "ledger_direction", "ledger_status", "member_role"}
 	for _, t := range types {
 		_, err := pool.Exec(ctx, fmt.Sprintf("DROP TYPE IF EXISTS %s CASCADE", t))
 		if err != nil {

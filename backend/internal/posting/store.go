@@ -29,4 +29,29 @@ type Store interface {
 	// InsertAllowancePosting is the idempotent allowance insert (§2.3), bound to the tx's Querier.
 	InsertAllowancePosting(ctx context.Context, q db.Querier,
 		groupID, userID uuid.UUID, amount int64, period string, createdBy uuid.UUID) (bool, error)
+
+	// --- EMI posting additions (WP-3.1) ---
+
+	// ListActiveLoans returns all active loans for the group in deterministic
+	// (user_id, start_period, id) order — required for no-deadlock property (§4.2).
+	ListActiveLoans(ctx context.Context, groupID uuid.UUID) ([]models.LoanPostingInput, error)
+
+	// PostedEMIPeriods returns, per loan, the set of periods already posted as EMI
+	// entries in this group — the fast-path guard (§4.4).
+	PostedEMIPeriods(ctx context.Context, groupID uuid.UUID) (map[uuid.UUID]map[string]bool, error)
+
+	// LockActiveLoan acquires FOR UPDATE on the loan row and returns whether it is
+	// currently active. Serializes the engine against the early-payoff close endpoint (§4.5).
+	LockActiveLoan(ctx context.Context, q db.Querier, loanID uuid.UUID) (bool, error)
+
+	// InsertEMIPosting is the idempotent EMI debit insert (§2.3), bound to the tx's Querier.
+	InsertEMIPosting(ctx context.Context, q db.Querier,
+		groupID, userID, loanID uuid.UUID,
+		amount int64, period string, note *string, createdBy uuid.UUID) (bool, error)
+
+	// CountPostedEMIs counts committed EMI entries for a loan on the tx querier (§4.5).
+	CountPostedEMIs(ctx context.Context, q db.Querier, loanID uuid.UUID) (int, error)
+
+	// CloseLoan sets the loan status to closed on the tx querier (§4.5).
+	CloseLoan(ctx context.Context, q db.Querier, loanID uuid.UUID) error
 }

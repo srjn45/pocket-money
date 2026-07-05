@@ -52,8 +52,9 @@ func setupAllowanceTestEnv(t *testing.T) *allowanceTestEnv {
 	groupRepo := db.NewGroupRepo(pool)
 	ledgerRepo := db.NewLedgerRepo(pool)
 	allowanceRepo := db.NewAllowanceRepo(pool)
+	loanRepo := db.NewLoanRepo(pool)
 
-	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, groupRepo, pool)
+	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
 	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc)
 	ah := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)

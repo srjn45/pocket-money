@@ -54,8 +54,9 @@ func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
 	choreRepo := db.NewChoreRepo(pool)
 	ledgerRepo := db.NewLedgerRepo(pool)
 	allowanceRepo := db.NewAllowanceRepo(pool)
+	loanRepo := db.NewLoanRepo(pool)
 
-	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, groupRepo, pool)
+	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
 	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
 
