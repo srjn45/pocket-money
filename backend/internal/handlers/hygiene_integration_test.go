@@ -237,18 +237,19 @@ func (e *hygieneTestEnv) isMember(t *testing.T, groupID, userID uuid.UUID) bool 
 func (e *hygieneTestEnv) seedSettledMember(t *testing.T, groupID, memberID, actorID uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
-	choreID := uuid.New()
 
+	// chore_id is nullable (migration 009) and only chore entries carry one; these
+	// synthetic balance-seed entries use non-chore types so no chores row is needed.
 	_, err := e.pool.Exec(ctx, `
-		INSERT INTO ledger_entries (id, group_id, user_id, chore_id, amount, status, entry_type, direction, created_by_user_id)
-		VALUES ($1, $2, $3, $4, 50000, 'approved', 'chore', 'credit', $5)`,
-		uuid.New(), groupID, memberID, choreID, actorID)
+		INSERT INTO ledger_entries (id, group_id, user_id, amount, status, entry_type, direction, created_by_user_id)
+		VALUES ($1, $2, $3, 50000, 'approved', 'adjustment', 'credit', $4)`,
+		uuid.New(), groupID, memberID, actorID)
 	require.NoError(t, err)
 
 	_, err = e.pool.Exec(ctx, `
-		INSERT INTO ledger_entries (id, group_id, user_id, chore_id, amount, status, entry_type, direction, created_by_user_id)
-		VALUES ($1, $2, $3, $4, 50000, 'approved', 'settlement', 'debit', $5)`,
-		uuid.New(), groupID, memberID, choreID, actorID)
+		INSERT INTO ledger_entries (id, group_id, user_id, amount, status, entry_type, direction, created_by_user_id)
+		VALUES ($1, $2, $3, 50000, 'approved', 'settlement', 'debit', $4)`,
+		uuid.New(), groupID, memberID, actorID)
 	require.NoError(t, err)
 }
 
@@ -262,20 +263,21 @@ func TestRemoveMember_HeadRemovesSettledMember(t *testing.T) {
 	env := setupHygieneTestEnv(t)
 	defer env.cleanup()
 
-	head, _, _ := env.seedHygieneGroup(t, "rm1", "pass")
+	head, _, group := env.seedHygieneGroup(t, "rm1", "pass")
+	groupID := group.ID
 	member, err := env.userRepo.Create(t.Context(), "target-rm1@example.com", "hash", "Target", nil, nil)
 	require.NoError(t, err)
-	_, err = env.groupRepo.AddMember(t.Context(), uuid.MustParse(head.ID.String()), member.ID, models.RoleMember)
+	_, err = env.groupRepo.AddMember(t.Context(), groupID, member.ID, models.RoleMember)
 	require.NoError(t, err)
 
-	// Determine group ID from head's membership
-	groups, err := env.groupRepo.ListForUserWithSummary(t.Context(), head.ID)
-	require.NoError(t, err)
-	require.Len(t, groups, 1)
-	groupID := groups[0].ID
-
-	// Set up allowance and seed a settled balance
-	_, err = env.allowanceRepo.SetAllowance(t.Context(), groupID, member.ID, 10000, "2024-01", head.ID)
+	// Set up a *future-effective* allowance and seed a settled balance. The allowance
+	// row must exist so we can prove it is deleted on removal, but it must not be due:
+	// PostDue posts one credit per month from max(effective_from, join-month) through
+	// the current month (engine.go), and AddMember stamps joined_at = now(). A future
+	// effective_from keeps the row present without posting a credit that would push the
+	// balance non-zero (→ 409 instead of the expected 204).
+	futureEff := time.Now().AddDate(0, 1, 0).Format("2006-01")
+	_, err = env.allowanceRepo.SetAllowance(t.Context(), groupID, member.ID, 10000, futureEff, head.ID)
 	require.NoError(t, err)
 	env.seedSettledMember(t, groupID, member.ID, head.ID)
 
@@ -397,9 +399,9 @@ func TestRemoveMember_NonZeroBalance(t *testing.T) {
 
 	// Add an approved credit with no offsetting debit → non-zero balance.
 	_, err = env.pool.Exec(t.Context(), `
-		INSERT INTO ledger_entries (id, group_id, user_id, chore_id, amount, status, entry_type, direction, created_by_user_id)
-		VALUES ($1, $2, $3, $4, 50000, 'approved', 'chore', 'credit', $5)`,
-		uuid.New(), groupID, member.ID, uuid.New(), head.ID)
+		INSERT INTO ledger_entries (id, group_id, user_id, amount, status, entry_type, direction, created_by_user_id)
+		VALUES ($1, $2, $3, 50000, 'approved', 'adjustment', 'credit', $4)`,
+		uuid.New(), groupID, member.ID, head.ID)
 	require.NoError(t, err)
 
 	w := doRequest(env.router, http.MethodDelete, removePath(groupID, member.ID), nil, bearerToken(t, head.ID))
@@ -513,9 +515,9 @@ func TestRemoveMember_LeaveBlockedByBalance(t *testing.T) {
 
 	// Non-zero credit.
 	_, err = env.pool.Exec(t.Context(), `
-		INSERT INTO ledger_entries (id, group_id, user_id, chore_id, amount, status, entry_type, direction, created_by_user_id)
-		VALUES ($1, $2, $3, $4, 30000, 'approved', 'chore', 'credit', $5)`,
-		uuid.New(), groupID, member.ID, uuid.New(), head.ID)
+		INSERT INTO ledger_entries (id, group_id, user_id, amount, status, entry_type, direction, created_by_user_id)
+		VALUES ($1, $2, $3, 30000, 'approved', 'adjustment', 'credit', $4)`,
+		uuid.New(), groupID, member.ID, head.ID)
 	require.NoError(t, err)
 
 	w := doRequest(env.router, http.MethodDelete, removePath(groupID, member.ID), nil, bearerToken(t, member.ID))
@@ -536,9 +538,9 @@ func TestRemoveMember_PendingAutoRejected(t *testing.T) {
 	// Insert a pending_approval entry (doesn't count toward balance).
 	entryID := uuid.New()
 	_, err = env.pool.Exec(t.Context(), `
-		INSERT INTO ledger_entries (id, group_id, user_id, chore_id, amount, status, entry_type, direction, created_by_user_id)
-		VALUES ($1, $2, $3, $4, 10000, 'pending_approval', 'chore', 'credit', $5)`,
-		entryID, groupID, member.ID, uuid.New(), member.ID)
+		INSERT INTO ledger_entries (id, group_id, user_id, amount, status, entry_type, direction, created_by_user_id)
+		VALUES ($1, $2, $3, 10000, 'pending_approval', 'adjustment', 'credit', $4)`,
+		entryID, groupID, member.ID, member.ID)
 	require.NoError(t, err)
 
 	// Balance is 0 (pending doesn't count) → removal should succeed.
