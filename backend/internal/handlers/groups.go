@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,15 +24,17 @@ type GroupHandler struct {
 	inviteRepo *db.InviteRepo
 	choreRepo  *db.ChoreRepo
 	postingSvc *posting.Service
+	appBaseURL string
 }
 
 // NewGroupHandler creates a new GroupHandler
-func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service) *GroupHandler {
+func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service, appBaseURL string) *GroupHandler {
 	return &GroupHandler{
 		groupRepo:  groupRepo,
 		inviteRepo: inviteRepo,
 		choreRepo:  choreRepo,
 		postingSvc: postingSvc,
+		appBaseURL: appBaseURL,
 	}
 }
 
@@ -374,13 +377,19 @@ func (h *GroupHandler) CreateInvite(c *gin.Context) {
 		return
 	}
 
-	// Build invite URL
-	host := c.Request.Host
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
+	// Build invite URL.  Prefer APP_BASE_URL so the link points at the Expo web
+	// server, not the API server (which has no /invite route).  Fall back to the
+	// request host for same-origin or dev setups where both are co-located.
+	var inviteURL string
+	if h.appBaseURL != "" {
+		inviteURL = fmt.Sprintf("%s/invite?token=%s", strings.TrimRight(h.appBaseURL, "/"), invite.Token)
+	} else {
+		scheme := "http"
+		if c.Request.TLS != nil {
+			scheme = "https"
+		}
+		inviteURL = fmt.Sprintf("%s://%s/invite?token=%s", scheme, c.Request.Host, invite.Token)
 	}
-	inviteURL := fmt.Sprintf("%s://%s/invite?token=%s", scheme, host, invite.Token)
 
 	c.JSON(http.StatusCreated, InviteResponse{
 		InviteURL: inviteURL,

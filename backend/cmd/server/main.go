@@ -46,7 +46,7 @@ func main() {
 
 	// Create handlers
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, postingSvc)
+	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, postingSvc, cfg.AppBaseURL)
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
 	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
 	allowanceHandler := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
