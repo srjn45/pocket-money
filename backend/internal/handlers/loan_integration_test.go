@@ -426,9 +426,10 @@ func TestLoan_EarlyPayoff(t *testing.T) {
 		models.LoanStatusActive, &start, nil, &head.ID, &decidedAt)
 	require.NoError(t, err)
 
-	// Backdate start_period 1 month back → 1 installment due.
-	oneMonthAgo := time.Now().AddDate(0, -1, 0).Format("2006-01")
-	env.backdateLoanStart(t, loan.ID, oneMonthAgo)
+	// Set start_period to the current month → exactly 1 installment due (the next
+	// installment falls in the following month, which is not yet due).
+	currentMonth := time.Now().Format("2006-01")
+	env.backdateLoanStart(t, loan.ID, currentMonth)
 	env.triggerPosting(t, group.ID, head.ID)
 	assert.Equal(t, 1, env.countEMIRows(t, loan.ID))
 
@@ -611,6 +612,14 @@ func TestLoan_Migration011_UpDown(t *testing.T) {
 		VALUES (gen_random_uuid(), $1, $2, 500, 'approved', 'emi', 'debit', $3, $4, $5)`,
 		group.ID, member.ID, bogusID, period+"X", head.ID)
 	assert.Error(t, fkErr, "bogus loan_id must fail FK constraint")
+
+	// RunMigrationsDown rolls back the ENTIRE chain, not just 011. An earlier
+	// down step (009) restores ledger_entries.chore_id NOT NULL, which the emi row
+	// seeded above (chore_id NULL) would violate — down migrations are schema
+	// rollbacks, not data-safe (§3.2). Clear the ledger rows before rolling back so
+	// the full down/up round-trip exercises 011's down cleanly.
+	_, err = env.pool.Exec(ctx, `DELETE FROM ledger_entries`)
+	require.NoError(t, err)
 
 	// Run migrations down and re-up.
 	dbURL := testutil.GetTestDatabaseURL()
