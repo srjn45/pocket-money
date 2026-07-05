@@ -301,6 +301,50 @@ ls migrations/
 
 ---
 
+## Backups & Restore
+
+The Postgres volume (`postgres_data`) is the **only** copy of the family's money ledger. Back it up regularly. All commands run `pg_dump`/`pg_restore` inside the existing `postgres` container — no Postgres client tools needed on the host.
+
+```bash
+# Create a compressed, timestamped dump in ./backups/ and prune to the newest 14
+make backup
+
+# Verify the newest dump restores cleanly into a throwaway db (live db untouched)
+make backup-verify
+
+# Verify a specific dump
+make backup-verify BACKUP=backups/pocket_money_20260705_020000.dump
+
+# Restore a dump into the LIVE db (prompts for 'yes' before overwriting)
+make restore BACKUP=backups/pocket_money_20260705_020000.dump
+
+# Skip the confirmation prompt (for scripts/CI)
+make restore BACKUP=backups/pocket_money_20260705_020000.dump FORCE=1
+```
+
+**Nightly cron** (keeps the newest 14 dumps, logs to `backups/backup.log`):
+
+```cron
+# m h dom mon dow   nightly Pocket Money DB backup (keeps newest 14), logs to backups/backup.log
+0 2 * * *  cd /home/<user>/pocket-money && PATH=/usr/local/bin:/usr/bin:/bin /usr/bin/make backup >> /home/<user>/pocket-money/backups/backup.log 2>&1
+```
+
+Replace `/home/<user>/pocket-money` with the actual deploy path. Confirm `which make` and `which docker` match the `PATH` above. To retain more dumps, add `KEEP=30` to the cron line.
+
+Optional weekly verify (confirms the newest dump is always restorable):
+
+```cron
+30 2 * * 0  cd /home/<user>/pocket-money && PATH=/usr/local/bin:/usr/bin:/bin /usr/bin/make backup-verify >> /home/<user>/pocket-money/backups/verify.log 2>&1
+```
+
+**Notes:**
+
+- `./backups/*.dump` is gitignored — dumps contain family financial data and must never be committed. Only `backups/.gitkeep` is tracked.
+- Override credentials on the command line if needed: `make backup DB_USER=… DB_NAME=…`
+- Off-machine/offsite copies (rsync to NAS, cloud storage) are a future ops task and not part of this setup.
+
+---
+
 ## Troubleshooting
 
 ### Database Connection Issues
