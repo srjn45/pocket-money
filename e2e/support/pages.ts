@@ -123,13 +123,23 @@ export function groupIdFromUrl(page: Page): string {
 }
 
 /**
- * Click a bottom-tab by the suffix of its href (RN-Web renders each tab as
- * <a role="tab" href="…/<suffix>">). Targeting the href avoids matching the
- * Overview tab, whose accessible name is the group name (e.g. "LoanFam-…"
- * would collide with a /loan/i name filter).
+ * Navigate to a tab.
+ *
+ * The group tabs (loans/chores) are reached by full-URL navigation, not by
+ * clicking the tab link: on web, switching to a sibling tab via the link does
+ * not populate the parent [id] dynamic segment in the child screen's
+ * useLocalSearchParams, so its group-scoped queries fetch with an empty id
+ * (loans list comes back empty, a loan request POSTs to /groups//loans). A full
+ * navigation parses [id] from the URL reliably. The app-level Profile tab has no
+ * dynamic segment, so a tab-link click is fine there.
  */
 export async function openTab(page: Page, suffix: 'loans' | 'chores' | 'profile'): Promise<void> {
-  await page.locator(`a[role="tab"][href$="/${suffix}"]`).click();
+  if (suffix === 'profile') {
+    await page.locator(`a[role="tab"][href$="/profile"]`).click();
+    return;
+  }
+  const gid = groupIdFromUrl(page);
+  await page.goto(`/groups/${gid}/${suffix}`);
 }
 
 /**

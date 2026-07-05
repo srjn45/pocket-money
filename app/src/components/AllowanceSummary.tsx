@@ -35,6 +35,7 @@ export function AllowanceSummary({ current, upcoming, onEdit }: AllowanceSummary
               size="sm"
               icon="pencil"
               onPress={onEdit}
+              testID="member-allowance-button"
             />
           )}
         </View>

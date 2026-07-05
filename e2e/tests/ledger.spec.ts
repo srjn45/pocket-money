@@ -6,6 +6,7 @@ import {
   inviteAndCaptureToken,
   groupIdFromUrl,
   reloadInto,
+  autoAcceptDialogs,
   memberLogChore,
   approveFirstPending,
   rejectFirstPending,
@@ -52,6 +53,7 @@ test('T4: member logs chores; head approves one and rejects another', async ({ p
 
   const inviteToken = await inviteAndCaptureToken(page);
   const { ctx: memberCtx, page: memberPage } = await joinGroupAsMember(browser, inviteToken, 'Member T4');
+  autoAcceptDialogs(page); // reject shows a window.confirm() on web
 
   try {
     // Member logs two chores — both land as pending approvals.
@@ -91,9 +93,8 @@ test('T5: head sets member allowance and it renders on the summary', async ({ pa
     await memberCard.click();
     await expect(page.getByTestId('member-detail-root')).toBeVisible({ timeout: 10_000 });
 
-    // Open the allowance sheet. The AllowanceSummary "Set"/"Edit" button sits in a
-    // component outside the bounded testID list, so target it by role/name.
-    await page.getByRole('button', { name: /^(set|edit)$/i }).click();
+    // Open the allowance sheet (AllowanceSummary "Set"/"Edit" button).
+    await page.getByTestId('member-allowance-button').click();
 
     // Set ₹300/month and save.
     await page.getByPlaceholder('e.g. 500').fill('300');
