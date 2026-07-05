@@ -20,6 +20,7 @@ export type Balance       = Schemas['BalanceResponse'];
 export type InviteResponse = Schemas['InviteResponse'];
 export type LoginResponse  = Schemas['LoginResponse'];
 export type Allowance     = Schemas['AllowanceResponse'];
+export type Loan          = Schemas['LoanResponse'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -126,6 +127,29 @@ export const allowancesApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+};
+
+// Loans API
+export const loansApi = {
+  list: (groupId: string, options?: { user_id?: string; status?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.user_id) params.append('user_id', options.user_id);
+    if (options?.status) params.append('status', options.status);
+    const qs = params.toString();
+    return request<Loan[]>(`/groups/${groupId}/loans${qs ? `?${qs}` : ''}`);
+  },
+
+  request: (groupId: string, data: { principal: number; installments: number; note?: string | null }) =>
+    request<Loan>(`/groups/${groupId}/loans`, { method: 'POST', body: JSON.stringify(data) }),
+
+  approve: (loanId: string, data: { principal?: number | null; installments?: number | null }) =>
+    request<Loan>(`/loans/${loanId}/approve`, { method: 'POST', body: JSON.stringify(data) }),
+
+  reject: (loanId: string) =>
+    request<Loan>(`/loans/${loanId}/reject`, { method: 'POST' }),
+
+  close: (loanId: string) =>
+    request<Loan>(`/loans/${loanId}/close`, { method: 'POST' }),
 };
 
 // Ledger API
