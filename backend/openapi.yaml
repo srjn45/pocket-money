@@ -53,7 +53,10 @@ paths:
       tags:
         - Auth
       summary: Register a new user
-      description: Creates a new user account
+      description: >
+        Creates a new user account and returns a JWT plus the user, so the client is
+        logged in immediately (auto-login). Same response shape as login; no separate
+        login call is needed after registering.
       operationId: register
       requestBody:
         required: true
@@ -63,11 +66,11 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: User created successfully
+          description: User created and logged in (returns token + user, same as login)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponse'
+                $ref: '#/components/schemas/LoginResponse'
         '400':
           description: Bad request (validation error or email already exists)
           content:

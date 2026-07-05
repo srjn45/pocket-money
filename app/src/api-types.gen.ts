@@ -35,7 +35,7 @@ export interface paths {
         put?: never;
         /**
          * Register a new user
-         * @description Creates a new user account
+         * @description Creates a new user account and returns a JWT plus the user, so the client is logged in immediately (auto-login). Same response shape as login; no separate login call is needed after registering.
          */
         post: operations["register"];
         delete?: never;
@@ -975,13 +975,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description User created successfully */
+            /** @description User created and logged in (returns token + user, same as login) */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserResponse"];
+                    "application/json": components["schemas"]["LoginResponse"];
                 };
             };
             /** @description Bad request (validation error or email already exists) */

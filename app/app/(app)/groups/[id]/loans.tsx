@@ -283,9 +283,9 @@ export default function LoansScreen() {
     </View>
   );
 
-  const emptyTitle = isHead ? 'No loans' : 'No loans yet';
+  const emptyTitle = isHead ? 'No loans yet' : 'No loans yet';
   const emptySubtitle = isHead
-    ? 'Members can request loans from this tab'
+    ? 'When a member requests a loan, it appears here for you to approve'
     : 'Tap "Request Loan" to borrow money repaid via pocket money';
 
   return (
