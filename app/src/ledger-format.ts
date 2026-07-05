@@ -1,4 +1,4 @@
-import type { LedgerEntry, Chore, Member } from './api';
+import type { LedgerEntry, Chore, Member, Loan } from './api';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -39,8 +39,18 @@ export function monthKeyOf(entry: LedgerEntry): string {
   return entry.period ?? toYearMonth(entry.created_at);
 }
 
-/** Friendly title for a ledger row per §2.2 of WP-1.3 spec. */
-export function entryTitle(entry: LedgerEntry, chores: Chore[]): string {
+/** Months between two YYYY-MM strings (to - from, signed). */
+function monthDiff(from: string, to: string): number {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+/**
+ * Friendly title for a ledger row per §2.2 of WP-1.3 spec.
+ * Pass `loans` to enable "EMI k/n — <note>" labels; omit for safe fallback.
+ */
+export function entryTitle(entry: LedgerEntry, chores: Chore[], loans?: Loan[]): string {
   switch (entry.entry_type) {
     case 'chore': {
       const chore = chores.find(c => c.id === entry.chore_id);
@@ -51,7 +61,14 @@ export function entryTitle(entry: LedgerEntry, chores: Chore[]): string {
       return `Pocket money — ${humanMonth(period)}`;
     }
     case 'emi': {
-      // WP-3.2 will add n/12 installment index; for now render without it
+      const loan = loans?.find(l => l.id === entry.loan_id);
+      if (loan && loan.start_period && entry.period) {
+        const k = monthDiff(loan.start_period, entry.period) + 1;
+        const n = loan.installments;
+        const notePart = loan.note ? ` — ${loan.note}` : '';
+        return `EMI ${k}/${n}${notePart}`;
+      }
+      // Safe fallback: no loan data available
       return entry.note ? `EMI — ${entry.note}` : 'EMI';
     }
     case 'settlement':

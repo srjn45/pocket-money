@@ -1,6 +1,6 @@
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { theme } from '../theme';
-import type { LedgerEntry, Chore, Member } from '../api';
+import type { LedgerEntry, Chore, Member, Loan } from '../api';
 import { groupEntriesByMonth, type MonthGroup } from '../ledger-format';
 import { LedgerRow } from './LedgerRow';
 import { MonthHeader } from './MonthHeader';
@@ -19,6 +19,8 @@ export interface LedgerListProps {
   onRefresh?: () => void;
   emptyTitle: string;
   emptySubtitle?: string;
+  /** Optional loans so EMI rows can render "EMI k/n"; omit for the plain fallback. */
+  loans?: Loan[];
 }
 
 export function LedgerList({
@@ -33,6 +35,7 @@ export function LedgerList({
   onRefresh,
   emptyTitle,
   emptySubtitle,
+  loans,
 }: LedgerListProps) {
   const sections = groupEntriesByMonth(entries);
 
@@ -59,6 +62,7 @@ export function LedgerList({
           onApprove={onApprove}
           onReject={onReject}
           processing={processingId === item.id}
+          loans={loans}
         />
       )}
       renderSectionHeader={({ section }) => (

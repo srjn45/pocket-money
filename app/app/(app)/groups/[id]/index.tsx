@@ -7,6 +7,7 @@ import { useGroup } from '../../../../src/hooks/useGroup';
 import { useChores } from '../../../../src/hooks/useChores';
 import { useLedger, useBalance } from '../../../../src/hooks/useLedger';
 import { useAllowances } from '../../../../src/hooks/useAllowances';
+import { useLoans } from '../../../../src/hooks/useLoans';
 import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../src/allowance-format';
 import { groupsApi } from '../../../../src/api';
 import type { Balance } from '../../../../src/api';
@@ -37,6 +38,7 @@ export default function GroupOverviewScreen() {
   const balanceQuery = useBalance(id ?? '');
   const choresQuery = useChores(id ?? '');
   const allowancesQuery = useAllowances(id ?? '');
+  const loansQuery = useLoans(id ?? '');
 
   const group = groupQuery.data;
   const members = group?.members ?? [];
@@ -217,6 +219,7 @@ export default function GroupOverviewScreen() {
         members={members}
         isHead={false}
         groupId={id ?? ''}
+        loans={loansQuery.data ?? []}
         refreshing={myLedgerQuery.isFetching}
         onRefresh={() => myLedgerQuery.refetch()}
         emptyTitle="No entries yet"

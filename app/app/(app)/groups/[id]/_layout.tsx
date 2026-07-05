@@ -42,6 +42,15 @@ export default function GroupDetailLayout() {
         }}
       />
       <Tabs.Screen
+        name="loans"
+        options={{
+          title: 'Loans',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="card-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="ledger"
         options={{
           href: null,

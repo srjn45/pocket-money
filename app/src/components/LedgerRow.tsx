@@ -1,7 +1,7 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../theme';
-import type { LedgerEntry, Chore, Member } from '../api';
+import type { LedgerEntry, Chore, Member, Loan } from '../api';
 import { entryTitle, decidedByCaption } from '../ledger-format';
 import { ListRow } from './ListRow';
 import { AmountText } from './AmountText';
@@ -24,6 +24,8 @@ export interface LedgerRowProps {
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
   processing?: boolean;
+  /** Optional loans so EMI rows can render "EMI k/n"; omit for the plain fallback. */
+  loans?: Loan[];
 }
 
 export function LedgerRow({
@@ -34,11 +36,12 @@ export function LedgerRow({
   onApprove,
   onReject,
   processing = false,
+  loans,
 }: LedgerRowProps) {
   const isPending = entry.status === 'pending_approval';
   const isRejected = entry.status === 'rejected';
   const icon = TYPE_ICONS[entry.entry_type] ?? 'ellipse-outline';
-  const title = entryTitle(entry, chores);
+  const title = entryTitle(entry, chores, loans);
   const dateStr = new Date(entry.created_at).toLocaleDateString();
   const subtitle = entry.note ? `${dateStr} · ${entry.note}` : dateStr;
   const caption = decidedByCaption(entry, members);
