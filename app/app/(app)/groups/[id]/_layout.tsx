@@ -51,7 +51,7 @@ export default function GroupDetailLayout() {
         }}
       />
       <Tabs.Screen
-        name="ledger"
+        name="members/[userId]"
         options={{
           href: null,
         }}
