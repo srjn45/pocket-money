@@ -11,6 +11,11 @@ type Config struct {
 	DatabaseURL string
 	JWTSecret   string
 	CORSOrigins string
+	// AppBaseURL is the web app origin (e.g. "http://192.168.1.5:8081").
+	// When set, invite_url is built from this instead of c.Request.Host so the
+	// link points at the Expo web server, not the API server.  Optional: if
+	// empty, the request-host fallback is used (works for same-origin deploys).
+	AppBaseURL string
 }
 
 // Load loads configuration from environment variables
@@ -21,6 +26,7 @@ func Load() (*Config, error) {
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		JWTSecret:   os.Getenv("JWT_SECRET"),
 		CORSOrigins: getEnvOrDefault("CORS_ORIGINS", "*"),
+		AppBaseURL:  os.Getenv("APP_BASE_URL"),
 	}
 
 	if err := cfg.validate(); err != nil {

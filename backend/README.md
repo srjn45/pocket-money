@@ -31,6 +31,7 @@ Go backend API for the Pocket Money application.
 | JWT_SECRET | Yes | - | Secret key for JWT signing |
 | PORT | No | 8080 | Server port |
 | CORS_ORIGINS | No | * | Comma-separated allowed origins |
+| APP_BASE_URL | No | - | Web app origin (e.g. `http://192.168.1.5:8081`). When set, invite links point at the Expo web server instead of the API host. Required for split LAN deployments where the API (`:8080`) and the web app (`:8081`) are on different ports. |
 
 ## Development
 

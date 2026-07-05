@@ -14,6 +14,8 @@ import type { Balance } from '../../../../src/api';
 import { theme } from '../../../../src/theme';
 import {
   Button,
+  Sheet,
+  TextField,
   AmountText,
   MemberCard,
   LedgerList,
@@ -33,6 +35,7 @@ export default function GroupOverviewScreen() {
 
   const [sheetVisible, setSheetVisible] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
 
   const groupQuery = useGroup(id ?? '');
   const balanceQuery = useBalance(id ?? '');
@@ -67,14 +70,28 @@ export default function GroupOverviewScreen() {
     try {
       const invite = await groupsApi.createInvite(id);
       if (Platform.OS === 'web') {
-        await Clipboard.setStringAsync(invite.invite_url);
-        showToast({ message: 'Invite link copied to clipboard', tone: 'success' });
+        try {
+          // On non-secure http origins (LAN) navigator.clipboard is unavailable;
+          // expo-clipboard falls back to execCommand and RESOLVES false (it does
+          // not reject), so we must honor the boolean, not just catch a throw.
+          const copied = await Clipboard.setStringAsync(invite.invite_url);
+          if (copied) {
+            showToast({ message: 'Invite link copied to clipboard', tone: 'success' });
+          } else {
+            setFallbackUrl(invite.invite_url);
+            showToast({ message: 'Copy failed — select and copy the link below', tone: 'danger' });
+          }
+        } catch {
+          setFallbackUrl(invite.invite_url);
+          showToast({ message: 'Copy failed — select and copy the link below', tone: 'danger' });
+        }
       } else {
         await Share.share({
           message: `Join my group "${group?.name}" on Pocket Money!\n\n${invite.invite_url}`,
           url: invite.invite_url,
           title: 'Join My Group',
         });
+        // dismissedAction is not an error — no Toast on cancel.
       }
     } catch (e) {
       showToast({ message: e instanceof Error ? e.message : 'Failed to create invite', tone: 'danger' });
@@ -171,6 +188,18 @@ export default function GroupOverviewScreen() {
           mode="head"
           members={nonHeadMembers}
         />
+
+        <Sheet
+          visible={!!fallbackUrl}
+          onClose={() => setFallbackUrl(null)}
+          title="Invite link"
+        >
+          <TextField
+            value={fallbackUrl ?? ''}
+            editable={false}
+            selectTextOnFocus
+          />
+        </Sheet>
       </View>
     );
   }
