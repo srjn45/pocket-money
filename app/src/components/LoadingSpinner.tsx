@@ -1,4 +1,5 @@
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { theme } from '../theme';
 
 interface LoadingSpinnerProps {
   message?: string;
@@ -7,7 +8,7 @@ interface LoadingSpinnerProps {
 export function LoadingSpinner({ message = 'Loading...' }: LoadingSpinnerProps) {
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#007AFF" />
+      <ActivityIndicator size="large" color={theme.color.primary} />
       <Text style={styles.text}>{message}</Text>
     </View>
   );
@@ -18,11 +19,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: theme.color.surface,
   },
   text: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    marginTop: theme.spacing.lg,
+    fontSize: theme.fontSize.md,
+    color: theme.color.textSecondary,
   },
 });

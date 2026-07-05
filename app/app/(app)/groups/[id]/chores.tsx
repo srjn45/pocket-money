@@ -1,21 +1,38 @@
 import { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, TextInput, Modal, Alert, Platform } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Chore } from '../../../../src/api';
 import { useAuth } from '../../../../src/auth-context';
 import { useChores, useCreateChore, useUpdateChore, useDeleteChore } from '../../../../src/hooks/useChores';
 import { useGroup } from '../../../../src/hooks/useGroup';
+import {
+  Button,
+  ListRow,
+  AmountText,
+  StatusBadge,
+  Sheet,
+  TextField,
+  EmptyState,
+  LoadingSpinner,
+  useToast,
+} from '../../../../src/components';
+import { rupeesToMinor } from '../../../../src/money';
+import { confirmAsync } from '../../../../src/confirm';
+import { theme } from '../../../../src/theme';
 
 export default function ChoresScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const toast = useToast();
+
   const [modalVisible, setModalVisible] = useState(false);
   const [choreName, setChoreName] = useState('');
   const [choreDescription, setChoreDescription] = useState('');
   const [choreAmount, setChoreAmount] = useState('');
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
-  const [formError, setFormError] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [amountError, setAmountError] = useState('');
 
   const choresQuery = useChores(id ?? '');
   const groupQuery = useGroup(id ?? '');
@@ -25,7 +42,7 @@ export default function ChoresScreen() {
 
   const isLoading = choresQuery.isLoading || groupQuery.isLoading;
   const isRefetching = choresQuery.isRefetching || groupQuery.isRefetching;
-  const error = choresQuery.error instanceof Error ? choresQuery.error.message
+  const loadError = choresQuery.error instanceof Error ? choresQuery.error.message
     : groupQuery.error instanceof Error ? groupQuery.error.message : '';
 
   const onRefresh = () => {
@@ -49,9 +66,12 @@ export default function ChoresScreen() {
       setChoreDescription('');
       setChoreAmount('');
     }
-    setFormError('');
+    setNameError('');
+    setAmountError('');
     setModalVisible(true);
   };
+
+  const closeModal = () => setModalVisible(false);
 
   const isFormValid = () => {
     const parsed = parseFloat(choreAmount);
@@ -65,16 +85,18 @@ export default function ChoresScreen() {
     const trimmedName = choreName.trim();
     const parsedAmount = parseFloat(choreAmount);
 
+    setNameError('');
+    setAmountError('');
+
     if (!trimmedName) {
-      setFormError('Chore name is required.');
+      setNameError('Chore name is required.');
       return;
     }
     if (!choreAmount.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
-      setFormError('Amount must be a number greater than 0.');
+      setAmountError('Amount must be a number greater than 0.');
       return;
     }
 
-    setFormError('');
     try {
       if (editingChore) {
         await updateChoreMutation.mutateAsync({
@@ -90,36 +112,25 @@ export default function ChoresScreen() {
           amount: parsedAmount,
         });
       }
-      setModalVisible(false);
+      closeModal();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save chore');
+      setAmountError(err instanceof Error ? err.message : 'Failed to save chore');
     }
   };
 
   const handleDelete = async (chore: Chore) => {
-    const msg = `Delete "${chore.name}"? This can't be undone.`;
-    let confirmed: boolean;
-    if (Platform.OS === 'web') {
-      confirmed = (globalThis as unknown as { confirm: (m: string) => boolean }).confirm(msg);
-    } else {
-      confirmed = await new Promise<boolean>((resolve) => {
-        Alert.alert('Delete Chore', msg, [
-          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
-        ]);
-      });
-    }
-    if (!confirmed) return;
+    const ok = await confirmAsync({
+      title: 'Delete Chore',
+      message: `Delete "${chore.name}"? This can't be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteChoreMutation.mutateAsync(chore.id);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to delete chore';
-      // Alert.alert is a no-op on react-native-web, so mirror the confirm() pattern above.
-      if (Platform.OS === 'web') {
-        (globalThis as unknown as { alert: (m: string) => void }).alert(errMsg);
-      } else {
-        Alert.alert('Error', errMsg);
-      }
+      toast.show({ tone: 'danger', message: errMsg });
     }
   };
 
@@ -127,69 +138,90 @@ export default function ChoresScreen() {
     const isSystemChore = item.is_system;
     const canEdit = isHead && !isSystemChore;
 
-    return (
-      <TouchableOpacity
-        style={[styles.choreCard, isSystemChore && styles.systemChoreCard]}
-        onPress={() => canEdit && openModal(item)}
-        disabled={!canEdit}
-      >
-        <View style={styles.choreInfo}>
-          <View style={styles.choreHeader}>
-            <Text style={styles.choreName}>{item.name}</Text>
-            {isSystemChore && (
-              <View style={styles.systemBadge}>
-                <Text style={styles.systemBadgeText}>System</Text>
-              </View>
-            )}
-          </View>
-          {isSystemChore && (
-            <Text style={styles.systemChoreCaption}>Used to record payouts — can't be edited or deleted</Text>
-          )}
-          {!isSystemChore && item.description && (
-            <Text style={styles.choreDescription}>{item.description}</Text>
-          )}
-        </View>
-        <View style={styles.choreRight}>
-          {isSystemChore ? (
-            <Text style={styles.choreAmountVariable}>Variable</Text>
-          ) : (
-            <Text style={styles.choreAmount}>₹{item.amount.toFixed(2)}</Text>
-          )}
+    const leftSlot = isSystemChore
+      ? <StatusBadge label="System" tone="neutral" />
+      : <Ionicons name="checkbox-outline" size={22} color={theme.color.primary} />;
+
+    const rightSlot = isSystemChore
+      ? <Text style={styles.variableText}>Variable</Text>
+      : (
+        <View style={styles.rightSlot}>
+          <AmountText minorUnits={rupeesToMinor(item.amount)} variant="neutral" />
           {canEdit && (
-            <TouchableOpacity onPress={() => handleDelete(item)}>
-              <Ionicons name="trash-outline" size={20} color="#ff3b30" />
-            </TouchableOpacity>
+            <Button
+              variant="ghost"
+              title=""
+              size="sm"
+              icon="trash-outline"
+              onPress={() => handleDelete(item)}
+            />
           )}
         </View>
-      </TouchableOpacity>
+      );
+
+    return (
+      <ListRow
+        title={item.name}
+        subtitle={
+          isSystemChore
+            ? 'Used to record payouts — can\'t be edited or deleted'
+            : item.description ?? undefined
+        }
+        left={leftSlot}
+        right={rightSlot}
+        onPress={canEdit ? () => openModal(item) : undefined}
+        style={isSystemChore ? styles.systemRow : undefined}
+      />
     );
   };
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
+    return <LoadingSpinner />;
   }
+
+  const sheetFooter = (
+    <>
+      <Button
+        variant="ghost"
+        title="Cancel"
+        onPress={closeModal}
+        style={styles.footerBtn}
+      />
+      <Button
+        variant="primary"
+        title="Save"
+        onPress={handleSave}
+        loading={saving}
+        disabled={!isFormValid()}
+        style={styles.footerBtnPrimary}
+      />
+    </>
+  );
 
   return (
     <View style={styles.container}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {loadError ? (
+        <Text style={styles.loadError}>{loadError}</Text>
+      ) : null}
 
       {isHead && (
-        <TouchableOpacity style={styles.addButton} onPress={() => openModal()}>
-          <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.addButtonText}>Add Chore</Text>
-        </TouchableOpacity>
+        <View style={styles.addButtonWrapper}>
+          <Button
+            title="Add Chore"
+            icon="add"
+            variant="primary"
+            fullWidth
+            onPress={() => openModal()}
+          />
+        </View>
       )}
 
       {chores.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="list-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No chores yet</Text>
-          {isHead && <Text style={styles.emptyHint}>Add chores your family can earn money for</Text>}
-        </View>
+        <EmptyState
+          icon="list-outline"
+          title="No chores yet"
+          subtitle={isHead ? 'Add chores your family can earn money for' : undefined}
+        />
       ) : (
         <FlatList
           data={chores}
@@ -202,59 +234,34 @@ export default function ChoresScreen() {
         />
       )}
 
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {editingChore ? 'Edit Chore' : 'Add Chore'}
-            </Text>
-
-            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
-
-            <TextInput
-              style={styles.input}
-              placeholder="Chore name"
-              value={choreName}
-              onChangeText={(v) => { setChoreName(v); setFormError(''); }}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Description (optional)"
-              value={choreDescription}
-              onChangeText={setChoreDescription}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Amount (₹)"
-              value={choreAmount}
-              onChangeText={(v) => { setChoreAmount(v); setFormError(''); }}
-              keyboardType="decimal-pad"
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton, (!isFormValid() || saving) && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={!isFormValid() || saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <Sheet
+        visible={modalVisible}
+        onClose={closeModal}
+        title={editingChore ? 'Edit Chore' : 'Add Chore'}
+        footer={sheetFooter}
+      >
+        <TextField
+          label="Chore name"
+          placeholder="e.g. Wash dishes"
+          value={choreName}
+          onChangeText={(v) => { setChoreName(v); setNameError(''); }}
+          error={nameError || undefined}
+        />
+        <TextField
+          label="Description (optional)"
+          placeholder="What needs to be done"
+          value={choreDescription}
+          onChangeText={setChoreDescription}
+        />
+        <TextField
+          label="Amount (₹)"
+          placeholder="e.g. 25"
+          value={choreAmount}
+          onChangeText={(v) => { setChoreAmount(v); setAmountError(''); }}
+          keyboardType="decimal-pad"
+          error={amountError || undefined}
+        />
+      </Sheet>
     </View>
   );
 }
@@ -262,174 +269,39 @@ export default function ChoresScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.color.background,
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  error: {
-    color: '#ff3b30',
-    padding: 16,
+  loadError: {
+    color: theme.color.danger,
+    padding: theme.spacing.lg,
     textAlign: 'center',
+    fontSize: theme.fontSize.sm,
   },
-  formError: {
-    color: '#ff3b30',
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#007AFF',
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  addButtonWrapper: {
+    margin: theme.spacing.lg,
   },
   list: {
-    padding: 16,
-    paddingTop: 0,
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
   },
-  choreCard: {
+  systemRow: {
+    backgroundColor: theme.color.surfaceMuted,
+  },
+  rightSlot: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
+    gap: theme.spacing.sm,
   },
-  systemChoreCard: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  choreInfo: {
-    flex: 1,
-  },
-  choreHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  choreName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  systemBadge: {
-    backgroundColor: '#6c757d',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  systemBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  systemChoreCaption: {
-    fontSize: 12,
-    color: '#6c757d',
-    marginTop: 4,
+  variableText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.color.textSecondary,
     fontStyle: 'italic',
+    fontWeight: theme.fontWeight.medium,
   },
-  choreDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  choreRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  choreAmount: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#34c759',
-  },
-  choreAmountVariable: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6c757d',
-    fontStyle: 'italic',
-  },
-  empty: {
+  footerBtn: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
   },
-  emptyText: {
-    fontSize: 18,
-    color: '#666',
-    marginTop: 16,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  modalOverlay: {
+  footerBtnPrimary: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#f5f5f5',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-  },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '600',
   },
 });
