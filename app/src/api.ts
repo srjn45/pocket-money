@@ -17,7 +17,6 @@ export type Member        = Schemas['MemberResponse'];
 export type Chore         = Schemas['ChoreResponse'];
 export type LedgerEntry   = Schemas['LedgerResponse'];
 export type Balance       = Schemas['BalanceResponse'];
-export type Settlement    = Schemas['SettlementResponse'];
 export type InviteResponse = Schemas['InviteResponse'];
 export type LoginResponse  = Schemas['LoginResponse'];
 
@@ -115,15 +114,24 @@ export const choresApi = {
 
 // Ledger API
 export const ledgerApi = {
-  list: (groupId: string, options?: { status?: string; user_id?: string }) => {
+  list: (groupId: string, options?: { status?: string; user_id?: string; type?: string; period?: string }) => {
     const params = new URLSearchParams();
     if (options?.status) params.append('status', options.status);
     if (options?.user_id) params.append('user_id', options.user_id);
+    if (options?.type) params.append('type', options.type);
+    if (options?.period) params.append('period', options.period);
     const queryString = params.toString();
     return request<LedgerEntry[]>(`/groups/${groupId}/ledger${queryString ? `?${queryString}` : ''}`);
   },
 
-  create: (groupId: string, data: { user_id?: string; chore_id: string; amount?: number }) =>
+  create: (groupId: string, data: {
+    entry_type: 'chore' | 'settlement' | 'adjustment';
+    user_id?: string;
+    chore_id?: string;
+    amount?: number;
+    direction?: 'credit' | 'debit';
+    note?: string;
+  }) =>
     request<LedgerEntry>(`/groups/${groupId}/ledger`, { method: 'POST', body: JSON.stringify(data) }),
 
   approve: (id: string) =>
@@ -132,15 +140,5 @@ export const ledgerApi = {
   reject: (id: string) =>
     request<LedgerEntry>(`/ledger/${id}/reject`, { method: 'POST' }),
 
-  listPending: (groupId: string) => request<LedgerEntry[]>(`/groups/${groupId}/pending`),
-
   getBalance: (groupId: string) => request<Balance[]>(`/groups/${groupId}/balance`),
-};
-
-// Settlements API
-export const settlementsApi = {
-  list: (groupId: string) => request<Settlement[]>(`/groups/${groupId}/settlements`),
-
-  create: (groupId: string, data: { user_id: string; amount: number; date: string; note?: string }) =>
-    request<Settlement>(`/groups/${groupId}/settlements`, { method: 'POST', body: JSON.stringify(data) }),
 };

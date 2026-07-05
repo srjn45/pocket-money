@@ -300,26 +300,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/groups/{id}/pending": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List pending entries
-         * @description Returns all pending ledger entries for a group (head only)
-         */
-        get: operations["listPending"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/groups/{id}/balance": {
         parameters: {
             query?: never;
@@ -334,30 +314,6 @@ export interface paths {
         get: operations["getBalance"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/groups/{id}/settlements": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List settlements
-         * @description Returns all settlements for a group
-         */
-        get: operations["listSettlements"];
-        put?: never;
-        /**
-         * Create settlement
-         * @description Creates a new settlement record (head only)
-         */
-        post: operations["createSettlement"];
         delete?: never;
         options?: never;
         head?: never;
@@ -574,20 +530,32 @@ export interface components {
         };
         CreateLedgerRequest: {
             /**
+             * @description Type of ledger entry. allowance/emi are machine-posted only and are rejected on this endpoint.
+             * @enum {string}
+             */
+            entry_type: "chore" | "settlement" | "adjustment";
+            /**
              * Format: uuid
-             * @description Target user ID (optional, only head can specify, defaults to self)
+             * @description Target user ID (head may specify any member; member defaults to self)
              */
             user_id?: string | null;
             /**
              * Format: uuid
-             * @description Chore ID
+             * @description Chore ID (required when entry_type=chore; must be a non-system chore in this group)
              */
-            chore_id: string;
+            chore_id?: string | null;
             /**
              * Format: int64
-             * @description Custom amount (required only for system chores like Settlement), in minor units (paise); e.g. ₹12.50 = 1250
+             * @description Amount in minor units (required for settlement/adjustment; ignored for chore — chore config amount is used instead)
              */
             amount?: number | null;
+            /**
+             * @description Direction (required for adjustment; server sets direction for chore and settlement)
+             * @enum {string|null}
+             */
+            direction?: "credit" | "debit" | null;
+            /** @description Optional note (recommended for adjustment to explain the reason) */
+            note?: string | null;
         };
         LedgerResponse: {
             /**
@@ -602,17 +570,17 @@ export interface components {
             group_id: string;
             /**
              * Format: uuid
-             * @description User who earned the amount
+             * @description User whose balance is affected
              */
             user_id: string;
             /**
              * Format: uuid
-             * @description Chore ID
+             * @description Chore ID (null for settlement/adjustment/allowance/emi)
              */
-            chore_id: string;
+            chore_id?: string | null;
             /**
              * Format: int64
-             * @description Amount earned, in minor units (paise); e.g. ₹12.50 = 1250
+             * @description Amount in minor units (paise); e.g. ₹12.50 = 1250. Always positive — direction field indicates credit/debit.
              */
             amount: number;
             /**
@@ -621,20 +589,39 @@ export interface components {
              */
             status: "approved" | "pending_approval" | "rejected";
             /**
+             * @description Type of balance event
+             * @enum {string}
+             */
+            entry_type: "chore" | "allowance" | "emi" | "settlement" | "adjustment";
+            /**
+             * @description Credit adds to balance; debit subtracts from balance
+             * @enum {string}
+             */
+            direction: "credit" | "debit";
+            /**
+             * Format: uuid
+             * @description Loan ID (set on emi entries; FK added in migration 011)
+             */
+            loan_id?: string | null;
+            /** @description Month period in YYYY-MM format (set on allowance/emi entries) */
+            period?: string | null;
+            /** @description Optional free-text note */
+            note?: string | null;
+            /**
              * Format: uuid
              * @description User who created the entry
              */
             created_by_user_id: string;
             /**
              * Format: uuid
-             * @description User who approved the entry
+             * @description User who approved or rejected the entry
              */
-            approved_by_user_id?: string | null;
+            decided_by?: string | null;
             /**
-             * Format: uuid
-             * @description User who rejected the entry
+             * Format: date-time
+             * @description When the entry was approved or rejected
              */
-            rejected_by_user_id?: string | null;
+            decided_at?: string | null;
             /**
              * Format: date-time
              * @description Entry creation timestamp
@@ -651,62 +638,9 @@ export interface components {
             name: string;
             /**
              * Format: int64
-             * @description User's current balance in minor units (paise); sum of approved ledger entries minus settlements; e.g. ₹12.50 = 1250
+             * @description Sum of approved credits minus approved debits, in minor units (paise); e.g. ₹12.50 = 1250
              */
             balance: number;
-        };
-        CreateSettlementRequest: {
-            /**
-             * Format: uuid
-             * @description User ID receiving the settlement
-             */
-            user_id: string;
-            /**
-             * Format: int64
-             * @description Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
-             */
-            amount: number;
-            /**
-             * Format: date
-             * @description Settlement date (YYYY-MM-DD)
-             */
-            date: string;
-            /** @description Optional note about the settlement */
-            note?: string | null;
-        };
-        SettlementResponse: {
-            /**
-             * Format: uuid
-             * @description Settlement ID
-             */
-            id: string;
-            /**
-             * Format: uuid
-             * @description Group ID
-             */
-            group_id: string;
-            /**
-             * Format: uuid
-             * @description User who received the settlement
-             */
-            user_id: string;
-            /**
-             * Format: int64
-             * @description Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
-             */
-            amount: number;
-            /**
-             * Format: date-time
-             * @description Settlement date
-             */
-            date: string;
-            /** @description Optional note about the settlement */
-            note?: string | null;
-            /**
-             * Format: date-time
-             * @description Settlement record creation timestamp
-             */
-            created_at: string;
         };
     };
     responses: never;
@@ -1477,6 +1411,10 @@ export interface operations {
                 status?: "approved" | "pending_approval" | "rejected";
                 /** @description Filter by user ID (head only) */
                 user_id?: string;
+                /** @description Filter by entry type */
+                type?: "chore" | "allowance" | "emi" | "settlement" | "adjustment";
+                /** @description Filter by period (YYYY-MM format) */
+                period?: string;
             };
             header?: never;
             path: {
@@ -1733,65 +1671,6 @@ export interface operations {
             };
         };
     };
-    listPending: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Group ID (UUID) */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of pending entries */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerResponse"][];
-                };
-            };
-            /** @description Invalid group ID */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Not authenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Only group head can view pending entries */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     getBalance: {
         parameters: {
             query?: never;
@@ -1832,128 +1711,6 @@ export interface operations {
                 };
             };
             /** @description Not a member of this group */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    listSettlements: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Group ID (UUID) */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of settlements */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettlementResponse"][];
-                };
-            };
-            /** @description Invalid group ID */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Not authenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Not a member of this group */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    createSettlement: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Group ID (UUID) */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSettlementRequest"];
-            };
-        };
-        responses: {
-            /** @description Settlement created successfully */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettlementResponse"];
-                };
-            };
-            /** @description Bad request (validation error or invalid date format) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Not authenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Only group head can create settlements */
             403: {
                 headers: {
                     [name: string]: unknown;
