@@ -164,3 +164,50 @@ jobs:
 
       - name: Web export smoke test
         run: npx expo export --platform web
+
+  # ============================================================================
+  # BACKUP VERIFY JOB (WP-1.4)
+  # Proves `make backup` + `make backup-verify` work end-to-end against the
+  # real compose Postgres. Closes the acceptance criterion that could not be
+  # met on the docker-less dev host. See docs/specs/WP-1.4.md §5.
+  # ============================================================================
+  backup-verify:
+    name: Backup Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start Postgres via docker compose
+        run: docker compose up -d postgres
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U pocket -d pocket_money; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            echo "Waiting for Postgres... ($i)"
+            sleep 2
+          done
+          echo "Postgres did not become ready in time" >&2
+          docker compose logs postgres
+          exit 1
+
+      - name: Seed a table with a row
+        run: |
+          docker compose exec -T postgres psql -U pocket -d pocket_money -v ON_ERROR_STOP=1 \
+            -c "CREATE TABLE ci_smoke (id int PRIMARY KEY, note text);" \
+            -c "INSERT INTO ci_smoke (id, note) VALUES (1, 'backup-verify');"
+
+      - name: make backup
+        run: make backup
+
+      - name: make backup-verify
+        run: make backup-verify
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

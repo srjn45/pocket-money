@@ -79,3 +79,8 @@ ios/
 
 # JetBrains (GoLand/WebStorm)
 .idea/
+
+# Database backups (WP-1.4) — family financial data, never commit dumps
+/backups/*.dump
+/backups/*.dump.tmp
+/backups/*.log
