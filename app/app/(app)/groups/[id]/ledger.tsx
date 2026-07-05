@@ -5,13 +5,17 @@ import { useAuth } from '../../../../src/auth-context';
 import { useGroup } from '../../../../src/hooks/useGroup';
 import { useChores } from '../../../../src/hooks/useChores';
 import { useLedger, useBalance, useApproveLedger, useRejectLedger } from '../../../../src/hooks/useLedger';
+import { useAllowances } from '../../../../src/hooks/useAllowances';
 import { confirmAsync } from '../../../../src/confirm';
+import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../src/allowance-format';
 import { theme } from '../../../../src/theme';
 import {
   AmountText,
   Button,
   LedgerList,
   AddEntrySheet,
+  AllowanceSummary,
+  AllowanceSheet,
   LoadingSpinner,
   ErrorMessage,
   useToast,
@@ -23,6 +27,7 @@ export default function MemberLedgerScreen() {
   const { show: showToast } = useToast();
 
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [allowanceSheetVisible, setAllowanceSheetVisible] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const groupQuery = useGroup(id ?? '');
@@ -33,6 +38,12 @@ export default function MemberLedgerScreen() {
   const ledgerQuery = useLedger(id ?? '', { user_id: userId });
   const balanceQuery = useBalance(id ?? '');
   const choresQuery = useChores(id ?? '');
+  const allowancesQuery = useAllowances(id ?? '');
+
+  const period = currentPeriod();
+  const memberAllowances = (allowancesQuery.data ?? []).filter(a => a.user_id === userId);
+  const currentAllow = currentAllowanceFor(memberAllowances, period);
+  const upcomingAllow = upcomingAllowanceFor(memberAllowances, period);
   const approveMutation = useApproveLedger(id ?? '');
   const rejectMutation = useRejectLedger(id ?? '');
 
@@ -100,6 +111,13 @@ export default function MemberLedgerScreen() {
           <Text style={styles.summaryHint}>
             {bal < 0 ? 'owes you' : 'owed'}
           </Text>
+          {!allowancesQuery.isError && (
+            <AllowanceSummary
+              current={currentAllow}
+              upcoming={upcomingAllow}
+              onEdit={() => setAllowanceSheetVisible(true)}
+            />
+          )}
         </View>
 
         <View style={styles.addButtonRow}>
@@ -125,6 +143,7 @@ export default function MemberLedgerScreen() {
           onRefresh={() => {
             ledgerQuery.refetch();
             balanceQuery.refetch();
+            allowancesQuery.refetch();
           }}
           emptyTitle="No entries yet"
           emptySubtitle="Add a chore, settlement, or adjustment"
@@ -137,6 +156,15 @@ export default function MemberLedgerScreen() {
           chores={choresQuery.data ?? []}
           mode="head"
           fixedUserId={userId}
+        />
+
+        <AllowanceSheet
+          visible={allowanceSheetVisible}
+          onClose={() => setAllowanceSheetVisible(false)}
+          groupId={id ?? ''}
+          userId={userId ?? ''}
+          memberName={name}
+          current={currentAllow}
         />
       </View>
     </>

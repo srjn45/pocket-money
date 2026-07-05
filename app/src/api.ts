@@ -19,6 +19,7 @@ export type LedgerEntry   = Schemas['LedgerResponse'];
 export type Balance       = Schemas['BalanceResponse'];
 export type InviteResponse = Schemas['InviteResponse'];
 export type LoginResponse  = Schemas['LoginResponse'];
+export type Allowance     = Schemas['AllowanceResponse'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -110,6 +111,21 @@ export const choresApi = {
     request<Chore>(`/chores/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   delete: (id: string) => request<void>(`/chores/${id}`, { method: 'DELETE' }),
+};
+
+// Allowances API (WP-2.1 contract)
+export const allowancesApi = {
+  // Head → all members' allowance history rows; member → own rows only (API-enforced).
+  list: (groupId: string) =>
+    request<Allowance[]>(`/groups/${groupId}/allowances`),
+
+  // Head only. amount in minor units (0 = pause); effective_from optional 'YYYY-MM'
+  // (server defaults to current month). A new effective_from is a new history row.
+  set: (groupId: string, userId: string, data: { amount: number; effective_from?: string }) =>
+    request<Allowance>(`/groups/${groupId}/allowances/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Ledger API
