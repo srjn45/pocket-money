@@ -85,14 +85,24 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Return user response
-	c.JSON(http.StatusCreated, UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		DOB:       user.DOB,
-		Sex:       user.Sex,
-		CreatedAt: user.CreatedAt,
+	// Issue a JWT so the client is logged in immediately (auto-login, WP-4.6 D1).
+	token, err := auth.IssueToken(user.ID.String(), h.jwtSecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	// 201 Created — same body shape as login (token + user).
+	c.JSON(http.StatusCreated, LoginResponse{
+		Token: token,
+		User: UserResponse{
+			ID:        user.ID,
+			Email:     user.Email,
+			Name:      user.Name,
+			DOB:       user.DOB,
+			Sex:       user.Sex,
+			CreatedAt: user.CreatedAt,
+		},
 	})
 }
 

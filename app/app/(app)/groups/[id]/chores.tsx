@@ -219,7 +219,9 @@ export default function ChoresScreen() {
         <EmptyState
           icon="list-outline"
           title="No chores yet"
-          subtitle={isHead ? 'Add chores your family can earn money for' : undefined}
+          subtitle={isHead
+            ? 'Add your first chore — the amount your family earns for doing it'
+            : "Your family head hasn't added any chores yet — check back soon"}
         />
       ) : (
         <FlatList
