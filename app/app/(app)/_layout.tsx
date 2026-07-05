@@ -31,13 +31,7 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="groups"
-        options={{
-          title: 'Groups',
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
-          ),
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="profile"

@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { groupsApi } from '../api';
+import { groupsApi, GroupSummary } from '../api';
 import { qk } from '../query-keys';
 
 export function useGroups() {
-  return useQuery({
+  return useQuery<GroupSummary[]>({
     queryKey: qk.groups(),
     queryFn: () => groupsApi.list(),
   });

@@ -166,13 +166,14 @@ paths:
         - BearerAuth: []
       responses:
         '200':
-          description: List of groups
+          description: List of the user's groups, each enriched with role, member count, and a
+            role-dependent summary balance for the dashboard.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/GroupResponse'
+                  $ref: '#/components/schemas/GroupSummaryResponse'
         '401':
           description: Not authenticated
           content:
@@ -1503,6 +1504,53 @@ components:
         - name
         - head_user_id
         - created_at
+
+    GroupSummaryResponse:
+      type: object
+      description: A group the caller belongs to, enriched for the dashboard listing. The
+        summary_balance is a glanceable figure computed from currently-posted approved ledger
+        entries; it does NOT trigger allowance/EMI posting, so it may lag the authoritative
+        per-group balance by the current month's machine-posted entries until the group is opened.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Group ID
+        name:
+          type: string
+          description: Group name
+        head_user_id:
+          type: string
+          format: uuid
+          description: ID of the group head
+        created_at:
+          type: string
+          format: date-time
+          description: Group creation timestamp
+        role:
+          type: string
+          enum: [head, member]
+          description: The caller's role in this group.
+        member_count:
+          type: integer
+          description: Number of members in the group (includes the head).
+        summary_balance:
+          type: integer
+          format: int64
+          description: >-
+            Role-dependent summary in minor units (paise). For role=head, the sum of all NON-head
+            members' balances (= total the head owes members; typically >= 0). For role=member, the
+            caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe
+            the head). Computed as Σ approved credits − Σ approved debits. A member never receives
+            another member's figure.
+      required:
+        - id
+        - name
+        - head_user_id
+        - created_at
+        - role
+        - member_count
+        - summary_balance
 
     GroupDetailResponse:
       type: object
