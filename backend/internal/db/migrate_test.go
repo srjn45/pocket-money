@@ -23,23 +23,22 @@ func TestMigrations_UpAndDown(t *testing.T) {
 	}
 	defer pool.Close()
 
-	err = testutil.CleanupTestDB(pool)
+	err = testutil.ResetTestDB(pool)
 	require.NoError(t, err, "Failed to clean up test database")
 
 	// Run migrations up
 	err = db.RunMigrations(dbURL)
 	require.NoError(t, err, "Failed to run migrations up")
 
-	// Verify tables exist
 	ctx := context.Background()
 
+	// Verify tables that must exist after full migration up (settlements dropped by 012)
 	tables := []string{
 		"users",
 		"groups",
 		"group_members",
 		"chores",
 		"ledger_entries",
-		"settlements",
 		"invite_tokens",
 	}
 
@@ -47,8 +46,8 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		var exists bool
 		err := pool.QueryRow(ctx, `
 			SELECT EXISTS (
-				SELECT FROM information_schema.tables 
-				WHERE table_schema = 'public' 
+				SELECT FROM information_schema.tables
+				WHERE table_schema = 'public'
 				AND table_name = $1
 			)
 		`, table).Scan(&exists)
@@ -56,8 +55,19 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		assert.True(t, exists, "Table %s should exist after migration up", table)
 	}
 
-	// Verify enum types exist
-	types := []string{"member_role", "ledger_status"}
+	// settlements must NOT exist after 012 drops it
+	var settlementsExists bool
+	err = pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_name = 'settlements'
+		)
+	`).Scan(&settlementsExists)
+	require.NoError(t, err)
+	assert.False(t, settlementsExists, "settlements table should not exist after migration 012")
+
+	// Verify enum types exist (including new v2 types)
+	types := []string{"member_role", "ledger_status", "ledger_entry_type", "ledger_direction"}
 	for _, typeName := range types {
 		var exists bool
 		err := pool.QueryRow(ctx, `
@@ -73,13 +83,13 @@ func TestMigrations_UpAndDown(t *testing.T) {
 	err = db.RunMigrationsDown(dbURL)
 	require.NoError(t, err, "Failed to run migrations down")
 
-	// Verify tables no longer exist
+	// Verify tables no longer exist (down rolled everything back)
 	for _, table := range tables {
 		var exists bool
 		err := pool.QueryRow(ctx, `
 			SELECT EXISTS (
-				SELECT FROM information_schema.tables 
-				WHERE table_schema = 'public' 
+				SELECT FROM information_schema.tables
+				WHERE table_schema = 'public'
 				AND table_name = $1
 			)
 		`, table).Scan(&exists)
@@ -98,7 +108,7 @@ func TestMigrations_Idempotent(t *testing.T) {
 	defer pool.Close()
 
 	// Clean up first
-	err = testutil.CleanupTestDB(pool)
+	err = testutil.ResetTestDB(pool)
 	require.NoError(t, err)
 
 	// Run migrations twice - should not error
