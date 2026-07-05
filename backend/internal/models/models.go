@@ -23,6 +23,25 @@ const (
 	StatusRejected        LedgerStatus = "rejected"
 )
 
+// LedgerEntryType classifies what balance event a ledger entry represents
+type LedgerEntryType string
+
+const (
+	EntryTypeChore      LedgerEntryType = "chore"
+	EntryTypeAllowance  LedgerEntryType = "allowance"
+	EntryTypeEMI        LedgerEntryType = "emi"
+	EntryTypeSettlement LedgerEntryType = "settlement"
+	EntryTypeAdjustment LedgerEntryType = "adjustment"
+)
+
+// LedgerDirection indicates whether an entry adds to or subtracts from a member's balance
+type LedgerDirection string
+
+const (
+	DirectionCredit LedgerDirection = "credit"
+	DirectionDebit  LedgerDirection = "debit"
+)
+
 // User represents a user in the system
 type User struct {
 	ID           uuid.UUID  `json:"id"`
@@ -62,29 +81,23 @@ type Chore struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
-// LedgerEntry represents a record of a completed chore
+// LedgerEntry represents an immutable balance event in the unified ledger
 type LedgerEntry struct {
-	ID               uuid.UUID    `json:"id"`
-	GroupID          uuid.UUID    `json:"group_id"`
-	UserID           uuid.UUID    `json:"user_id"`
-	ChoreID          uuid.UUID    `json:"chore_id"`
-	Amount           int64        `json:"amount"`
-	Status           LedgerStatus `json:"status"`
-	CreatedByUserID  uuid.UUID    `json:"created_by_user_id"`
-	ApprovedByUserID *uuid.UUID   `json:"approved_by_user_id,omitempty"`
-	RejectedByUserID *uuid.UUID   `json:"rejected_by_user_id,omitempty"`
-	CreatedAt        time.Time    `json:"created_at"`
-}
-
-// Settlement represents a cash payout to a member
-type Settlement struct {
-	ID        uuid.UUID `json:"id"`
-	GroupID   uuid.UUID `json:"group_id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Amount    int64     `json:"amount"`
-	Date      time.Time `json:"date"`
-	Note      *string   `json:"note,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              uuid.UUID       `json:"id"`
+	GroupID         uuid.UUID       `json:"group_id"`
+	UserID          uuid.UUID       `json:"user_id"`
+	ChoreID         *uuid.UUID      `json:"chore_id,omitempty"` // null for settlement/adjustment/allowance/emi
+	Amount          int64           `json:"amount"`
+	Status          LedgerStatus    `json:"status"`
+	EntryType       LedgerEntryType `json:"entry_type"`
+	Direction       LedgerDirection `json:"direction"`
+	LoanID          *uuid.UUID      `json:"loan_id,omitempty"` // set on emi entries; FK added in migration 011
+	Period          *string         `json:"period,omitempty"`  // YYYY-MM, set on allowance/emi
+	Note            *string         `json:"note,omitempty"`
+	CreatedByUserID uuid.UUID       `json:"created_by_user_id"`
+	DecidedBy       *uuid.UUID      `json:"decided_by,omitempty"` // who approved/rejected
+	DecidedAt       *time.Time      `json:"decided_at,omitempty"` // when approved/rejected
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 // InviteToken represents an invitation to join a group

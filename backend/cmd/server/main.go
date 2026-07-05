@@ -36,7 +36,6 @@ func main() {
 	groupRepo := db.NewGroupRepo(pool)
 	choreRepo := db.NewChoreRepo(pool)
 	ledgerRepo := db.NewLedgerRepo(pool)
-	settlementRepo := db.NewSettlementRepo(pool)
 	inviteRepo := db.NewInviteRepo(pool)
 
 	// Create handlers
@@ -44,7 +43,6 @@ func main() {
 	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo)
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
 	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo)
-	settlementHandler := handlers.NewSettlementHandler(settlementRepo, groupRepo)
 
 	// Setup router
 	router := gin.Default()
@@ -88,12 +86,7 @@ func main() {
 			protected.POST("/groups/:id/ledger", ledgerHandler.CreateLedger)
 			protected.POST("/ledger/:id/approve", ledgerHandler.ApproveLedger)
 			protected.POST("/ledger/:id/reject", ledgerHandler.RejectLedger)
-			protected.GET("/groups/:id/pending", ledgerHandler.ListPending)
 			protected.GET("/groups/:id/balance", ledgerHandler.GetBalance)
-
-			// Settlement routes
-			protected.GET("/groups/:id/settlements", settlementHandler.ListSettlements)
-			protected.POST("/groups/:id/settlements", settlementHandler.CreateSettlement)
 		}
 	}
 

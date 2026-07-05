@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Pocket Money API
-  description: Backend API for managing chores, ledger entries, and settlements in family groups
+  description: Backend API for managing chores, ledger entries, and balances in family groups
   version: 1.0.0
   contact:
     name: API Support
@@ -23,8 +23,6 @@ tags:
     description: Chore management
   - name: Ledger
     description: Ledger entries and balance tracking
-  - name: Settlements
-    description: Settlement management
 
 paths:
   /health:
@@ -672,6 +670,20 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: type
+          in: query
+          required: false
+          description: Filter by entry type
+          schema:
+            type: string
+            enum: [chore, allowance, emi, settlement, adjustment]
+        - name: period
+          in: query
+          required: false
+          description: Filter by period (YYYY-MM format)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
       responses:
         '200':
           description: List of ledger entries
@@ -870,57 +882,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/groups/{id}/pending:
-    get:
-      tags:
-        - Ledger
-      summary: List pending entries
-      description: Returns all pending ledger entries for a group (head only)
-      operationId: listPending
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Group ID (UUID)
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: List of pending entries
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LedgerResponse'
-        '400':
-          description: Invalid group ID
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Only group head can view pending entries
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /api/v1/groups/{id}/balance:
     get:
       tags:
@@ -961,111 +922,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Not a member of this group
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/groups/{id}/settlements:
-    get:
-      tags:
-        - Settlements
-      summary: List settlements
-      description: Returns all settlements for a group
-      operationId: listSettlements
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Group ID (UUID)
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: List of settlements
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/SettlementResponse'
-        '400':
-          description: Invalid group ID
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Not a member of this group
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    post:
-      tags:
-        - Settlements
-      summary: Create settlement
-      description: Creates a new settlement record (head only)
-      operationId: createSettlement
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Group ID (UUID)
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateSettlementRequest'
-      responses:
-        '201':
-          description: Settlement created successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SettlementResponse'
-        '400':
-          description: Bad request (validation error or invalid date format)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Only group head can create settlements
           content:
             application/json:
               schema:
@@ -1390,23 +1246,37 @@ components:
     CreateLedgerRequest:
       type: object
       properties:
+        entry_type:
+          type: string
+          enum: [chore, settlement, adjustment]
+          description: Type of ledger entry. allowance/emi are machine-posted only and are rejected on this endpoint.
         user_id:
           type: string
           format: uuid
           nullable: true
-          description: Target user ID (optional, only head can specify, defaults to self)
+          description: Target user ID (head may specify any member; member defaults to self)
         chore_id:
           type: string
           format: uuid
-          description: Chore ID
+          nullable: true
+          description: Chore ID (required when entry_type=chore; must be a non-system chore in this group)
         amount:
           type: integer
           format: int64
           nullable: true
           minimum: 1
-          description: Custom amount (required only for system chores like Settlement), in minor units (paise); e.g. ₹12.50 = 1250
+          description: Amount in minor units (required for settlement/adjustment; ignored for chore — chore config amount is used instead)
+        direction:
+          type: string
+          enum: [credit, debit]
+          nullable: true
+          description: Direction (required for adjustment; server sets direction for chore and settlement)
+        note:
+          type: string
+          nullable: true
+          description: Optional note (recommended for adjustment to explain the reason)
       required:
-        - chore_id
+        - entry_type
 
     LedgerResponse:
       type: object
@@ -1422,33 +1292,55 @@ components:
         user_id:
           type: string
           format: uuid
-          description: User who earned the amount
+          description: User whose balance is affected
         chore_id:
           type: string
           format: uuid
-          description: Chore ID
+          nullable: true
+          description: Chore ID (null for settlement/adjustment/allowance/emi)
         amount:
           type: integer
           format: int64
-          description: Amount earned, in minor units (paise); e.g. ₹12.50 = 1250
+          description: Amount in minor units (paise); e.g. ₹12.50 = 1250. Always positive — direction field indicates credit/debit.
         status:
           type: string
           enum: [approved, pending_approval, rejected]
           description: Entry status
+        entry_type:
+          type: string
+          enum: [chore, allowance, emi, settlement, adjustment]
+          description: Type of balance event
+        direction:
+          type: string
+          enum: [credit, debit]
+          description: Credit adds to balance; debit subtracts from balance
+        loan_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Loan ID (set on emi entries; FK added in migration 011)
+        period:
+          type: string
+          nullable: true
+          description: Month period in YYYY-MM format (set on allowance/emi entries)
+        note:
+          type: string
+          nullable: true
+          description: Optional free-text note
         created_by_user_id:
           type: string
           format: uuid
           description: User who created the entry
-        approved_by_user_id:
+        decided_by:
           type: string
           format: uuid
           nullable: true
-          description: User who approved the entry
-        rejected_by_user_id:
+          description: User who approved or rejected the entry
+        decided_at:
           type: string
-          format: uuid
+          format: date-time
           nullable: true
-          description: User who rejected the entry
+          description: When the entry was approved or rejected
         created_at:
           type: string
           format: date-time
@@ -1457,9 +1349,10 @@ components:
         - id
         - group_id
         - user_id
-        - chore_id
         - amount
         - status
+        - entry_type
+        - direction
         - created_by_user_id
         - created_at
 
@@ -1476,72 +1369,9 @@ components:
         balance:
           type: integer
           format: int64
-          description: User's current balance in minor units (paise); sum of approved ledger entries minus settlements; e.g. ₹12.50 = 1250
+          description: Sum of approved credits minus approved debits, in minor units (paise); e.g. ₹12.50 = 1250
       required:
         - user_id
         - name
         - balance
 
-    CreateSettlementRequest:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-          description: User ID receiving the settlement
-        amount:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
-        date:
-          type: string
-          format: date
-          description: Settlement date (YYYY-MM-DD)
-        note:
-          type: string
-          nullable: true
-          description: Optional note about the settlement
-      required:
-        - user_id
-        - amount
-        - date
-
-    SettlementResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Settlement ID
-        group_id:
-          type: string
-          format: uuid
-          description: Group ID
-        user_id:
-          type: string
-          format: uuid
-          description: User who received the settlement
-        amount:
-          type: integer
-          format: int64
-          description: Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
-        date:
-          type: string
-          format: date-time
-          description: Settlement date
-        note:
-          type: string
-          nullable: true
-          description: Optional note about the settlement
-        created_at:
-          type: string
-          format: date-time
-          description: Settlement record creation timestamp
-      required:
-        - id
-        - group_id
-        - user_id
-        - amount
-        - date
-        - created_at

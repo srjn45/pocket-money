@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,93 +23,114 @@ func NewLedgerRepo(pool *pgxpool.Pool) *LedgerRepo {
 	return &LedgerRepo{pool: pool}
 }
 
-// Create inserts a new ledger entry
-func (r *LedgerRepo) Create(ctx context.Context, groupID, userID, choreID, createdByUserID uuid.UUID, amount int64, status models.LedgerStatus, approvedByUserID *uuid.UUID) (*models.LedgerEntry, error) {
-	entry := &models.LedgerEntry{
-		ID:               uuid.New(),
-		GroupID:          groupID,
-		UserID:           userID,
-		ChoreID:          choreID,
-		Amount:           amount,
-		Status:           status,
-		CreatedByUserID:  createdByUserID,
-		ApprovedByUserID: approvedByUserID,
-	}
-
-	query := `
-		INSERT INTO ledger_entries (id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING created_at
-	`
-
-	err := r.pool.QueryRow(ctx, query,
-		entry.ID, groupID, userID, choreID, amount, status, createdByUserID, approvedByUserID,
-	).Scan(&entry.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ledger entry: %w", err)
-	}
-
-	return entry, nil
+// rowScanner is satisfied by both *pgx.Row (from QueryRow) and pgx.Rows (from Query).
+type rowScanner interface {
+	Scan(dest ...any) error
 }
 
-// GetByID retrieves a ledger entry by ID
-func (r *LedgerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.LedgerEntry, error) {
+// scanEntry scans into a LedgerEntry in the canonical column order used by all SELECT queries.
+// Column order: id, group_id, user_id, chore_id, amount, status, entry_type, direction,
+//
+//	loan_id, period, note, created_by_user_id, decided_by, decided_at, created_at
+func scanEntry(row rowScanner) (*models.LedgerEntry, error) {
 	entry := &models.LedgerEntry{}
-
-	query := `
-		SELECT id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id, rejected_by_user_id, created_at
-		FROM ledger_entries
-		WHERE id = $1
-	`
-
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := row.Scan(
 		&entry.ID,
 		&entry.GroupID,
 		&entry.UserID,
 		&entry.ChoreID,
 		&entry.Amount,
 		&entry.Status,
+		&entry.EntryType,
+		&entry.Direction,
+		&entry.LoanID,
+		&entry.Period,
+		&entry.Note,
 		&entry.CreatedByUserID,
-		&entry.ApprovedByUserID,
-		&entry.RejectedByUserID,
+		&entry.DecidedBy,
+		&entry.DecidedAt,
 		&entry.CreatedAt,
 	)
+	return entry, err
+}
+
+const selectLedgerColumns = `
+	id, group_id, user_id, chore_id, amount, status, entry_type, direction,
+	loan_id, period, note, created_by_user_id, decided_by, decided_at, created_at`
+
+// Create inserts a new ledger entry.
+// period and loan_id are always NULL on the API-create path (set by posting engine in WP-2.1/3.1).
+func (r *LedgerRepo) Create(ctx context.Context, groupID, userID uuid.UUID, choreID *uuid.UUID,
+	createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
+	direction models.LedgerDirection, status models.LedgerStatus, note *string,
+	decidedBy *uuid.UUID, decidedAt *time.Time) (*models.LedgerEntry, error) {
+
+	query := `
+		INSERT INTO ledger_entries
+			(id, group_id, user_id, chore_id, amount, status, entry_type, direction, note,
+			 created_by_user_id, decided_by, decided_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING ` + selectLedgerColumns
+
+	entry, err := scanEntry(r.pool.QueryRow(ctx, query,
+		uuid.New(), groupID, userID, choreID, amount, status, entryType, direction, note,
+		createdBy, decidedBy, decidedAt,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ledger entry: %w", err)
+	}
+	return entry, nil
+}
+
+// GetByID retrieves a ledger entry by ID
+func (r *LedgerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.LedgerEntry, error) {
+	query := `SELECT ` + selectLedgerColumns + ` FROM ledger_entries WHERE id = $1`
+
+	entry, err := scanEntry(r.pool.QueryRow(ctx, query, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get ledger entry by id: %w", err)
 	}
-
 	return entry, nil
 }
 
 // ListForGroup retrieves all ledger entries for a group with optional status filter
 func (r *LedgerRepo) ListForGroup(ctx context.Context, groupID uuid.UUID, status *models.LedgerStatus) ([]*models.LedgerEntry, error) {
-	return r.ListForGroupWithUser(ctx, groupID, status, nil)
+	return r.ListForGroupWithUser(ctx, groupID, status, nil, nil, nil)
 }
 
-// ListForGroupWithUser retrieves ledger entries for a group with optional status and user filters
-func (r *LedgerRepo) ListForGroupWithUser(ctx context.Context, groupID uuid.UUID, status *models.LedgerStatus, userID *uuid.UUID) ([]*models.LedgerEntry, error) {
-	query := `
-		SELECT id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id, rejected_by_user_id, created_at
-		FROM ledger_entries
-		WHERE group_id = $1
-	`
+// ListForGroupWithUser retrieves ledger entries for a group with optional filters.
+// Members see only their own entries (caller enforces by passing filterUserID = self).
+func (r *LedgerRepo) ListForGroupWithUser(ctx context.Context, groupID uuid.UUID,
+	status *models.LedgerStatus, userID *uuid.UUID,
+	entryType *models.LedgerEntryType, period *string) ([]*models.LedgerEntry, error) {
+
+	query := `SELECT ` + selectLedgerColumns + ` FROM ledger_entries WHERE group_id = $1`
 	args := []interface{}{groupID}
-	argNum := 2
+	n := 2
 
 	if status != nil {
-		query += fmt.Sprintf(" AND status = $%d", argNum)
+		query += fmt.Sprintf(" AND status = $%d", n)
 		args = append(args, *status)
-		argNum++
+		n++
 	}
-
 	if userID != nil {
-		query += fmt.Sprintf(" AND user_id = $%d", argNum)
+		query += fmt.Sprintf(" AND user_id = $%d", n)
 		args = append(args, *userID)
+		n++
 	}
-
+	if entryType != nil {
+		query += fmt.Sprintf(" AND entry_type = $%d", n)
+		args = append(args, *entryType)
+		n++
+	}
+	if period != nil {
+		query += fmt.Sprintf(" AND period = $%d", n)
+		args = append(args, *period)
+		// n++ — not needed after last append
+	}
 	query += " ORDER BY created_at DESC"
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -119,87 +141,56 @@ func (r *LedgerRepo) ListForGroupWithUser(ctx context.Context, groupID uuid.UUID
 
 	var entries []*models.LedgerEntry
 	for rows.Next() {
-		entry := &models.LedgerEntry{}
-		if err := rows.Scan(
-			&entry.ID,
-			&entry.GroupID,
-			&entry.UserID,
-			&entry.ChoreID,
-			&entry.Amount,
-			&entry.Status,
-			&entry.CreatedByUserID,
-			&entry.ApprovedByUserID,
-			&entry.RejectedByUserID,
-			&entry.CreatedAt,
-		); err != nil {
+		entry, err := scanEntry(rows)
+		if err != nil {
 			return nil, fmt.Errorf("failed to scan ledger entry: %w", err)
 		}
 		entries = append(entries, entry)
 	}
-
 	return entries, nil
 }
 
-// UpdateStatus updates the status of a ledger entry
-func (r *LedgerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status models.LedgerStatus, approvedByUserID, rejectedByUserID *uuid.UUID) (*models.LedgerEntry, error) {
+// SetDecision atomically updates a ledger entry's status and records the approver/rejecter.
+func (r *LedgerRepo) SetDecision(ctx context.Context, id uuid.UUID, status models.LedgerStatus,
+	decidedBy uuid.UUID, decidedAt time.Time) (*models.LedgerEntry, error) {
+
 	query := `
 		UPDATE ledger_entries
-		SET status = $2, approved_by_user_id = $3, rejected_by_user_id = $4
+		SET status = $2, decided_by = $3, decided_at = $4
 		WHERE id = $1
-		RETURNING id, group_id, user_id, chore_id, amount, status, created_by_user_id, approved_by_user_id, rejected_by_user_id, created_at
-	`
+		RETURNING ` + selectLedgerColumns
 
-	entry := &models.LedgerEntry{}
-	err := r.pool.QueryRow(ctx, query, id, status, approvedByUserID, rejectedByUserID).Scan(
-		&entry.ID,
-		&entry.GroupID,
-		&entry.UserID,
-		&entry.ChoreID,
-		&entry.Amount,
-		&entry.Status,
-		&entry.CreatedByUserID,
-		&entry.ApprovedByUserID,
-		&entry.RejectedByUserID,
-		&entry.CreatedAt,
-	)
+	entry, err := scanEntry(r.pool.QueryRow(ctx, query, id, status, decidedBy, decidedAt))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("failed to update ledger entry status: %w", err)
+		return nil, fmt.Errorf("failed to set decision on ledger entry: %w", err)
 	}
-
 	return entry, nil
 }
 
-// GetBalanceForGroup calculates the balance for each member in a group
-// Balance = sum(approved regular chore entries) - sum(approved settlement entries)
-// Settlement entries are identified by chore.is_system = true
+// GetBalanceForGroup calculates the balance for each member in a group.
+// Balance = Σ approved credits − Σ approved debits, computed from direction.
+// No chores join: settlement rows (chore_id NULL) are counted correctly.
 func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) ([]*models.Balance, error) {
 	query := `
 		WITH ledger_totals AS (
-			SELECT
-				le.user_id,
-				COALESCE(SUM(CASE WHEN c.is_system = false THEN le.amount ELSE 0 END), 0)::bigint AS earned,
-				COALESCE(SUM(CASE WHEN c.is_system = true  THEN le.amount ELSE 0 END), 0)::bigint AS settled
+			SELECT le.user_id,
+				COALESCE(SUM(CASE WHEN le.direction = 'credit' THEN le.amount ELSE 0 END), 0)::bigint AS credits,
+				COALESCE(SUM(CASE WHEN le.direction = 'debit'  THEN le.amount ELSE 0 END), 0)::bigint AS debits
 			FROM ledger_entries le
-			INNER JOIN chores c ON le.chore_id = c.id
 			WHERE le.group_id = $1 AND le.status = 'approved'
 			GROUP BY le.user_id
 		),
 		all_members AS (
 			SELECT gm.user_id, u.name, gm.role
-			FROM group_members gm
-			INNER JOIN users u ON gm.user_id = u.id
+			FROM group_members gm JOIN users u ON gm.user_id = u.id
 			WHERE gm.group_id = $1
 		)
-		SELECT
-			am.user_id,
-			am.name,
-			am.role,
-			(COALESCE(lt.earned, 0) - COALESCE(lt.settled, 0))::bigint AS balance
-		FROM all_members am
-		LEFT JOIN ledger_totals lt ON am.user_id = lt.user_id
+		SELECT am.user_id, am.name, am.role,
+			(COALESCE(lt.credits, 0) - COALESCE(lt.debits, 0))::bigint AS balance
+		FROM all_members am LEFT JOIN ledger_totals lt ON am.user_id = lt.user_id
 		ORDER BY am.role DESC, am.name
 	`
 
@@ -216,11 +207,9 @@ func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) 
 		if err := rows.Scan(&balance.UserID, &balance.Name, &role, &balance.Balance); err != nil {
 			return nil, fmt.Errorf("failed to scan balance: %w", err)
 		}
-		// Skip head user from balance list (head doesn't have balance)
 		if role != "head" {
 			balances = append(balances, balance)
 		}
 	}
-
 	return balances, nil
 }

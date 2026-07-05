@@ -54,14 +54,16 @@ func NewTestPool() (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// CleanupTestDB cleans up all data in the test database (truncates tables)
+// CleanupTestDB cleans up all data in the test database (truncates tables, preserves schema)
 func CleanupTestDB(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 
-	// Truncate all tables in reverse order of dependencies (preserves schema)
+	// Truncate all tables in reverse order of dependencies.
+	// settlements is omitted: migration 012 drops it. Any per-table error (e.g. a
+	// table not existing yet) is swallowed below. Note: Postgres TRUNCATE has no
+	// IF EXISTS form, so the table names must all exist post-migration.
 	tables := []string{
 		"invite_tokens",
-		"settlements",
 		"ledger_entries",
 		"chores",
 		"group_members",
@@ -84,7 +86,8 @@ func CleanupTestDB(pool *pgxpool.Pool) error {
 func ResetTestDB(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 
-	// Drop all tables in reverse order of dependencies
+	// Drop all tables in reverse order of dependencies.
+	// settlements included for pre-012 state compatibility (IF EXISTS is safe).
 	tables := []string{
 		"schema_migrations",
 		"invite_tokens",
@@ -103,8 +106,8 @@ func ResetTestDB(pool *pgxpool.Pool) error {
 		}
 	}
 
-	// Drop custom types
-	types := []string{"ledger_status", "member_role"}
+	// Drop custom types (include v2 enum types)
+	types := []string{"ledger_entry_type", "ledger_direction", "ledger_status", "member_role"}
 	for _, t := range types {
 		_, err := pool.Exec(ctx, fmt.Sprintf("DROP TYPE IF EXISTS %s CASCADE", t))
 		if err != nil {
