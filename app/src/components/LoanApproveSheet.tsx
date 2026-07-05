@@ -87,7 +87,6 @@ export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApprov
   }
 
   const isPending = approveLoan.isPending;
-  const borrowerName = loan?.note ? undefined : undefined; // note is on the loan, not a user name
 
   return (
     <Sheet
