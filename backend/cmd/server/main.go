@@ -39,9 +39,10 @@ func main() {
 	ledgerRepo := db.NewLedgerRepo(pool)
 	inviteRepo := db.NewInviteRepo(pool)
 	allowanceRepo := db.NewAllowanceRepo(pool)
+	loanRepo := db.NewLoanRepo(pool)
 
-	// Build posting service (lazy allowance posting engine)
-	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, groupRepo, pool)
+	// Build posting service (lazy allowance + EMI posting engine)
+	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
 	// Create handlers
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
@@ -49,6 +50,7 @@ func main() {
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
 	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
 	allowanceHandler := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
+	loanHandler := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 
 	// Setup router
 	router := gin.Default()
@@ -97,6 +99,13 @@ func main() {
 			// Allowance routes
 			protected.GET("/groups/:id/allowances", allowanceHandler.ListAllowances)
 			protected.PUT("/groups/:id/allowances/:userId", allowanceHandler.SetAllowance)
+
+			// Loan routes
+			protected.GET("/groups/:id/loans", loanHandler.ListLoans)
+			protected.POST("/groups/:id/loans", loanHandler.CreateLoan)
+			protected.POST("/loans/:id/approve", loanHandler.ApproveLoan)
+			protected.POST("/loans/:id/reject", loanHandler.RejectLoan)
+			protected.POST("/loans/:id/close", loanHandler.CloseLoan)
 		}
 	}
 

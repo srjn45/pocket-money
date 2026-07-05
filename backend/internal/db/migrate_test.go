@@ -41,6 +41,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		"ledger_entries",
 		"invite_tokens",
 		"allowances",
+		"loans",
 	}
 
 	for _, table := range tables {
@@ -67,8 +68,8 @@ func TestMigrations_UpAndDown(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, settlementsExists, "settlements table should not exist after migration 012")
 
-	// Verify enum types exist (including new v2 types)
-	types := []string{"member_role", "ledger_status", "ledger_entry_type", "ledger_direction"}
+	// Verify enum types exist (including v2 types and loan_status from 011)
+	types := []string{"member_role", "ledger_status", "ledger_entry_type", "ledger_direction", "loan_status"}
 	for _, typeName := range types {
 		var exists bool
 		err := pool.QueryRow(ctx, `

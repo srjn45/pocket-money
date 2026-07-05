@@ -15,9 +15,11 @@ import (
 )
 
 // Querier is satisfied by both *pgxpool.Pool and pgx.Tx, allowing repo methods
-// to be called within or outside a transaction.
+// to be called within or outside a transaction. QueryRow is needed for
+// FOR UPDATE selects and COUNT/SUM reads on the EMI posting path (WP-3.1).
 type Querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // LedgerRepo handles database operations for ledger entries
@@ -224,6 +226,31 @@ func (r *LedgerRepo) PostedAllowancePeriods(ctx context.Context, groupID uuid.UU
 		result[userID][period] = true
 	}
 	return result, nil
+}
+
+// InsertEMIPosting inserts one approved emi debit for (group,user,loan,period), idempotently.
+// Returns (inserted bool) so the engine/close path can assert exactly-once.
+// loan_id AND period are both set, so the row collides on
+// (group,user,'emi',period,loan_id) — distinct per loan, distinct from allowance
+// rows (different entry_type) and from other loans' EMIs (different loan_id).
+// The bare ON CONFLICT DO NOTHING catches the partial unique index without restating it.
+// Invariant: loan_id and period must both be non-NULL or the index won't guard them.
+func (r *LedgerRepo) InsertEMIPosting(ctx context.Context, q Querier,
+	groupID, userID, loanID uuid.UUID, amount int64, period string,
+	note *string, createdBy uuid.UUID) (bool, error) {
+
+	tag, err := q.Exec(ctx, `
+		INSERT INTO ledger_entries
+			(id, group_id, user_id, chore_id, amount, status, entry_type, direction,
+			 loan_id, period, note, created_by_user_id, decided_by, decided_at)
+		VALUES (gen_random_uuid(), $1, $2, NULL, $3, 'approved', 'emi', 'debit',
+		        $4, $5, $6, $7, NULL, NULL)
+		ON CONFLICT DO NOTHING`,
+		groupID, userID, amount, loanID, period, note, createdBy)
+	if err != nil {
+		return false, fmt.Errorf("failed to insert emi posting: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // GetBalanceForGroup calculates the balance for each member in a group.

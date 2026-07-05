@@ -121,6 +121,42 @@ type AllowancePostingInput struct {
 	JoinedAt      time.Time
 }
 
+// LoanStatus mirrors the DB loan_status enum.
+type LoanStatus string
+
+const (
+	LoanStatusRequested LoanStatus = "requested"
+	LoanStatusActive    LoanStatus = "active"
+	LoanStatusRejected  LoanStatus = "rejected"
+	LoanStatusClosed    LoanStatus = "closed"
+)
+
+// Loan is a zero-interest loan repaid via monthly EMI debits (§5.3).
+type Loan struct {
+	ID           uuid.UUID  `json:"id"`
+	GroupID      uuid.UUID  `json:"group_id"`
+	UserID       uuid.UUID  `json:"user_id"`                // borrower
+	Principal    int64      `json:"principal"`              // minor units, > 0
+	Installments int        `json:"installments"`           // > 0
+	EMIAmount    int64      `json:"emi_amount"`             // ceil(principal/installments), > 0
+	StartPeriod  *string    `json:"start_period,omitempty"` // 'YYYY-MM'; NULL until active
+	Status       LoanStatus `json:"status"`
+	Note         *string    `json:"note,omitempty"`
+	RequestedAt  time.Time  `json:"requested_at"`
+	DecidedBy    *uuid.UUID `json:"decided_by,omitempty"`
+	DecidedAt    *time.Time `json:"decided_at,omitempty"`
+}
+
+// LoanPostingInput is the posting engine's read model for one active loan.
+type LoanPostingInput struct {
+	LoanID       uuid.UUID
+	UserID       uuid.UUID
+	Principal    int64
+	Installments int
+	EMIAmount    int64
+	StartPeriod  string // active loans always have a start_period
+}
+
 // InviteToken represents an invitation to join a group
 type InviteToken struct {
 	ID        uuid.UUID `json:"id"`
