@@ -1,5 +1,5 @@
 import { test, expect, type BrowserContext } from '@playwright/test';
-import { uniqueEmail, registerUser, createGroup, inviteAndCaptureToken, login } from '../support/pages';
+import { uniqueEmail, registerUser, createGroup, inviteAndCaptureToken, openTab } from '../support/pages';
 
 // T1: Register → auto-login → lands on dashboard (no separate login step).
 test('T1: register auto-logs-in and lands on dashboard', async ({ page }) => {
@@ -69,7 +69,9 @@ test('T-LOGIN: wrong password shows error; correct password enters app', async (
   const email = uniqueEmail();
   // First register the user.
   await registerUser(page, 'Login Test', email);
-  // Log out.
+  // Log out (register lands on the Dashboard tab → go to Profile first).
+  await openTab(page, /profile/i);
+  await expect(page.getByTestId('profile-logout')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('profile-logout').click();
   await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 15_000 });
 

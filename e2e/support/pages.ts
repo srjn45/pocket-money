@@ -111,3 +111,114 @@ export async function freshContext(
   const page = await ctx.newPage();
   return { ctx, page };
 }
+
+// ─── Navigation / tab helpers ─────────────────────────────────────────────────
+
+/** Extract the group id from a /groups/<id> URL. */
+export function groupIdFromUrl(page: Page): string {
+  const m = page.url().match(/\/groups\/([0-9a-f-]{36})/i);
+  if (!m) throw new Error(`no group id in url: ${page.url()}`);
+  return m[1];
+}
+
+/** Click a bottom-tab by its accessible name (RN-Web renders role="tab"). */
+export async function openTab(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole('tab', { name }).click();
+}
+
+/**
+ * Reload the current page and wait for a testID to reappear. React-query has a
+ * 30s staleTime, so a page that already loaded stale data (e.g. a head whose
+ * member list was empty when a member later joined in another context) will not
+ * refetch on its own — a reload forces a fresh fetch. Auth persists in
+ * AsyncStorage (localStorage on web) across the reload.
+ */
+export async function reloadInto(page: Page, testId: string): Promise<void> {
+  await page.reload();
+  await expect(page.getByTestId(testId)).toBeVisible({ timeout: 20_000 });
+}
+
+/** Auto-accept the browser's native confirm() dialogs (leave/remove use window.confirm). */
+export function autoAcceptDialogs(page: Page): void {
+  page.on('dialog', (d) => d.accept().catch(() => {}));
+}
+
+// ─── Ledger helpers ───────────────────────────────────────────────────────────
+
+/** Member logs a chore (member Overview → "Log a chore" → pick first chore → Save). */
+export async function memberLogChore(page: Page): Promise<void> {
+  await page.getByTestId('member-log-chore').click();
+  const picker = page.getByTestId('entry-chore-picker');
+  await expect(picker).toBeVisible({ timeout: 10_000 });
+  // Wait for chore options to populate, then pick the first (sets selectedChoreId).
+  await expect(picker.locator('option')).not.toHaveCount(0, { timeout: 10_000 });
+  await picker.selectOption({ index: 0 });
+  await page.getByTestId('entry-submit').click();
+}
+
+/**
+ * Head adds a settlement/adjustment entry from a member's detail screen
+ * (member-detail add-entry is head mode with a fixed user → auto-approved).
+ */
+export async function headAddEntry(
+  page: Page,
+  kind: 'settlement' | 'adjustment',
+  amount: string,
+  direction: 'credit' | 'debit' = 'credit',
+): Promise<void> {
+  await page.getByTestId('member-add-entry-button').click();
+  await page.getByTestId('entry-type-picker').selectOption(kind);
+  await page.getByTestId('entry-amount').fill(amount);
+  if (kind === 'adjustment') {
+    await page.getByTestId('entry-direction-picker').selectOption(direction);
+  }
+  await page.getByTestId('entry-submit').click();
+}
+
+/**
+ * Approve the first pending ledger row. Captures that row's exact testID before
+ * clicking so the "disappeared" assertion is not confused by other pending rows
+ * that still carry an approve control.
+ */
+export async function approveFirstPending(page: Page): Promise<void> {
+  const btn = page.getByTestId(/^ledger-approve-/).first();
+  await expect(btn).toBeVisible({ timeout: 15_000 });
+  const tid = await btn.getAttribute('data-testid');
+  await btn.click();
+  await expect(page.getByTestId(tid!)).toHaveCount(0, { timeout: 10_000 });
+}
+
+/** Reject the first pending ledger row (same exact-testID capture as approve). */
+export async function rejectFirstPending(page: Page): Promise<void> {
+  const btn = page.getByTestId(/^ledger-reject-/).first();
+  await expect(btn).toBeVisible({ timeout: 15_000 });
+  const tid = await btn.getAttribute('data-testid');
+  await btn.click();
+  await expect(page.getByTestId(tid!)).toHaveCount(0, { timeout: 10_000 });
+}
+
+// ─── Loan helpers ─────────────────────────────────────────────────────────────
+
+export async function requestLoan(
+  page: Page,
+  amount: string,
+  installments: string,
+): Promise<void> {
+  await openTab(page, /loan/i);
+  await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('loans-request-button').click();
+  await page.getByTestId('loan-amount').fill(amount);
+  await page.getByTestId('loan-installments').fill(installments);
+  await page.getByTestId('loan-request-submit').click();
+}
+
+/** Head approves the first requested loan (opens the approve sheet, confirms). */
+export async function approveFirstLoan(page: Page): Promise<void> {
+  await openTab(page, /loan/i);
+  await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
+  const approve = page.getByTestId(/^loan-approve-/).first();
+  await expect(approve).toBeVisible({ timeout: 15_000 });
+  await approve.click();
+  await page.getByTestId('loan-approve-submit').click();
+  await expect(page.getByTestId('loan-approve-submit')).not.toBeVisible({ timeout: 10_000 });
+}

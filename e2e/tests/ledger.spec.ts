@@ -1,5 +1,16 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { uniqueEmail, registerUser, createGroup, inviteAndCaptureToken } from '../support/pages';
+import {
+  uniqueEmail,
+  registerUser,
+  createGroup,
+  inviteAndCaptureToken,
+  groupIdFromUrl,
+  reloadInto,
+  memberLogChore,
+  approveFirstPending,
+  rejectFirstPending,
+} from '../support/pages';
+import { apiLogin, apiCreateChore } from '../support/api';
 
 const WEB_BASE = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
 
@@ -25,68 +36,73 @@ async function joinGroupAsMember(
   return { ctx, page: pg, email };
 }
 
-// T4: Head logs a chore entry for the member (pending) → head approves it.
-test('T4: head logs chore pending then approves', async ({ page, browser }) => {
-  await registerUser(page, 'Head T4', uniqueEmail());
+// T4: member logs chores (pending) → head approves one and rejects the other.
+// Head-created entries auto-approve, so a *pending* entry (with approve/reject
+// controls) can only come from a member submission — that is the flow under test.
+test('T4: member logs chores; head approves one and rejects another', async ({ page, browser }) => {
+  const headEmail = uniqueEmail();
+  const headPass = 'headpass123!';
+  await registerUser(page, 'Head T4', headEmail, headPass);
   await createGroup(page, `LedgerFam-${Date.now()}`);
+  const groupId = groupIdFromUrl(page);
 
-  const token = await inviteAndCaptureToken(page);
-  const { ctx: memberCtx } = await joinGroupAsMember(browser, token, 'Member T4');
+  // Seed an earnable chore via the API so the member has something to log.
+  const { token: headToken } = await apiLogin(headEmail, headPass);
+  await apiCreateChore(headToken, groupId, 'Wash dishes', 2000);
+
+  const inviteToken = await inviteAndCaptureToken(page);
+  const { ctx: memberCtx, page: memberPage } = await joinGroupAsMember(browser, inviteToken, 'Member T4');
 
   try {
-    // Head: open member detail for the first member card.
+    // Member logs two chores — both land as pending approvals.
+    await memberLogChore(memberPage);
+    await expect(memberPage.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
+    await memberLogChore(memberPage);
+    await expect(memberPage.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
+
+    // Head: reload to see the just-joined member (react-query staleTime), open detail.
+    await reloadInto(page, 'group-overview-root');
     const memberCard = page.getByTestId(/^member-card-/).first();
     await expect(memberCard).toBeVisible({ timeout: 10_000 });
     await memberCard.click();
     await expect(page.getByTestId('member-detail-root')).toBeVisible({ timeout: 10_000 });
 
-    // Head: tap "Add entry" — opens entry sheet.
-    await page.getByTestId('member-add-entry-button').click();
-
-    // Fill amount in the sheet (TextInput with testID or inputmode=numeric).
-    const amountInput = page.locator('[data-testid="entry-amount"], input[inputmode="numeric"]').first();
-    await expect(amountInput).toBeVisible({ timeout: 8_000 });
-    await amountInput.fill('200');
-
-    // Submit the entry form.
-    await page.getByRole('button', { name: /save|submit|add/i }).last().click();
-
-    // The ledger row for the new entry should show an approve button (pending).
-    const approveBtn = page.getByTestId(/^ledger-approve-/).first();
-    await expect(approveBtn).toBeVisible({ timeout: 15_000 });
-
-    // Head approves — button should disappear.
-    await approveBtn.click();
-    await expect(approveBtn).not.toBeVisible({ timeout: 10_000 });
+    // Two pending rows are present → approve one, reject the other.
+    await approveFirstPending(page);
+    await rejectFirstPending(page);
   } finally {
     await memberCtx.close();
   }
 });
 
-// T4-REJECT: Head rejects a pending entry — reject button disappears.
-test('T4-REJECT: head rejects a pending chore entry', async ({ page, browser }) => {
-  await registerUser(page, 'Head T4R', uniqueEmail());
-  await createGroup(page, `RejectFam-${Date.now()}`);
+// T5: head sets a member's allowance and the value renders on the member summary.
+test('T5: head sets member allowance and it renders on the summary', async ({ page, browser }) => {
+  const headEmail = uniqueEmail();
+  await registerUser(page, 'Head T5', headEmail);
+  await createGroup(page, `AllowanceFam-${Date.now()}`);
 
-  const token = await inviteAndCaptureToken(page);
-  const { ctx: memberCtx } = await joinGroupAsMember(browser, token, 'Member T4R');
+  const inviteToken = await inviteAndCaptureToken(page);
+  const { ctx: memberCtx } = await joinGroupAsMember(browser, inviteToken, 'Member T5');
 
   try {
+    await reloadInto(page, 'group-overview-root');
     const memberCard = page.getByTestId(/^member-card-/).first();
     await expect(memberCard).toBeVisible({ timeout: 10_000 });
     await memberCard.click();
     await expect(page.getByTestId('member-detail-root')).toBeVisible({ timeout: 10_000 });
-    await page.getByTestId('member-add-entry-button').click();
 
-    const amountInput = page.locator('[data-testid="entry-amount"], input[inputmode="numeric"]').first();
-    await expect(amountInput).toBeVisible({ timeout: 8_000 });
-    await amountInput.fill('300');
-    await page.getByRole('button', { name: /save|submit|add/i }).last().click();
+    // Open the allowance sheet. The AllowanceSummary "Set"/"Edit" button sits in a
+    // component outside the bounded testID list, so target it by role/name.
+    await page.getByRole('button', { name: /^(set|edit)$/i }).click();
 
-    const rejectBtn = page.getByTestId(/^ledger-reject-/).first();
-    await expect(rejectBtn).toBeVisible({ timeout: 15_000 });
-    await rejectBtn.click();
-    await expect(rejectBtn).not.toBeVisible({ timeout: 10_000 });
+    // Set ₹300/month and save.
+    await page.getByPlaceholder('e.g. 500').fill('300');
+    await page.getByRole('button', { name: /^save$/i }).click();
+
+    // Success toast, then the amount renders on the member summary (balance is ₹0,
+    // so 300.00 can only be the allowance).
+    await expect(page.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/300\.00/).first()).toBeVisible({ timeout: 10_000 });
   } finally {
     await memberCtx.close();
   }

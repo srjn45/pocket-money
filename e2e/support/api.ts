@@ -59,3 +59,16 @@ export async function apiApproveEntry(token: string, groupId: string, entryId: s
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export async function apiCreateChore(
+  token: string,
+  groupId: string,
+  name: string,
+  amountMinor: number,
+): Promise<{ id: string; name: string }> {
+  return request(`/groups/${groupId}/chores`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name, amount: amountMinor }),
+  });
+}

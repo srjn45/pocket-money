@@ -1,5 +1,13 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { uniqueEmail, registerUser, createGroup, inviteAndCaptureToken } from '../support/pages';
+import {
+  uniqueEmail,
+  registerUser,
+  createGroup,
+  inviteAndCaptureToken,
+  openTab,
+  requestLoan,
+  approveFirstLoan,
+} from '../support/pages';
 
 const WEB_BASE = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
 
@@ -25,8 +33,9 @@ async function joinGroupAsMember(
   return { ctx, page: pg, email };
 }
 
-// T6: Member requests loan → head approves → loan card shows active.
-test('T6: member requests loan, head approves, EMI visible', async ({ page, browser }) => {
+// T6: member requests a loan → head approves it (via the approve sheet) → the
+// loan becomes active; the member can see it but has no approve control.
+test('T6: member requests loan, head approves, loan active', async ({ page, browser }) => {
   await registerUser(page, 'Head T6', uniqueEmail());
   await createGroup(page, `LoanFam-${Date.now()}`);
 
@@ -34,73 +43,29 @@ test('T6: member requests loan, head approves, EMI visible', async ({ page, brow
   const { ctx: memberCtx, page: memberPage } = await joinGroupAsMember(browser, token, 'Member T6');
 
   try {
-    // ── Member: navigate to loans tab ────────────────────────────────────────
-    await expect(memberPage.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 }).catch(async () => {
-      // Loans tab might require navigation via tab bar.
-      await memberPage.getByRole('tab', { name: /loan/i }).click();
-      await expect(memberPage.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
-    });
-
-    // Member: tap "Request Loan".
-    await memberPage.getByTestId('loans-request-button').click();
-
-    // Fill the loan request form.
-    // Amount field.
-    const amountInput = memberPage.locator('[data-testid="loan-amount"], input[inputmode="numeric"]').first();
-    await expect(amountInput).toBeVisible({ timeout: 8_000 });
-    await amountInput.fill('60000');
-
-    // Installments field (if present).
-    const installmentsInput = memberPage
-      .locator('[data-testid="loan-installments"], input[inputmode="numeric"]')
-      .last();
-    await installmentsInput.fill('3').catch(() => {
-      // Installments input may not be separate — ignore if not found.
-    });
-
-    // Submit.
-    await memberPage.getByRole('button', { name: /submit|request|apply/i }).last().click();
-
-    // Loan card should appear in the list.
-    const loanCard = memberPage.getByTestId(/^loan-card-/).first();
-    await expect(loanCard).toBeVisible({ timeout: 15_000 });
-
-    // ── Head: approve the loan ────────────────────────────────────────────────
-    // Navigate head to the same group's loans tab.
-    const headLoansRoot = page.getByTestId('loans-root');
-    await headLoansRoot.isVisible().catch(async () => {
-      await page.getByRole('tab', { name: /loan/i }).click();
-      await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
-    });
-
-    // The approve button should be visible for the requested loan.
-    const approveBtn = page.getByTestId(/^loan-approve-/).first();
-    await expect(approveBtn).toBeVisible({ timeout: 15_000 });
-    await approveBtn.click();
-
-    // Approve button should disappear (loan is now active).
-    await expect(approveBtn).not.toBeVisible({ timeout: 10_000 });
-
-    // ── Member: loan card now shows active status ─────────────────────────────
-    // Reload member's loans view.
-    await memberPage.reload();
+    // Member: request a loan (₹6000 over 3 months).
+    await requestLoan(memberPage, '6000', '3');
     await expect(memberPage.getByTestId(/^loan-card-/).first()).toBeVisible({ timeout: 15_000 });
-    // Card should NOT have an approve button (member can't approve).
-    await expect(memberPage.getByTestId(/^loan-approve-/).first()).not.toBeVisible();
+
+    // Head: navigate to the loans tab and approve the requested loan.
+    await approveFirstLoan(page);
+
+    // Member: reload and reopen the loans tab → loan card present, no approve
+    // control (members cannot approve their own loan).
+    await memberPage.reload();
+    await openTab(memberPage, /loan/i);
+    await expect(memberPage.getByTestId(/^loan-card-/).first()).toBeVisible({ timeout: 15_000 });
+    await expect(memberPage.getByTestId(/^loan-approve-/)).toHaveCount(0);
   } finally {
     await memberCtx.close();
   }
 });
 
-// T6-EMPTY: New group shows empty state on loans tab.
+// T6-EMPTY: a brand-new group shows the empty state on the loans tab.
 test('T6-EMPTY: new group has empty loans state', async ({ page }) => {
   await registerUser(page, 'Head Loans Empty', uniqueEmail());
   await createGroup(page, `EmptyLoans-${Date.now()}`);
 
-  // Navigate to loans tab.
-  const loansRoot = page.getByTestId('loans-root');
-  await loansRoot.isVisible({ timeout: 5_000 }).catch(async () => {
-    await page.getByRole('tab', { name: /loan/i }).click();
-  });
+  await openTab(page, /loan/i);
   await expect(page.getByTestId('loans-empty')).toBeVisible({ timeout: 10_000 });
 });

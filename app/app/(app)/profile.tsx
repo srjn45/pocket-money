@@ -92,6 +92,7 @@ export default function ProfileScreen() {
           value={currentPw}
           onChangeText={setCurrentPw}
           autoCapitalize="none"
+          testID="cp-current-password"
         />
         <TextField
           label="New password"
@@ -99,6 +100,7 @@ export default function ProfileScreen() {
           value={newPw}
           onChangeText={setNewPw}
           autoCapitalize="none"
+          testID="cp-new-password"
         />
         <TextField
           label="Confirm new password"
@@ -106,6 +108,7 @@ export default function ProfileScreen() {
           value={confirmPw}
           onChangeText={setConfirmPw}
           autoCapitalize="none"
+          testID="cp-confirm-password"
         />
         <Button
           title="Change password"
@@ -113,6 +116,7 @@ export default function ProfileScreen() {
           loading={changeMutation.isPending}
           onPress={handleChangePassword}
           fullWidth
+          testID="cp-submit"
         />
         <Button
           title="Cancel"

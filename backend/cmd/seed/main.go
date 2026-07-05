@@ -329,7 +329,7 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 	if err != nil {
 		return nil, fmt.Errorf("create wash-dishes chore: %w", err)
 	}
-	_, err = choreRepo.Create(ctx, group.ID, "Walk the dog", nil, 5000)
+	walkDog, err := choreRepo.Create(ctx, group.ID, "Walk the dog", nil, 5000)
 	if err != nil {
 		return nil, fmt.Errorf("create walk-the-dog chore: %w", err)
 	}
@@ -424,12 +424,16 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 	}
 
 	// Member chore — pending: Diya submitted "Walk the dog".
+	// chore_id MUST be set: the API requires chore_id for chore entries
+	// (ledger.go: "chore_id is required for chore entries"), so a NULL chore_id
+	// here would be a state the API can never produce.
+	walkDogID := &walkDog.ID
 	if err := insertLedgerEntry(ctx, pool,
 		group.ID, diya.ID, diya.ID,
-		nil, 5000,
+		walkDogID, 5000,
 		models.EntryTypeChore, models.DirectionCredit,
 		models.StatusPendingApproval,
-		note("Walk the dog"), nil, nil, recentDate,
+		nil, nil, nil, recentDate,
 	); err != nil {
 		return nil, fmt.Errorf("insert pending chore: %w", err)
 	}
@@ -438,10 +442,10 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 	rejectedAt := recentDate.AddDate(0, 0, -1)
 	if err := insertLedgerEntry(ctx, pool,
 		group.ID, aarav.ID, aarav.ID,
-		nil, 5000,
+		walkDogID, 5000,
 		models.EntryTypeChore, models.DirectionCredit,
 		models.StatusRejected,
-		note("Walk the dog"), &head.ID, &rejectedAt, rejectedAt,
+		nil, &head.ID, &rejectedAt, rejectedAt,
 	); err != nil {
 		return nil, fmt.Errorf("insert rejected chore: %w", err)
 	}

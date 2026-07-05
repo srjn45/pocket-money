@@ -282,6 +282,7 @@ export default function LoansScreen() {
         loading={requestLoan.isPending}
         disabled={requestLoan.isPending}
         fullWidth
+        testID="loan-request-submit"
       />
     </View>
   );
@@ -347,6 +348,7 @@ export default function LoansScreen() {
           onChangeText={(v) => { setPrincipalStr(v); setPrincipalError(''); }}
           error={principalError}
           placeholder="e.g. 5000"
+          testID="loan-amount"
         />
         <TextField
           label="Repay over (months)"
@@ -355,6 +357,7 @@ export default function LoansScreen() {
           onChangeText={(v) => { setInstallmentsStr(v); setInstallmentsError(''); }}
           error={installmentsError}
           placeholder="e.g. 6"
+          testID="loan-installments"
         />
         {estimateEmi !== null && (
           <Text style={styles.emiHint}>

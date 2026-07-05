@@ -264,6 +264,7 @@ export default function GroupOverviewScreen() {
             icon="add"
             onPress={() => setSheetVisible(true)}
             fullWidth
+            testID="member-log-chore"
           />
         </View>
 

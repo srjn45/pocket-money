@@ -147,6 +147,7 @@ export function AddEntrySheet({
             loading={isSubmitting}
             disabled={isSubmitting}
             fullWidth
+            testID="entry-submit"
           />
         </View>
       }
@@ -158,6 +159,7 @@ export function AddEntrySheet({
             <Picker<EntryKind>
               selectedValue={kind}
               onValueChange={setKind}
+              testID="entry-type-picker"
             >
               <Picker.Item label="Chore" value="chore" />
               <Picker.Item label="Settlement" value="settlement" />
@@ -193,6 +195,7 @@ export function AddEntrySheet({
               <Picker<string>
                 selectedValue={selectedChoreId}
                 onValueChange={setSelectedChoreId}
+                testID="entry-chore-picker"
               >
                 {nonSystemChores.map(c => (
                   <Picker.Item
@@ -224,6 +227,7 @@ export function AddEntrySheet({
             onChangeText={setAmountStr}
             keyboardType="decimal-pad"
             placeholder="e.g. 12.50"
+            testID="entry-amount"
           />
         </>
       )}
@@ -235,6 +239,7 @@ export function AddEntrySheet({
             <Picker<Direction>
               selectedValue={direction}
               onValueChange={setDirection}
+              testID="entry-direction-picker"
             >
               <Picker.Item label="Add to balance (credit)" value="credit" />
               <Picker.Item label="Subtract from balance (debit)" value="debit" />
