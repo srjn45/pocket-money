@@ -11,6 +11,7 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/auth"
 	"github.com/srjn45/pocket-money/backend/internal/db"
 	"github.com/srjn45/pocket-money/backend/internal/models"
+	"github.com/srjn45/pocket-money/backend/internal/posting"
 )
 
 // LedgerHandler handles ledger-related requests
@@ -18,14 +19,16 @@ type LedgerHandler struct {
 	ledgerRepo *db.LedgerRepo
 	groupRepo  *db.GroupRepo
 	choreRepo  *db.ChoreRepo
+	postingSvc *posting.Service
 }
 
 // NewLedgerHandler creates a new LedgerHandler
-func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreRepo *db.ChoreRepo) *LedgerHandler {
+func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service) *LedgerHandler {
 	return &LedgerHandler{
 		ledgerRepo: ledgerRepo,
 		groupRepo:  groupRepo,
 		choreRepo:  choreRepo,
+		postingSvc: postingSvc,
 	}
 }
 
@@ -132,6 +135,11 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+
+	// Trigger due allowance posting before serving ledger (balance-sensitive).
+	if !runPosting(c, h.postingSvc, groupID) {
 		return
 	}
 
@@ -540,6 +548,11 @@ func (h *LedgerHandler) GetBalance(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+
+	// Trigger due allowance posting before serving balance (balance-sensitive).
+	if !runPosting(c, h.postingSvc, groupID) {
 		return
 	}
 

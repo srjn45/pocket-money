@@ -63,6 +63,7 @@ func CleanupTestDB(pool *pgxpool.Pool) error {
 	// table not existing yet) is swallowed below. Note: Postgres TRUNCATE has no
 	// IF EXISTS form, so the table names must all exist post-migration.
 	tables := []string{
+		"allowances",
 		"invite_tokens",
 		"ledger_entries",
 		"chores",
@@ -90,6 +91,7 @@ func ResetTestDB(pool *pgxpool.Pool) error {
 	// settlements included for pre-012 state compatibility (IF EXISTS is safe).
 	tables := []string{
 		"schema_migrations",
+		"allowances",
 		"invite_tokens",
 		"settlements",
 		"ledger_entries",

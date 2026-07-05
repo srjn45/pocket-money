@@ -10,6 +10,7 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/db"
 	"github.com/srjn45/pocket-money/backend/internal/handlers"
 	"github.com/srjn45/pocket-money/backend/internal/middleware"
+	"github.com/srjn45/pocket-money/backend/internal/posting"
 )
 
 func main() {
@@ -37,12 +38,17 @@ func main() {
 	choreRepo := db.NewChoreRepo(pool)
 	ledgerRepo := db.NewLedgerRepo(pool)
 	inviteRepo := db.NewInviteRepo(pool)
+	allowanceRepo := db.NewAllowanceRepo(pool)
+
+	// Build posting service (lazy allowance posting engine)
+	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, groupRepo, pool)
 
 	// Create handlers
 	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo)
+	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, postingSvc)
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
-	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo)
+	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
+	allowanceHandler := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
 
 	// Setup router
 	router := gin.Default()
@@ -87,6 +93,10 @@ func main() {
 			protected.POST("/ledger/:id/approve", ledgerHandler.ApproveLedger)
 			protected.POST("/ledger/:id/reject", ledgerHandler.RejectLedger)
 			protected.GET("/groups/:id/balance", ledgerHandler.GetBalance)
+
+			// Allowance routes
+			protected.GET("/groups/:id/allowances", allowanceHandler.ListAllowances)
+			protected.PUT("/groups/:id/allowances/:userId", allowanceHandler.SetAllowance)
 		}
 	}
 

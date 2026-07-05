@@ -8,10 +8,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/srjn45/pocket-money/backend/internal/models"
 )
+
+// Querier is satisfied by both *pgxpool.Pool and pgx.Tx, allowing repo methods
+// to be called within or outside a transaction.
+type Querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
 
 // LedgerRepo handles database operations for ledger entries
 type LedgerRepo struct {
@@ -168,6 +175,55 @@ func (r *LedgerRepo) SetDecision(ctx context.Context, id uuid.UUID, status model
 		return nil, fmt.Errorf("failed to set decision on ledger entry: %w", err)
 	}
 	return entry, nil
+}
+
+// InsertAllowancePosting inserts one approved allowance credit for (group,user,period),
+// idempotently. Returns (inserted bool) so the engine/tests can assert exactly-once.
+// created_by is the group head. decided_by/decided_at stay NULL (machine post).
+// loan_id stays NULL so (group,user,'allowance',period,NULL) collides via NULLS NOT DISTINCT.
+// The bare ON CONFLICT DO NOTHING catches the partial unique index without restating it.
+func (r *LedgerRepo) InsertAllowancePosting(ctx context.Context, q Querier,
+	groupID, userID uuid.UUID, amount int64, period string, createdBy uuid.UUID) (bool, error) {
+
+	tag, err := q.Exec(ctx, `
+		INSERT INTO ledger_entries
+			(id, group_id, user_id, chore_id, amount, status, entry_type, direction,
+			 loan_id, period, note, created_by_user_id, decided_by, decided_at)
+		VALUES (gen_random_uuid(), $1, $2, NULL, $3, 'approved', 'allowance', 'credit',
+		        NULL, $4, NULL, $5, NULL, NULL)
+		ON CONFLICT DO NOTHING`,
+		groupID, userID, amount, period, createdBy)
+	if err != nil {
+		return false, fmt.Errorf("failed to insert allowance posting: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// PostedAllowancePeriods returns, per user, the set of periods already posted as
+// allowance entries in this group. Used by the posting engine as a fast-path guard.
+func (r *LedgerRepo) PostedAllowancePeriods(ctx context.Context, groupID uuid.UUID) (map[uuid.UUID]map[string]bool, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT user_id, period FROM ledger_entries
+		WHERE group_id = $1 AND entry_type = 'allowance' AND period IS NOT NULL`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query posted allowance periods: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uuid.UUID]map[string]bool)
+	for rows.Next() {
+		var userID uuid.UUID
+		var period string
+		if err := rows.Scan(&userID, &period); err != nil {
+			return nil, fmt.Errorf("failed to scan posted period: %w", err)
+		}
+		if result[userID] == nil {
+			result[userID] = make(map[string]bool)
+		}
+		result[userID][period] = true
+	}
+	return result, nil
 }
 
 // GetBalanceForGroup calculates the balance for each member in a group.
