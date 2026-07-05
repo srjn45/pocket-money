@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../src/auth-context';
+import { ToastProvider } from '../src/components';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,14 +52,16 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AuthGate />
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(app)" options={{ headerShown: false }} />
-          <Stack.Screen name="invite" options={{ title: 'Join Group' }} />
-        </Stack>
-        <StatusBar style="auto" />
+        <ToastProvider>
+          <AuthGate />
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(app)" options={{ headerShown: false }} />
+            <Stack.Screen name="invite" options={{ title: 'Join Group' }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
