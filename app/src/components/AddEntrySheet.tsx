@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useState } from 'react';
+import { theme } from '../theme';
 import type { Chore, Member } from '../api';
 import { parseMoneyToMinorUnits } from '../money';
 import { useCreateLedgerEntry } from '../hooks/useLedger';
@@ -258,19 +259,19 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: theme.color.textSecondary,
     marginBottom: 6,
     marginTop: 12,
   },
   pickerWrap: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.color.border,
     borderRadius: 8,
     marginBottom: 4,
   },
   hint: {
     fontSize: 13,
-    color: '#D97706',
+    color: theme.color.warning,
     marginVertical: 8,
   },
   choreAmountRow: {
@@ -282,7 +283,7 @@ const styles = StyleSheet.create({
   },
   choreAmountLabel: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.color.textSecondary,
   },
   footerRow: {
     flexDirection: 'row',

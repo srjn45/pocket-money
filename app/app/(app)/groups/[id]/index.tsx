@@ -8,6 +8,7 @@ import { useChores } from '../../../../src/hooks/useChores';
 import { useLedger, useBalance } from '../../../../src/hooks/useLedger';
 import { groupsApi } from '../../../../src/api';
 import type { Balance } from '../../../../src/api';
+import { theme } from '../../../../src/theme';
 import {
   Button,
   AmountText,
@@ -223,7 +224,7 @@ export default function GroupOverviewScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.color.background,
   },
   centered: {
     flex: 1,
@@ -235,13 +236,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.color.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.color.border,
   },
   memberCount: {
     fontSize: 15,
-    color: '#6B7280',
+    color: theme.color.textSecondary,
   },
   addButtonRow: {
     padding: 16,
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7280',
+    color: theme.color.textSecondary,
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
@@ -257,20 +258,20 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   summaryCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.color.surface,
     padding: 24,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.color.border,
   },
   summaryLabel: {
     fontSize: 15,
-    color: '#6B7280',
+    color: theme.color.textSecondary,
     marginBottom: 8,
   },
   summaryHint: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.color.textSecondary,
     marginTop: 4,
   },
   memberScroll: {

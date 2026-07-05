@@ -1,4 +1,5 @@
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { theme } from '../theme';
 import type { LedgerEntry, Chore, Member } from '../api';
 import { groupEntriesByMonth, type MonthGroup } from '../ledger-format';
 import { LedgerRow } from './LedgerRow';
@@ -81,6 +82,6 @@ export function LedgerList({
 const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: theme.color.border,
   },
 });

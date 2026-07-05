@@ -6,6 +6,7 @@ import { useGroup } from '../../../../src/hooks/useGroup';
 import { useChores } from '../../../../src/hooks/useChores';
 import { useLedger, useBalance, useApproveLedger, useRejectLedger } from '../../../../src/hooks/useLedger';
 import { confirmAsync } from '../../../../src/confirm';
+import { theme } from '../../../../src/theme';
 import {
   AmountText,
   Button,
@@ -145,7 +146,7 @@ export default function MemberLedgerScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.color.background,
   },
   centered: {
     flex: 1,
@@ -153,20 +154,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.color.surface,
     padding: 24,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.color.border,
   },
   summaryLabel: {
     fontSize: 15,
-    color: '#6B7280',
+    color: theme.color.textSecondary,
     marginBottom: 8,
   },
   summaryHint: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.color.textSecondary,
     marginTop: 4,
   },
   addButtonRow: {
