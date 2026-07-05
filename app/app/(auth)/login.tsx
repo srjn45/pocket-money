@@ -66,6 +66,7 @@ export default function LoginScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          testID="login-email"
         />
 
         <TextField
@@ -74,14 +75,15 @@ export default function LoginScreen() {
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="password"
+          testID="login-password"
         />
 
-        <Button title="Login" onPress={handleLogin} loading={isLoading} fullWidth />
+        <Button title="Login" onPress={handleLogin} loading={isLoading} fullWidth testID="login-submit" />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don&apos;t have an account? </Text>
           <Link href="/(auth)/register" asChild>
-            <Pressable>
+            <Pressable testID="login-link-register">
               <Text style={styles.link}>Register</Text>
             </Pressable>
           </Link>

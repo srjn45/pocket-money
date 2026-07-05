@@ -1,0 +1,14 @@
+{
+  "name": "pocket-money-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "^22.0.0",
+    "serve": "14.2.3",
+    "typescript": "5.7.3"
+  }
+}

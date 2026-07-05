@@ -75,6 +75,7 @@ export default function RegisterScreen() {
           value={name}
           onChangeText={setName}
           autoComplete="name"
+          testID="register-name"
         />
 
         <TextField
@@ -84,6 +85,7 @@ export default function RegisterScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          testID="register-email"
         />
 
         <TextField
@@ -92,6 +94,7 @@ export default function RegisterScreen() {
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="new-password"
+          testID="register-password"
         />
 
         <TextField
@@ -100,9 +103,10 @@ export default function RegisterScreen() {
           onChangeText={setConfirmPassword}
           secureTextEntry
           autoComplete="new-password"
+          testID="register-confirm"
         />
 
-        <Button title="Register" onPress={handleRegister} loading={isLoading} fullWidth />
+        <Button title="Register" onPress={handleRegister} loading={isLoading} fullWidth testID="register-submit" />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>

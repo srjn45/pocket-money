@@ -13,10 +13,28 @@ KEEP        ?= 14                        # nightly backups to retain
 STAMP       := $(shell date +%Y%m%d_%H%M%S)
 DUMP        := $(BACKUP_DIR)/pocket_money_$(STAMP).dump
 
-.PHONY: help backup restore backup-verify backup-prune
+.PHONY: help backup restore backup-verify backup-prune seed demo-up
+
+SEED_DATABASE_URL ?= postgres://pocket:pocket@localhost:5432/pocket_money_dev?sslmode=disable
+SEED_JWT_SECRET   ?= dev-secret-key
+APP_BASE_URL      ?= http://localhost:8081
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+seed: ## Seed demo family into the dev database (SEED_DATABASE_URL)
+	cd backend && \
+	DATABASE_URL="$(SEED_DATABASE_URL)" \
+	JWT_SECRET="$(SEED_JWT_SECRET)" \
+	APP_BASE_URL="$(APP_BASE_URL)" \
+	go run ./cmd/seed --reset
+
+demo-up: seed ## Seed + boot the backend in the background (useful for local E2E)
+	cd backend && \
+	DATABASE_URL="$(SEED_DATABASE_URL)" \
+	JWT_SECRET="$(SEED_JWT_SECRET)" \
+	APP_BASE_URL="$(APP_BASE_URL)" \
+	go run ./cmd/server &
 
 backup: ## Dump the live DB to backups/ (custom format), then prune old dumps
 	@mkdir -p $(BACKUP_DIR)

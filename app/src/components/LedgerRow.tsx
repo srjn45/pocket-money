@@ -68,6 +68,7 @@ export function LedgerRow({
                 size="sm"
                 onPress={() => onApprove?.(entry.id)}
                 disabled={processing}
+                testID={`ledger-approve-${entry.id}`}
               />
               <Button
                 title="✕"
@@ -75,6 +76,7 @@ export function LedgerRow({
                 size="sm"
                 onPress={() => onReject?.(entry.id)}
                 disabled={processing}
+                testID={`ledger-reject-${entry.id}`}
               />
             </>
           )}

@@ -1,5 +1,5 @@
 .PHONY: build test run clean lint tidy test-up test-down test-all test-coverage \
-        docker-build docker-run dev dev-up dev-down help
+        docker-build docker-run dev dev-up dev-down help seed
 
 # Default target
 .DEFAULT_GOAL := help
@@ -145,3 +145,12 @@ clean: ## Clean build artifacts and coverage files
 
 clean-all: clean dev-down test-down ## Clean everything including Docker containers
 	@echo "Cleaned all artifacts and stopped containers"
+
+# ============================================================================
+# SEED
+# ============================================================================
+
+seed: ## Seed demo family into SEED_DATABASE_URL. Requires --reset or an allowed DB name.
+	DATABASE_URL="$(SEED_DATABASE_URL)" \
+	JWT_SECRET="$(SEED_JWT_SECRET)" \
+	go run ./cmd/seed $(SEED_FLAGS)
