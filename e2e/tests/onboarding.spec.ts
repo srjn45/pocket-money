@@ -83,7 +83,12 @@ test('T-LOGIN: wrong password shows error; correct password enters app', async (
   await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('dashboard-root')).not.toBeVisible();
 
-  // Correct password.
+  // Correct password. Reload first for a clean form: re-filling and immediately
+  // resubmitting on the same screen can race the previous failed attempt's state
+  // and resend the stale password.
+  await page.reload();
+  await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('login-email').fill(email);
   await page.getByTestId('login-password').fill('password123');
   await page.getByTestId('login-submit').click();
   await expect(page.getByTestId('dashboard-root')).toBeVisible({ timeout: 15_000 });
