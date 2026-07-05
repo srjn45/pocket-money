@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,6 +27,7 @@ import (
 // allowanceTestEnv holds all wired-up deps for allowance handler integration tests.
 type allowanceTestEnv struct {
 	router        *gin.Engine
+	pool          *pgxpool.Pool
 	userRepo      *db.UserRepo
 	groupRepo     *db.GroupRepo
 	ledgerRepo    *db.LedgerRepo
@@ -65,6 +67,7 @@ func setupAllowanceTestEnv(t *testing.T) *allowanceTestEnv {
 
 	return &allowanceTestEnv{
 		router:        router,
+		pool:          pool,
 		userRepo:      userRepo,
 		groupRepo:     groupRepo,
 		ledgerRepo:    ledgerRepo,
@@ -93,6 +96,19 @@ func (e *allowanceTestEnv) seedGroup(t *testing.T, suffix string) (head, member 
 	_, err = e.groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
 	return
+}
+
+// backdateJoin sets a member's group_members.joined_at to the first day of the
+// given YYYY-MM month. AddMember stamps joined_at = now(), and PostDue floors the
+// backfill start at max(effective_from, join-month) — so to exercise a multi-month
+// backfill (member existed before the server caught up) the join date must be
+// moved into the past, otherwise only the current month is due.
+func (e *allowanceTestEnv) backdateJoin(t *testing.T, groupID, userID uuid.UUID, period string) {
+	t.Helper()
+	_, err := e.pool.Exec(t.Context(),
+		`UPDATE group_members SET joined_at = $1::timestamptz WHERE group_id = $2 AND user_id = $3`,
+		period+"-01T00:00:00Z", groupID, userID)
+	require.NoError(t, err)
 }
 
 // TestAllowance_AuthZ tests authorization rules for allowance endpoints.
@@ -162,8 +178,9 @@ func TestAllowance_IdempotencyDoubleTrigger(t *testing.T) {
 	ctx := t.Context()
 	head, member, group := env.seedGroup(t, "idem")
 
-	// Set allowance effective 2 months ago.
+	// Set allowance effective 2 months ago; member joined then too (backfill scenario).
 	twoMonthsAgo := time.Now().AddDate(0, -2, 0).Format("2006-01")
+	env.backdateJoin(t, group.ID, member.ID, twoMonthsAgo)
 	_, err := env.allowanceRepo.SetAllowance(ctx, group.ID, member.ID, 1000, twoMonthsAgo, head.ID)
 	require.NoError(t, err)
 
@@ -202,6 +219,7 @@ func TestAllowance_ConcurrentRace(t *testing.T) {
 	head, member, group := env.seedGroup(t, "race")
 
 	twoMonthsAgo := time.Now().AddDate(0, -2, 0).Format("2006-01")
+	env.backdateJoin(t, group.ID, member.ID, twoMonthsAgo)
 	_, err := env.allowanceRepo.SetAllowance(ctx, group.ID, member.ID, 500, twoMonthsAgo, head.ID)
 	require.NoError(t, err)
 
@@ -250,6 +268,7 @@ func TestAllowance_ConcurrentRaceMultiMember(t *testing.T) {
 		require.NoError(t, err)
 		_, err = env.groupRepo.AddMember(ctx, group.ID, m.ID, models.RoleMember)
 		require.NoError(t, err)
+		env.backdateJoin(t, group.ID, m.ID, twoMonthsAgo)
 		_, err = env.allowanceRepo.SetAllowance(ctx, group.ID, m.ID, 500, twoMonthsAgo, head.ID)
 		require.NoError(t, err)
 		members = append(members, m)
@@ -290,8 +309,9 @@ func TestAllowance_BalanceAfterPosting(t *testing.T) {
 	head, member, group := env.seedGroup(t, "bal")
 
 	// Allowance 1000 effective 3 months ago → 4 months (3 back + current).
-	fourMonthsAgo := time.Now().AddDate(0, -3, 0).Format("2006-01")
-	_, err := env.allowanceRepo.SetAllowance(ctx, group.ID, member.ID, 1000, fourMonthsAgo, head.ID)
+	threeMonthsAgo := time.Now().AddDate(0, -3, 0).Format("2006-01")
+	env.backdateJoin(t, group.ID, member.ID, threeMonthsAgo)
+	_, err := env.allowanceRepo.SetAllowance(ctx, group.ID, member.ID, 1000, threeMonthsAgo, head.ID)
 	require.NoError(t, err)
 
 	// Trigger via GET /balance.
