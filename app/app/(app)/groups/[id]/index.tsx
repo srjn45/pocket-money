@@ -6,6 +6,8 @@ import { useAuth } from '../../../../src/auth-context';
 import { useGroup } from '../../../../src/hooks/useGroup';
 import { useChores } from '../../../../src/hooks/useChores';
 import { useLedger, useBalance } from '../../../../src/hooks/useLedger';
+import { useAllowances } from '../../../../src/hooks/useAllowances';
+import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../src/allowance-format';
 import { groupsApi } from '../../../../src/api';
 import type { Balance } from '../../../../src/api';
 import { theme } from '../../../../src/theme';
@@ -15,6 +17,7 @@ import {
   MemberCard,
   LedgerList,
   AddEntrySheet,
+  AllowanceSummary,
   EmptyState,
   ErrorMessage,
   LoadingSpinner,
@@ -33,6 +36,7 @@ export default function GroupOverviewScreen() {
   const groupQuery = useGroup(id ?? '');
   const balanceQuery = useBalance(id ?? '');
   const choresQuery = useChores(id ?? '');
+  const allowancesQuery = useAllowances(id ?? '');
 
   const group = groupQuery.data;
   const members = group?.members ?? [];
@@ -40,6 +44,10 @@ export default function GroupOverviewScreen() {
 
   const pendingLedgerQuery = useLedger(id ?? '', { status: 'pending_approval' });
   const myLedgerQuery = useLedger(id ?? '', isHead ? undefined : {});
+
+  const memberPeriod = currentPeriod();
+  const memberCurrentAllow = currentAllowanceFor(allowancesQuery.data ?? [], memberPeriod);
+  const memberUpcomingAllow = upcomingAllowanceFor(allowancesQuery.data ?? [], memberPeriod);
 
   const isLoading = groupQuery.isLoading || balanceQuery.isLoading;
   const error = groupQuery.error || balanceQuery.error;
@@ -184,6 +192,12 @@ export default function GroupOverviewScreen() {
           <Text style={styles.summaryHint}>
             {(myBalance?.balance ?? 0) < 0 ? 'you owe' : 'owed to you'}
           </Text>
+          {!allowancesQuery.isError && (
+            <AllowanceSummary
+              current={memberCurrentAllow}
+              upcoming={memberUpcomingAllow}
+            />
+          )}
         </View>
 
         <View style={styles.addButtonRow}>
