@@ -533,6 +533,38 @@ export interface components {
              */
             created_at: string;
         };
+        /** @description A group the caller belongs to, enriched for the dashboard listing. The summary_balance is a glanceable figure computed from currently-posted approved ledger entries; it does NOT trigger allowance/EMI posting, so it may lag the authoritative per-group balance by the current month's machine-posted entries until the group is opened. */
+        GroupSummaryResponse: {
+            /**
+             * Format: uuid
+             * @description Group ID
+             */
+            id: string;
+            /** @description Group name */
+            name: string;
+            /**
+             * Format: uuid
+             * @description ID of the group head
+             */
+            head_user_id: string;
+            /**
+             * Format: date-time
+             * @description Group creation timestamp
+             */
+            created_at: string;
+            /**
+             * @description The caller's role in this group.
+             * @enum {string}
+             */
+            role: "head" | "member";
+            /** @description Number of members in the group (includes the head). */
+            member_count: number;
+            /**
+             * Format: int64
+             * @description Role-dependent summary in minor units (paise). For role=head, the sum of all NON-head members' balances (= total the head owes members; typically >= 0). For role=member, the caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe the head). Computed as Σ approved credits − Σ approved debits. A member never receives another member's figure.
+             */
+            summary_balance: number;
+        };
         GroupDetailResponse: {
             /**
              * Format: uuid
@@ -1033,13 +1065,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of groups */
+            /** @description List of the user's groups, each enriched with role, member count, and a role-dependent summary balance for the dashboard. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroupResponse"][];
+                    "application/json": components["schemas"]["GroupSummaryResponse"][];
                 };
             };
             /** @description Not authenticated */

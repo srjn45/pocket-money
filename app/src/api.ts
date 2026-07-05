@@ -12,6 +12,7 @@ const BASE_URL = Constants.expoConfig?.extra?.apiUrl ||
 export type ApiError      = Schemas['ErrorResponse'];
 export type User          = Schemas['UserResponse'];
 export type Group         = Schemas['GroupResponse'];
+export type GroupSummary  = Schemas['GroupSummaryResponse'];
 export type GroupDetail   = Schemas['GroupDetailResponse'];
 export type Member        = Schemas['MemberResponse'];
 export type Chore         = Schemas['ChoreResponse'];
@@ -82,7 +83,7 @@ export const authApi = {
 
 // Groups API
 export const groupsApi = {
-  list: () => request<Group[]>('/groups'),
+  list: () => request<GroupSummary[]>('/groups'),
 
   create: (data: { name: string }) =>
     request<Group>('/groups', { method: 'POST', body: JSON.stringify(data) }),

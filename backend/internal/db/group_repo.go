@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +12,18 @@ import (
 
 	"github.com/srjn45/pocket-money/backend/internal/models"
 )
+
+// GroupSummary is a dashboard-listing row: a group plus the caller's role, member count,
+// and a role-dependent summary balance (minor units). See GET /groups.
+type GroupSummary struct {
+	ID             uuid.UUID
+	Name           string
+	HeadUserID     uuid.UUID
+	CreatedAt      time.Time
+	Role           models.MemberRole
+	MemberCount    int
+	SummaryBalance int64
+}
 
 // GroupRepo handles database operations for groups
 type GroupRepo struct {
@@ -70,32 +83,68 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 	return group, nil
 }
 
-// ListForUser retrieves all groups a user is a member of
-func (r *GroupRepo) ListForUser(ctx context.Context, userID uuid.UUID) ([]*models.Group, error) {
+// ListForUserWithSummary returns every group the user belongs to, each enriched with the caller's
+// role, the member count, and a summary balance: for head groups the sum of all non-head members'
+// balances (total owed); for member groups the caller's own balance. Balances come from currently
+// approved ledger entries only (no posting is triggered — see WP-4.2 §0.2).
+func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID) ([]*GroupSummary, error) {
 	query := `
-		SELECT g.id, g.name, g.head_user_id, g.created_at
-		FROM groups g
-		INNER JOIN group_members gm ON g.id = gm.group_id
-		WHERE gm.user_id = $1
-		ORDER BY g.created_at DESC
+		WITH my_groups AS (
+			SELECT g.id, g.name, g.head_user_id, g.created_at, gm.role
+			FROM groups g
+			JOIN group_members gm ON gm.group_id = g.id
+			WHERE gm.user_id = $1
+		),
+		member_counts AS (
+			SELECT group_id, COUNT(*)::int AS member_count
+			FROM group_members
+			WHERE group_id IN (SELECT id FROM my_groups)
+			GROUP BY group_id
+		),
+		member_balances AS (
+			SELECT le.group_id, le.user_id,
+				(COALESCE(SUM(CASE WHEN le.direction = 'credit' THEN le.amount ELSE 0 END), 0)
+			   - COALESCE(SUM(CASE WHEN le.direction = 'debit'  THEN le.amount ELSE 0 END), 0))::bigint AS balance
+			FROM ledger_entries le
+			WHERE le.status = 'approved'
+			  AND le.group_id IN (SELECT id FROM my_groups)
+			GROUP BY le.group_id, le.user_id
+		),
+		head_totals AS (
+			SELECT mb.group_id, COALESCE(SUM(mb.balance), 0)::bigint AS total_owed
+			FROM member_balances mb
+			JOIN group_members gm ON gm.group_id = mb.group_id AND gm.user_id = mb.user_id
+			WHERE gm.role <> 'head'
+			GROUP BY mb.group_id
+		)
+		SELECT mg.id, mg.name, mg.head_user_id, mg.created_at, mg.role,
+			COALESCE(mc.member_count, 0) AS member_count,
+			CASE WHEN mg.role = 'head'
+				 THEN COALESCE(ht.total_owed, 0)
+				 ELSE COALESCE(ob.balance, 0)
+			END::bigint AS summary_balance
+		FROM my_groups mg
+		LEFT JOIN member_counts mc ON mc.group_id = mg.id
+		LEFT JOIN head_totals   ht ON ht.group_id = mg.id
+		LEFT JOIN member_balances ob ON ob.group_id = mg.id AND ob.user_id = $1
+		ORDER BY mg.created_at DESC
 	`
-
 	rows, err := r.pool.Query(ctx, query, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list groups for user: %w", err)
+		return nil, fmt.Errorf("failed to list group summaries: %w", err)
 	}
 	defer rows.Close()
 
-	var groups []*models.Group
+	summaries := make([]*GroupSummary, 0)
 	for rows.Next() {
-		group := &models.Group{}
-		if err := rows.Scan(&group.ID, &group.Name, &group.HeadUserID, &group.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan group: %w", err)
+		s := &GroupSummary{}
+		if err := rows.Scan(&s.ID, &s.Name, &s.HeadUserID, &s.CreatedAt,
+			&s.Role, &s.MemberCount, &s.SummaryBalance); err != nil {
+			return nil, fmt.Errorf("failed to scan group summary: %w", err)
 		}
-		groups = append(groups, group)
+		summaries = append(summaries, s)
 	}
-
-	return groups, nil
+	return summaries, rows.Err()
 }
 
 // AddMember adds a user to a group

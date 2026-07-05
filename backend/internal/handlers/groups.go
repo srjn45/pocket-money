@@ -48,6 +48,17 @@ type GroupResponse struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// GroupSummaryResponse is one dashboard-listing row (see openapi GroupSummaryResponse).
+type GroupSummaryResponse struct {
+	ID             uuid.UUID         `json:"id"`
+	Name           string            `json:"name"`
+	HeadUserID     uuid.UUID         `json:"head_user_id"`
+	CreatedAt      time.Time         `json:"created_at"`
+	Role           models.MemberRole `json:"role"`
+	MemberCount    int               `json:"member_count"`
+	SummaryBalance int64             `json:"summary_balance"`
+}
+
 // MemberResponse represents a member in API responses
 type MemberResponse struct {
 	UserID   uuid.UUID         `json:"user_id"`
@@ -119,7 +130,8 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	})
 }
 
-// ListGroups returns all groups for the authenticated user
+// ListGroups returns the user's groups enriched for the dashboard. Does NOT trigger posting
+// (WP-4.2 §0.2): summary_balance reflects currently-posted approved entries.
 // GET /api/v1/groups
 func (h *GroupHandler) ListGroups(c *gin.Context) {
 	userIDStr, exists := auth.GetUserID(c)
@@ -134,22 +146,24 @@ func (h *GroupHandler) ListGroups(c *gin.Context) {
 		return
 	}
 
-	groups, err := h.groupRepo.ListForUser(c.Request.Context(), userID)
+	summaries, err := h.groupRepo.ListForUserWithSummary(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list groups"})
 		return
 	}
 
-	response := make([]GroupResponse, 0, len(groups))
-	for _, g := range groups {
-		response = append(response, GroupResponse{
-			ID:         g.ID,
-			Name:       g.Name,
-			HeadUserID: g.HeadUserID,
-			CreatedAt:  g.CreatedAt,
+	response := make([]GroupSummaryResponse, 0, len(summaries))
+	for _, s := range summaries {
+		response = append(response, GroupSummaryResponse{
+			ID:             s.ID,
+			Name:           s.Name,
+			HeadUserID:     s.HeadUserID,
+			CreatedAt:      s.CreatedAt,
+			Role:           s.Role,
+			MemberCount:    s.MemberCount,
+			SummaryBalance: s.SummaryBalance,
 		})
 	}
-
 	c.JSON(http.StatusOK, response)
 }
 
