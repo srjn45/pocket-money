@@ -313,3 +313,25 @@ func (r *LoanRepo) Reject(ctx context.Context, q Querier,
 	}
 	return loan, nil
 }
+
+// LockBlockingLoans locks the member's non-terminal loans (requested|active) FOR
+// UPDATE and returns how many there are. The lock serializes against a concurrent
+// PostDue that would FOR UPDATE the same active loans before posting EMIs (WP-3.1).
+// Ordered by id — a single-user subset, so it cannot form a lock cycle with
+// PostDue's group-wide (user_id, start_period, id) order.
+func (r *LoanRepo) LockBlockingLoans(ctx context.Context, q Querier, groupID, userID uuid.UUID) (int, error) {
+	rows, err := q.Query(ctx,
+		`SELECT id FROM loans
+		 WHERE group_id = $1 AND user_id = $2 AND status IN ('requested','active')
+		 ORDER BY id
+		 FOR UPDATE`, groupID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to lock blocking loans: %w", err)
+	}
+	defer rows.Close()
+	n := 0
+	for rows.Next() {
+		n++
+	}
+	return n, rows.Err()
+}

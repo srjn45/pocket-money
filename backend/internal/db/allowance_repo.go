@@ -88,6 +88,17 @@ func (r *AllowanceRepo) ListForUser(ctx context.Context, groupID, userID uuid.UU
 	return result, nil
 }
 
+// DeleteForMember removes a member's allowance config rows. Safe: nothing FKs
+// allowances. Already-posted allowance ledger entries (history) are untouched (D7).
+func (r *AllowanceRepo) DeleteForMember(ctx context.Context, q Querier, groupID, userID uuid.UUID) error {
+	_, err := q.Exec(ctx,
+		`DELETE FROM allowances WHERE group_id = $1 AND user_id = $2`, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete allowances for member: %w", err)
+	}
+	return nil
+}
+
 // ListPostingInputs returns each member's allowance rows joined with their join date,
 // filtered to role='member'. Ordered by user then effective_from for the posting engine.
 func (r *AllowanceRepo) ListPostingInputs(ctx context.Context, groupID uuid.UUID) ([]models.AllowancePostingInput, error) {

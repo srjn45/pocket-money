@@ -11,6 +11,7 @@ import { useLoans } from '../../../../../src/hooks/useLoans';
 import { confirmAsync } from '../../../../../src/confirm';
 import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../../src/allowance-format';
 import { formatMinor } from '../../../../../src/money';
+import { useRemoveMember } from '../../../../../src/hooks/useHygiene';
 import { theme } from '../../../../../src/theme';
 import {
   AmountText,
@@ -59,6 +60,7 @@ export default function MemberDetailScreen() {
 
   const approveMutation = useApproveLedger(id ?? '');
   const rejectMutation = useRejectLedger(id ?? '');
+  const removeMutation = useRemoveMember(id ?? '');
 
   const period = currentPeriod();
   const memberAllowances = (allowancesQuery.data ?? []).filter(a => a.user_id === userId);
@@ -67,6 +69,8 @@ export default function MemberDetailScreen() {
 
   const memberBalance = balanceQuery.data?.find(b => b.user_id === userId);
   const entries = ledgerQuery.data ?? [];
+  const viewedMember = members.find(m => m.user_id === userId);
+  const canRemove = isHead && viewedMember?.role !== 'head';
 
   // Loans filtered to this member (read-only; management is on Loans tab)
   const memberLoans = (loansQuery.data ?? []).filter(l => l.user_id === userId);
@@ -103,6 +107,24 @@ export default function MemberDetailScreen() {
       showToast({ message: e instanceof Error ? e.message : 'Failed to reject', tone: 'danger' });
     } finally {
       setProcessingId(null);
+    }
+  }
+
+  async function handleRemoveMember() {
+    const memberName = name || 'this member';
+    const confirmed = await confirmAsync({
+      title: 'Remove member',
+      message: `Remove ${memberName} from the group? Their ledger history is kept. This only works if their balance is ₹0 and they have no active or pending loans.`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await removeMutation.mutateAsync(userId ?? '');
+      showToast({ tone: 'success', message: `${memberName} removed` });
+      router.back();
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : 'Failed to remove member' });
     }
   }
 
@@ -254,6 +276,18 @@ export default function MemberDetailScreen() {
           memberName={name}
           current={currentAllow}
         />
+
+        {canRemove && (
+          <View style={styles.removeButtonRow}>
+            <Button
+              title="Remove member"
+              variant="danger"
+              loading={removeMutation.isPending}
+              onPress={handleRemoveMember}
+              fullWidth
+            />
+          </View>
+        )}
       </View>
     </>
   );
@@ -335,5 +369,8 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xs,
     color: theme.color.text,
     fontWeight: theme.fontWeight.medium,
+  },
+  removeButtonRow: {
+    padding: theme.spacing.lg,
   },
 });

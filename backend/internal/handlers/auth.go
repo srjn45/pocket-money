@@ -143,6 +143,61 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
+// ChangePasswordRequest is the body for PUT /auth/password.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
+}
+
+// ChangePassword handles PUT /api/v1/auth/password.
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	userIDStr, exists := auth.GetUserID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.userRepo.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+		return
+	}
+
+	// Verify the CURRENT password. Mismatch → 403, NOT 401 (a 401 would trip the FE
+	// client's global logout interceptor and end the session mid-change).
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "current password is incorrect"})
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+	if err := h.userRepo.UpdatePassword(c.Request.Context(), userID, string(newHash)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	c.Status(http.StatusNoContent) // 204 — nothing to return; JWT unchanged (D1)
+}
+
 // Me returns the current authenticated user
 // GET /api/v1/auth/me
 func (h *AuthHandler) Me(c *gin.Context) {

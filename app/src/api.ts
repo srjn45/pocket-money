@@ -9,19 +9,20 @@ const BASE_URL = Constants.expoConfig?.extra?.apiUrl ||
   process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:8080/api/v1';
 
-export type ApiError      = Schemas['ErrorResponse'];
-export type User          = Schemas['UserResponse'];
-export type Group         = Schemas['GroupResponse'];
-export type GroupSummary  = Schemas['GroupSummaryResponse'];
-export type GroupDetail   = Schemas['GroupDetailResponse'];
-export type Member        = Schemas['MemberResponse'];
-export type Chore         = Schemas['ChoreResponse'];
-export type LedgerEntry   = Schemas['LedgerResponse'];
-export type Balance       = Schemas['BalanceResponse'];
-export type InviteResponse = Schemas['InviteResponse'];
-export type LoginResponse  = Schemas['LoginResponse'];
-export type Allowance     = Schemas['AllowanceResponse'];
-export type Loan          = Schemas['LoanResponse'];
+export type ApiError             = Schemas['ErrorResponse'];
+export type User                 = Schemas['UserResponse'];
+export type Group                = Schemas['GroupResponse'];
+export type GroupSummary         = Schemas['GroupSummaryResponse'];
+export type GroupDetail          = Schemas['GroupDetailResponse'];
+export type Member               = Schemas['MemberResponse'];
+export type Chore                = Schemas['ChoreResponse'];
+export type LedgerEntry          = Schemas['LedgerResponse'];
+export type Balance              = Schemas['BalanceResponse'];
+export type InviteResponse       = Schemas['InviteResponse'];
+export type LoginResponse        = Schemas['LoginResponse'];
+export type Allowance            = Schemas['AllowanceResponse'];
+export type Loan                 = Schemas['LoanResponse'];
+export type ChangePasswordRequest = Schemas['ChangePasswordRequest'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -79,6 +80,9 @@ export const authApi = {
     request<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
 
   me: () => request<User>('/auth/me'),
+
+  changePassword: (data: ChangePasswordRequest) =>
+    request<void>('/auth/password', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // Groups API
@@ -100,6 +104,10 @@ export const groupsApi = {
 
   join: (token: string) =>
     request<Group>('/groups/join', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  // Serves both "head removes member" and "member leaves" (caller passes own id).
+  removeMember: (groupId: string, userId: string) =>
+    request<void>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
 };
 
 // Chores API

@@ -233,6 +233,34 @@ func (r *GroupRepo) ListMembers(ctx context.Context, groupID uuid.UUID) ([]*mode
 	return members, nil
 }
 
+// LockMembershipForUpdate reads the target's membership row FOR UPDATE, returning
+// its role. ErrNotFound when the user is not a member. The row lock is the tx's
+// serialization anchor for this member.
+func (r *GroupRepo) LockMembershipForUpdate(ctx context.Context, q Querier, groupID, userID uuid.UUID) (models.MemberRole, error) {
+	var role models.MemberRole
+	err := q.QueryRow(ctx,
+		`SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 FOR UPDATE`,
+		groupID, userID).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("failed to lock membership: %w", err)
+	}
+	return role, nil
+}
+
+// DeleteMembership removes the group_members row. Ledger/loan/allowance rows are
+// unaffected (they FK users(id), not group_members) — history is preserved.
+func (r *GroupRepo) DeleteMembership(ctx context.Context, q Querier, groupID, userID uuid.UUID) error {
+	_, err := q.Exec(ctx,
+		`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete membership: %w", err)
+	}
+	return nil
+}
+
 // CountChores returns the number of chores in a group
 func (r *GroupRepo) CountChores(ctx context.Context, groupID uuid.UUID) (int, error) {
 	var count int

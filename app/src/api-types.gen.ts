@@ -84,6 +84,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change password (logged-in)
+         * @description Changes the authenticated user's password. Verifies the current password (bcrypt) before setting the new one. No email/reset flow. Does NOT rotate the JWT — existing tokens remain valid until expiry (LAN v2 limitation).
+         */
+        put: operations["changePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/groups": {
         parameters: {
             query?: never;
@@ -143,6 +163,26 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/groups/{id}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member (head) or leave a group (self)
+         * @description Removes a membership. The head may remove any non-head member; any member may remove themselves (leave). Allowed ONLY when the target member's balance is settled to exactly 0 AND they have no loan in `requested` or `active` status. Ledger history and closed/rejected loans are KEPT (they reference the user, not the membership); the member's allowance config rows are deleted and any pending ledger entries are auto-rejected. The group head can neither leave nor be removed. Triggers due allowance/EMI posting before evaluating the balance so a stale un-posted entry cannot let a non-zero member out.
+         */
+        delete: operations["removeMember"];
         options?: never;
         head?: never;
         patch?: never;
@@ -469,6 +509,12 @@ export interface components {
             dob?: string | null;
             /** @description User's sex */
             sex?: string | null;
+        };
+        ChangePasswordRequest: {
+            /** @description The user's current password, verified before the change. */
+            current_password: string;
+            /** @description The new password (minimum 6 characters). */
+            new_password: string;
         };
         LoginRequest: {
             /**
@@ -1056,6 +1102,64 @@ export interface operations {
             };
         };
     };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed successfully (no content) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body or new password too short (min 6) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated (missing/invalid token) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Current password is incorrect */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listGroups: {
         parameters: {
             query?: never;
@@ -1254,6 +1358,83 @@ export interface operations {
             };
             /** @description Not a member of this group */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Group ID (UUID) */
+                id: string;
+                /** @description ID of the member to remove (equal to the caller for "leave") */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member removed / left successfully (no content) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid group ID or user ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A non-head member may only remove themselves */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Target user is not a member of this group */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Removal blocked — the target is the group head, or their balance is not zero, or they have an active/pending loan. The error message is human-readable and states which. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

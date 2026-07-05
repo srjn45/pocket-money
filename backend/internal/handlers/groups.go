@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/srjn45/pocket-money/backend/internal/auth"
 	"github.com/srjn45/pocket-money/backend/internal/db"
@@ -20,21 +21,39 @@ import (
 
 // GroupHandler handles group-related requests
 type GroupHandler struct {
-	groupRepo  *db.GroupRepo
-	inviteRepo *db.InviteRepo
-	choreRepo  *db.ChoreRepo
-	postingSvc *posting.Service
-	appBaseURL string
+	groupRepo     *db.GroupRepo
+	inviteRepo    *db.InviteRepo
+	choreRepo     *db.ChoreRepo
+	ledgerRepo    *db.LedgerRepo
+	loanRepo      *db.LoanRepo
+	allowanceRepo *db.AllowanceRepo
+	postingSvc    *posting.Service
+	pool          *pgxpool.Pool
+	appBaseURL    string
 }
 
 // NewGroupHandler creates a new GroupHandler
-func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service, appBaseURL string) *GroupHandler {
+func NewGroupHandler(
+	groupRepo *db.GroupRepo,
+	inviteRepo *db.InviteRepo,
+	choreRepo *db.ChoreRepo,
+	ledgerRepo *db.LedgerRepo,
+	loanRepo *db.LoanRepo,
+	allowanceRepo *db.AllowanceRepo,
+	postingSvc *posting.Service,
+	pool *pgxpool.Pool,
+	appBaseURL string,
+) *GroupHandler {
 	return &GroupHandler{
-		groupRepo:  groupRepo,
-		inviteRepo: inviteRepo,
-		choreRepo:  choreRepo,
-		postingSvc: postingSvc,
-		appBaseURL: appBaseURL,
+		groupRepo:     groupRepo,
+		inviteRepo:    inviteRepo,
+		choreRepo:     choreRepo,
+		ledgerRepo:    ledgerRepo,
+		loanRepo:      loanRepo,
+		allowanceRepo: allowanceRepo,
+		postingSvc:    postingSvc,
+		pool:          pool,
+		appBaseURL:    appBaseURL,
 	}
 }
 
@@ -481,4 +500,121 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 		HeadUserID: group.HeadUserID,
 		CreatedAt:  group.CreatedAt,
 	})
+}
+
+// RemoveMember handles DELETE /api/v1/groups/:id/members/:userId.
+// Head removes a member; member leaves self. See WP-4.7 §4.2.
+func (h *GroupHandler) RemoveMember(c *gin.Context) {
+	callerIDStr, exists := auth.GetUserID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	callerID, err := uuid.Parse(callerIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID"})
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group ID"})
+		return
+	}
+	targetID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	// Caller must be a member; get their role for the authz decision.
+	caller, err := h.groupRepo.GetMember(c.Request.Context(), groupID, callerID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+
+	// Authz: head may remove others; anyone may remove self; a non-head may NOT remove another member.
+	isSelf := targetID == callerID
+	if !isSelf && caller.Role != models.RoleHead {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only the group head can remove other members"})
+		return
+	}
+
+	// D3: post any due allowance/EMI FIRST (own tx), so the balance below is current
+	// and a stale un-posted entry cannot let a non-zero member out.
+	if !runPosting(c, h.postingSvc, groupID) {
+		return
+	}
+
+	ctx := c.Request.Context()
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to begin transaction"})
+		return
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Lock the target's membership (anchor); confirms they are a member.
+	role, err := h.groupRepo.LockMembershipForUpdate(ctx, tx, groupID, targetID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user is not a member of this group"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to lock membership"})
+		return
+	}
+	// D6: the head can neither leave nor be removed.
+	if role == models.RoleHead {
+		c.JSON(http.StatusConflict, gin.H{"error": "the group head cannot leave or be removed"})
+		return
+	}
+
+	// D5: block on any requested/active loan (FOR UPDATE serializes vs PostDue EMI posting).
+	blocking, err := h.loanRepo.LockBlockingLoans(ctx, tx, groupID, targetID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check loans"})
+		return
+	}
+	if blocking > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "cannot remove a member who has an active or pending loan; close or reject it first"})
+		return
+	}
+
+	// D4: balance must be exactly zero (same math as GetBalanceForGroup).
+	balance, err := h.ledgerRepo.MemberBalanceTx(ctx, tx, groupID, targetID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check balance"})
+		return
+	}
+	if balance != 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "cannot remove a member whose balance is not settled to zero; settle their balance first"})
+		return
+	}
+
+	// D7: reject the member's pending entries, delete their allowance config, delete
+	// the membership. Ledger history (approved/rejected) and closed/rejected loans stay.
+	now := time.Now()
+	if _, err := h.ledgerRepo.RejectPendingForMember(ctx, tx, groupID, targetID, callerID, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reject pending entries"})
+		return
+	}
+	if err := h.allowanceRepo.DeleteForMember(ctx, tx, groupID, targetID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete allowances"})
+		return
+	}
+	if err := h.groupRepo.DeleteMembership(ctx, tx, groupID, targetID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member"})
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit"})
+		return
+	}
+	c.Status(http.StatusNoContent) // 204
 }

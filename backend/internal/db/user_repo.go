@@ -112,6 +112,20 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*models.User, 
 	return user, nil
 }
 
+// UpdatePassword replaces a user's password hash. Returns ErrNotFound if the user
+// row is gone (should not happen for an authenticated caller).
+func (r *UserRepo) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE users SET password_hash = $2 WHERE id = $1`, userID, passwordHash)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // isDuplicateKeyError checks if the error is a duplicate key violation
 func isDuplicateKeyError(err error) bool {
 	return err != nil && (contains(err.Error(), "duplicate key") || contains(err.Error(), "23505"))

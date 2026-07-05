@@ -15,11 +15,13 @@ import (
 )
 
 // Querier is satisfied by both *pgxpool.Pool and pgx.Tx, allowing repo methods
-// to be called within or outside a transaction. QueryRow is needed for
-// FOR UPDATE selects and COUNT/SUM reads on the EMI posting path (WP-3.1).
+// to be called within or outside a transaction. Query is needed for
+// FOR UPDATE multi-row selects (WP-4.7 loan lock); QueryRow for FOR UPDATE
+// single-row reads and SUM reads on the EMI posting path (WP-3.1).
 type Querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // LedgerRepo handles database operations for ledger entries
@@ -295,4 +297,36 @@ func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) 
 		}
 	}
 	return balances, nil
+}
+
+// MemberBalanceTx computes one member's balance (Σ approved credits − Σ approved
+// debits, ::bigint) on the tx querier — identical math to GetBalanceForGroup.
+func (r *LedgerRepo) MemberBalanceTx(ctx context.Context, q Querier, groupID, userID uuid.UUID) (int64, error) {
+	var balance int64
+	err := q.QueryRow(ctx, `
+		SELECT (COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount ELSE 0 END), 0)
+		      - COALESCE(SUM(CASE WHEN direction = 'debit'  THEN amount ELSE 0 END), 0))::bigint
+		FROM ledger_entries
+		WHERE group_id = $1 AND user_id = $2 AND status = 'approved'`,
+		groupID, userID).Scan(&balance)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compute member balance: %w", err)
+	}
+	return balance, nil
+}
+
+// RejectPendingForMember flips all of a member's pending_approval entries to
+// rejected in this group, recording the actor. Pending entries never counted toward
+// balance, so this does not change any total; it prevents a post-removal "ghost
+// approval" (D7). Returns rows affected (informational).
+func (r *LedgerRepo) RejectPendingForMember(ctx context.Context, q Querier, groupID, userID, decidedBy uuid.UUID, decidedAt time.Time) (int64, error) {
+	tag, err := q.Exec(ctx, `
+		UPDATE ledger_entries
+		SET status = 'rejected', decided_by = $3, decided_at = $4
+		WHERE group_id = $1 AND user_id = $2 AND status = 'pending_approval'`,
+		groupID, userID, decidedBy, decidedAt)
+	if err != nil {
+		return 0, fmt.Errorf("failed to reject pending entries: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
