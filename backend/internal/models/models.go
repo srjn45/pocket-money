@@ -91,12 +91,12 @@ type LedgerEntry struct {
 	Status          LedgerStatus    `json:"status"`
 	EntryType       LedgerEntryType `json:"entry_type"`
 	Direction       LedgerDirection `json:"direction"`
-	LoanID          *uuid.UUID      `json:"loan_id,omitempty"`  // set on emi entries; FK added in migration 011
-	Period          *string         `json:"period,omitempty"`   // YYYY-MM, set on allowance/emi
+	LoanID          *uuid.UUID      `json:"loan_id,omitempty"` // set on emi entries; FK added in migration 011
+	Period          *string         `json:"period,omitempty"`  // YYYY-MM, set on allowance/emi
 	Note            *string         `json:"note,omitempty"`
 	CreatedByUserID uuid.UUID       `json:"created_by_user_id"`
-	DecidedBy       *uuid.UUID      `json:"decided_by,omitempty"`  // who approved/rejected
-	DecidedAt       *time.Time      `json:"decided_at,omitempty"`  // when approved/rejected
+	DecidedBy       *uuid.UUID      `json:"decided_by,omitempty"` // who approved/rejected
+	DecidedAt       *time.Time      `json:"decided_at,omitempty"` // when approved/rejected
 	CreatedAt       time.Time       `json:"created_at"`
 }
 

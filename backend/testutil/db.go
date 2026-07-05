@@ -59,7 +59,9 @@ func CleanupTestDB(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 
 	// Truncate all tables in reverse order of dependencies.
-	// settlements is omitted: migration 012 drops it; IF EXISTS handles pre-012 state.
+	// settlements is omitted: migration 012 drops it. Any per-table error (e.g. a
+	// table not existing yet) is swallowed below. Note: Postgres TRUNCATE has no
+	// IF EXISTS form, so the table names must all exist post-migration.
 	tables := []string{
 		"invite_tokens",
 		"ledger_entries",
@@ -70,7 +72,7 @@ func CleanupTestDB(pool *pgxpool.Pool) error {
 	}
 
 	for _, table := range tables {
-		_, err := pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE IF EXISTS %s CASCADE", table))
+		_, err := pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table))
 		if err != nil {
 			// Table might not exist yet, that's OK
 			continue

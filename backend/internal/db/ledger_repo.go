@@ -30,7 +30,8 @@ type rowScanner interface {
 
 // scanEntry scans into a LedgerEntry in the canonical column order used by all SELECT queries.
 // Column order: id, group_id, user_id, chore_id, amount, status, entry_type, direction,
-//               loan_id, period, note, created_by_user_id, decided_by, decided_at, created_at
+//
+//	loan_id, period, note, created_by_user_id, decided_by, decided_at, created_at
 func scanEntry(row rowScanner) (*models.LedgerEntry, error) {
 	entry := &models.LedgerEntry{}
 	err := row.Scan(

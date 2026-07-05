@@ -42,21 +42,21 @@ type CreateLedgerRequest struct {
 
 // LedgerResponse represents a ledger entry in API responses
 type LedgerResponse struct {
-	ID              uuid.UUID               `json:"id"`
-	GroupID         uuid.UUID               `json:"group_id"`
-	UserID          uuid.UUID               `json:"user_id"`
-	ChoreID         *uuid.UUID              `json:"chore_id,omitempty"`
-	Amount          int64                   `json:"amount"`
-	Status          models.LedgerStatus     `json:"status"`
-	EntryType       models.LedgerEntryType  `json:"entry_type"`
-	Direction       models.LedgerDirection  `json:"direction"`
-	LoanID          *uuid.UUID              `json:"loan_id,omitempty"`
-	Period          *string                 `json:"period,omitempty"`
-	Note            *string                 `json:"note,omitempty"`
-	CreatedByUserID uuid.UUID               `json:"created_by_user_id"`
-	DecidedBy       *uuid.UUID              `json:"decided_by,omitempty"`
-	DecidedAt       *time.Time              `json:"decided_at,omitempty"`
-	CreatedAt       time.Time               `json:"created_at"`
+	ID              uuid.UUID              `json:"id"`
+	GroupID         uuid.UUID              `json:"group_id"`
+	UserID          uuid.UUID              `json:"user_id"`
+	ChoreID         *uuid.UUID             `json:"chore_id,omitempty"`
+	Amount          int64                  `json:"amount"`
+	Status          models.LedgerStatus    `json:"status"`
+	EntryType       models.LedgerEntryType `json:"entry_type"`
+	Direction       models.LedgerDirection `json:"direction"`
+	LoanID          *uuid.UUID             `json:"loan_id,omitempty"`
+	Period          *string                `json:"period,omitempty"`
+	Note            *string                `json:"note,omitempty"`
+	CreatedByUserID uuid.UUID              `json:"created_by_user_id"`
+	DecidedBy       *uuid.UUID             `json:"decided_by,omitempty"`
+	DecidedAt       *time.Time             `json:"decided_at,omitempty"`
+	CreatedAt       time.Time              `json:"created_at"`
 }
 
 // BalanceResponse represents a user's balance
