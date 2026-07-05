@@ -230,6 +230,57 @@ func TestAllowance_ConcurrentRace(t *testing.T) {
 	assert.Len(t, posted[member.ID], 3, "exactly 3 distinct months must be posted")
 }
 
+// TestAllowance_ConcurrentRaceMultiMember stresses the exactly-once invariant with
+// several members and several concurrent triggers. With multiple members, two
+// transactions inserting the same rows in different orders could deadlock (→ 500);
+// PostDue must iterate members in a deterministic order so the loser blocks and
+// no-ops instead. Asserts no error and no duplicates across all members.
+func TestAllowance_ConcurrentRaceMultiMember(t *testing.T) {
+	env := setupAllowanceTestEnv(t)
+	defer env.cleanup()
+
+	ctx := t.Context()
+	head, _, group := env.seedGroup(t, "multirace")
+
+	// Add several more members, each with a 3-month backfill of allowances.
+	twoMonthsAgo := time.Now().AddDate(0, -2, 0).Format("2006-01")
+	members := make([]*models.User, 0, 5)
+	for i := 0; i < 5; i++ {
+		m, err := env.userRepo.Create(ctx, fmt.Sprintf("multirace-%d@example.com", i), "hash", fmt.Sprintf("M%d", i), nil, nil)
+		require.NoError(t, err)
+		_, err = env.groupRepo.AddMember(ctx, group.ID, m.ID, models.RoleMember)
+		require.NoError(t, err)
+		_, err = env.allowanceRepo.SetAllowance(ctx, group.ID, m.ID, 500, twoMonthsAgo, head.ID)
+		require.NoError(t, err)
+		members = append(members, m)
+	}
+
+	now := time.Now()
+	const goroutines = 6
+	var wg sync.WaitGroup
+	errs := make([]error, goroutines)
+	for i := 0; i < goroutines; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = env.postingSvc.PostDue(ctx, group.ID, now)
+		}()
+	}
+	wg.Wait()
+
+	for _, e := range errs {
+		assert.NoError(t, e, "concurrent PostDue must never error (no deadlock/500)")
+	}
+
+	posted, err := env.ledgerRepo.PostedAllowancePeriods(ctx, group.ID)
+	require.NoError(t, err)
+	for _, m := range members {
+		require.NotNil(t, posted[m.ID], "member %s must have postings", m.ID)
+		assert.Len(t, posted[m.ID], 3, "each member must have exactly 3 distinct months, no duplicates")
+	}
+}
+
 // TestAllowance_BalanceAfterPosting verifies balance correctness after posting.
 func TestAllowance_BalanceAfterPosting(t *testing.T) {
 	env := setupAllowanceTestEnv(t)

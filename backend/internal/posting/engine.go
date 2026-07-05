@@ -37,10 +37,17 @@ func PostDue(ctx context.Context, store Store, groupID uuid.UUID, now time.Time)
 	}
 
 	// Group inputs by user; rows are already sorted asc by user then effective_from.
-	byUser := groupByUser(inputs)
+	// userOrder preserves the SQL user_id ordering so that concurrent PostDue calls
+	// attempt their inserts in an identical, deterministic order. This turns a
+	// potential cross-row deadlock (two txns locking the same rows in opposite
+	// order) into a plain block-then-no-op — the loser waits, then ON CONFLICT
+	// DO NOTHING finds the committed row. Iterating a map here would randomize the
+	// order and could deadlock a multi-member group under concurrent triggers.
+	byUser, userOrder := groupByUser(inputs)
 
 	return store.WithTx(ctx, func(q db.Querier) error {
-		for userID, rows := range byUser {
+		for _, userID := range userOrder {
+			rows := byUser[userID]
 			joinMonth := formatPeriod(rows[0].JoinedAt) // all rows share the member's joined_at
 			firstEff := rows[0].EffectiveFrom
 			start := maxPeriod(firstEff, joinMonth)
@@ -63,13 +70,21 @@ func PostDue(ctx context.Context, store Store, groupID uuid.UUID, now time.Time)
 	})
 }
 
-// groupByUser groups AllowancePostingInput rows by UserID preserving order.
-func groupByUser(inputs []models.AllowancePostingInput) map[uuid.UUID][]models.AllowancePostingInput {
+// groupByUser groups AllowancePostingInput rows by UserID, returning both the
+// grouping and a slice of user IDs in first-appearance (SQL user_id) order. The
+// ordered slice gives callers a deterministic iteration order independent of Go
+// map randomization — required so concurrent transactions lock rows in the same
+// order and cannot deadlock (see PostDue).
+func groupByUser(inputs []models.AllowancePostingInput) (map[uuid.UUID][]models.AllowancePostingInput, []uuid.UUID) {
 	m := make(map[uuid.UUID][]models.AllowancePostingInput)
+	var order []uuid.UUID
 	for _, inp := range inputs {
+		if _, seen := m[inp.UserID]; !seen {
+			order = append(order, inp.UserID)
+		}
 		m[inp.UserID] = append(m[inp.UserID], inp)
 	}
-	return m
+	return m, order
 }
 
 // formatPeriod returns the YYYY-MM string for t in server-local time.
