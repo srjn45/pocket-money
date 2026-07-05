@@ -171,6 +171,7 @@ export default function LoansScreen() {
     const memberName = group?.members.find(m => m.user_id === loan.user_id)?.name;
 
     return (
+      <View testID={`loan-card-${loan.id}`}>
       <Card key={loan.id} style={styles.loanCard}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
@@ -233,6 +234,7 @@ export default function LoansScreen() {
               size="sm"
               onPress={() => setApproveSheetLoan(loan)}
               style={styles.actionBtn}
+              testID={`loan-approve-${loan.id}`}
             />
             <Button
               title="Reject"
@@ -257,6 +259,7 @@ export default function LoansScreen() {
           </View>
         )}
       </Card>
+      </View>
     );
   }
 
@@ -279,6 +282,7 @@ export default function LoansScreen() {
         loading={requestLoan.isPending}
         disabled={requestLoan.isPending}
         fullWidth
+        testID="loan-request-submit"
       />
     </View>
   );
@@ -289,7 +293,7 @@ export default function LoansScreen() {
     : 'Tap "Request Loan" to borrow money repaid via pocket money';
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="loans-root">
       {loadError ? (
         <Text style={styles.loadError}>{loadError}</Text>
       ) : null}
@@ -302,6 +306,7 @@ export default function LoansScreen() {
             variant="primary"
             fullWidth
             onPress={() => setRequestSheetVisible(true)}
+            testID="loans-request-button"
           />
         </View>
       )}
@@ -311,11 +316,13 @@ export default function LoansScreen() {
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />}
           contentContainerStyle={styles.emptyContainer}
         >
-          <EmptyState
-            icon="card-outline"
-            title={emptyTitle}
-            subtitle={emptySubtitle}
-          />
+          <View testID="loans-empty">
+            <EmptyState
+              icon="card-outline"
+              title={emptyTitle}
+              subtitle={emptySubtitle}
+            />
+          </View>
         </ScrollView>
       ) : (
         <FlatList
@@ -341,6 +348,7 @@ export default function LoansScreen() {
           onChangeText={(v) => { setPrincipalStr(v); setPrincipalError(''); }}
           error={principalError}
           placeholder="e.g. 5000"
+          testID="loan-amount"
         />
         <TextField
           label="Repay over (months)"
@@ -349,6 +357,7 @@ export default function LoansScreen() {
           onChangeText={(v) => { setInstallmentsStr(v); setInstallmentsError(''); }}
           error={installmentsError}
           placeholder="e.g. 6"
+          testID="loan-installments"
         />
         {estimateEmi !== null && (
           <Text style={styles.emiHint}>

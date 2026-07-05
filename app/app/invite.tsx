@@ -69,12 +69,16 @@ export default function InviteScreen() {
   }, [token, user, authLoading]);
 
   if (isLoading && !error) {
-    return <LoadingSpinner message="Joining group…" />;
+    return (
+      <View testID="invite-loading">
+        <LoadingSpinner message="Joining group…" />
+      </View>
+    );
   }
 
   if (error) {
     return (
-      <View style={styles.container}>
+      <View style={styles.container} testID="invite-error">
         <ErrorMessage message={error} />
         {errorKind === 'network' ? (
           <Button
@@ -82,11 +86,13 @@ export default function InviteScreen() {
             onPress={() =>
               router.replace({ pathname: '/invite', params: { token: token ?? '' } })
             }
+            testID="invite-back"
           />
         ) : (
           <Button
             title="Back to groups"
             onPress={() => router.replace('/(app)')}
+            testID="invite-back"
           />
         )}
       </View>

@@ -192,7 +192,7 @@ export default function MemberDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ title: name ? `${name}'s ledger` : 'Ledger' }} />
-      <View style={styles.screen}>
+      <View style={styles.screen} testID="member-detail-root">
         {/* Balance header */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>{name ? `${name}'s balance` : 'Balance'}</Text>
@@ -220,6 +220,7 @@ export default function MemberDetailScreen() {
             icon="add"
             onPress={() => setSheetVisible(true)}
             fullWidth
+            testID="member-add-entry-button"
           />
         </View>
 
@@ -285,6 +286,7 @@ export default function MemberDetailScreen() {
               loading={removeMutation.isPending}
               onPress={handleRemoveMember}
               fullWidth
+              testID="member-remove-button"
             />
           </View>
         )}

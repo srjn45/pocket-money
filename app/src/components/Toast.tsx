@@ -72,6 +72,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <Pressable
               onPress={dismiss}
               style={[styles.card, { borderLeftColor: toneColor[toast.tone] }]}
+              testID="toast-root"
             >
               <Ionicons
                 name={toneIcon[toast.tone]}

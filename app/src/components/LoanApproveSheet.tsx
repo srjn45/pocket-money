@@ -103,6 +103,7 @@ export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApprov
             loading={isPending}
             disabled={isPending}
             fullWidth
+            testID="loan-approve-submit"
           />
         </View>
       }

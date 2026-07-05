@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
 import { Button, TextField } from '../../src/components';
 import { theme } from '../../src/theme';
-import { getPendingInviteToken, clearPendingInviteToken } from '../../src/storage';
 
 const isValidEmail = (email: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -45,13 +44,8 @@ export default function RegisterScreen() {
 
     try {
       await register(email, password, name);
-      const pending = await getPendingInviteToken();
-      if (pending) {
-        await clearPendingInviteToken();
-        router.replace({ pathname: '/invite', params: { token: pending } });
-      } else {
-        router.replace('/(app)');
-      }
+      // Post-auth navigation (including the pending-invite resume) is owned by
+      // the root AuthGate, which reacts to the new token.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -75,6 +69,7 @@ export default function RegisterScreen() {
           value={name}
           onChangeText={setName}
           autoComplete="name"
+          testID="register-name"
         />
 
         <TextField
@@ -84,6 +79,7 @@ export default function RegisterScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          testID="register-email"
         />
 
         <TextField
@@ -92,6 +88,7 @@ export default function RegisterScreen() {
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="new-password"
+          testID="register-password"
         />
 
         <TextField
@@ -100,9 +97,10 @@ export default function RegisterScreen() {
           onChangeText={setConfirmPassword}
           secureTextEntry
           autoComplete="new-password"
+          testID="register-confirm"
         />
 
-        <Button title="Register" onPress={handleRegister} loading={isLoading} fullWidth />
+        <Button title="Register" onPress={handleRegister} loading={isLoading} fullWidth testID="register-submit" />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>

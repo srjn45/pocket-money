@@ -135,7 +135,7 @@ export default function GroupOverviewScreen() {
     const memberBalanceMap = new Map<string, Balance>(balances.map(b => [b.user_id, b]));
 
     return (
-      <View style={styles.screen}>
+      <View style={styles.screen} testID="group-overview-root">
         <View style={styles.header}>
           <Text style={styles.memberCount}>
             {nonHeadMembers.length} {nonHeadMembers.length === 1 ? 'member' : 'members'}
@@ -147,6 +147,7 @@ export default function GroupOverviewScreen() {
             loading={inviteLoading}
             onPress={handleInvite}
             size="sm"
+            testID="group-invite-button"
           />
         </View>
 
@@ -172,25 +173,29 @@ export default function GroupOverviewScreen() {
               balance: 0,
             };
             return (
-              <MemberCard
-                balance={bal}
-                member={member}
-                pendingCount={countPendingFor(member.user_id)}
-                onPress={() =>
-                  router.push({
-                    pathname: `/(app)/groups/${id}/members/${member.user_id}`,
-                    params: { name: member.name },
-                  })
-                }
-              />
+              <View testID={`member-card-${member.user_id}`}>
+                <MemberCard
+                  balance={bal}
+                  member={member}
+                  pendingCount={countPendingFor(member.user_id)}
+                  onPress={() =>
+                    router.push({
+                      pathname: `/(app)/groups/${id}/members/${member.user_id}`,
+                      params: { name: member.name },
+                    })
+                  }
+                />
+              </View>
             );
           }}
           ListEmptyComponent={
-            <EmptyState
-              icon="people-outline"
-              title="No members yet"
-              subtitle="Tap Invite to add your family"
-            />
+            <View testID="members-empty">
+              <EmptyState
+                icon="people-outline"
+                title="No members yet"
+                subtitle="Tap Invite to add your family"
+              />
+            </View>
           }
           refreshing={groupQuery.isFetching || balanceQuery.isFetching}
           onRefresh={() => {
@@ -229,7 +234,7 @@ export default function GroupOverviewScreen() {
   const myEntries = myLedgerQuery.data ?? [];
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} testID="group-overview-root">
       <ScrollView contentContainerStyle={styles.memberScroll}>
         {/* Balance summary header */}
         <View style={styles.summaryCard}>
@@ -259,6 +264,7 @@ export default function GroupOverviewScreen() {
             icon="add"
             onPress={() => setSheetVisible(true)}
             fullWidth
+            testID="member-log-chore"
           />
         </View>
 
@@ -269,6 +275,7 @@ export default function GroupOverviewScreen() {
             loading={leaveMutation.isPending}
             onPress={handleLeaveGroup}
             fullWidth
+            testID="group-leave-button"
           />
         </View>
       </ScrollView>

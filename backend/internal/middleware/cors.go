@@ -21,7 +21,10 @@ func CORSMiddleware(origins string) gin.HandlerFunc {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		// PUT is used by change-password (PUT /auth/password) and set-allowance
+		// (PUT /groups/:id/allowances/:userId); omitting it makes the browser
+		// preflight reject those calls on web.
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")

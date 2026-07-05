@@ -159,18 +159,20 @@ export default function ChoresScreen() {
       );
 
     return (
-      <ListRow
-        title={item.name}
-        subtitle={
-          isSystemChore
-            ? 'Used to record payouts — can\'t be edited or deleted'
-            : item.description ?? undefined
-        }
-        left={leftSlot}
-        right={rightSlot}
-        onPress={canEdit ? () => openModal(item) : undefined}
-        style={isSystemChore ? styles.systemRow : undefined}
-      />
+      <View testID={`chore-row-${item.id}`}>
+        <ListRow
+          title={item.name}
+          subtitle={
+            isSystemChore
+              ? 'Used to record payouts — can\'t be edited or deleted'
+              : item.description ?? undefined
+          }
+          left={leftSlot}
+          right={rightSlot}
+          onPress={canEdit ? () => openModal(item) : undefined}
+          style={isSystemChore ? styles.systemRow : undefined}
+        />
+      </View>
     );
   };
 
@@ -198,7 +200,7 @@ export default function ChoresScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="chores-root">
       {loadError ? (
         <Text style={styles.loadError}>{loadError}</Text>
       ) : null}
@@ -211,18 +213,21 @@ export default function ChoresScreen() {
             variant="primary"
             fullWidth
             onPress={() => openModal()}
+            testID="chores-add-button"
           />
         </View>
       )}
 
       {chores.length === 0 ? (
-        <EmptyState
-          icon="list-outline"
-          title="No chores yet"
-          subtitle={isHead
-            ? 'Add your first chore — the amount your family earns for doing it'
-            : "Your family head hasn't added any chores yet — check back soon"}
-        />
+        <View testID="chores-empty">
+          <EmptyState
+            icon="list-outline"
+            title="No chores yet"
+            subtitle={isHead
+              ? 'Add your first chore — the amount your family earns for doing it'
+              : "Your family head hasn't added any chores yet — check back soon"}
+          />
+        </View>
       ) : (
         <FlatList
           data={chores}

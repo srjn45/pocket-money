@@ -16,6 +16,7 @@ interface ButtonProps {
   /** Stretch to container width (default false). */
   fullWidth?: boolean;
   style?: ViewStyle;
+  testID?: string;
 }
 
 const variantStyle = {
@@ -35,6 +36,7 @@ export function Button({
   icon,
   fullWidth = false,
   style,
+  testID,
 }: ButtonProps) {
   const blocked = disabled || loading;
   const colors = variantStyle[variant];
@@ -53,6 +55,7 @@ export function Button({
       ]}
       accessibilityRole="button"
       accessibilityState={{ disabled: blocked }}
+      testID={testID}
     >
       {loading ? (
         <ActivityIndicator color={colors.fg} size="small" />

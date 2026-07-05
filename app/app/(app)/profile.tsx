@@ -62,7 +62,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="profile-root">
       <Card style={styles.profileCard}>
         <Avatar name={user?.name ?? 'User'} id={user?.id ?? ''} size={80} />
         <Text style={styles.name}>{user?.name || 'User'}</Text>
@@ -74,6 +74,7 @@ export default function ProfileScreen() {
         onPress={() => setSheetVisible(true)}
         fullWidth
         style={styles.changePasswordButton}
+        testID="profile-change-password"
       />
       <Button
         title="Logout"
@@ -81,6 +82,7 @@ export default function ProfileScreen() {
         onPress={handleLogout}
         fullWidth
         style={styles.logoutButton}
+        testID="profile-logout"
       />
 
       <Sheet visible={sheetVisible} onClose={closeSheet} title="Change password">
@@ -90,6 +92,7 @@ export default function ProfileScreen() {
           value={currentPw}
           onChangeText={setCurrentPw}
           autoCapitalize="none"
+          testID="cp-current-password"
         />
         <TextField
           label="New password"
@@ -97,6 +100,7 @@ export default function ProfileScreen() {
           value={newPw}
           onChangeText={setNewPw}
           autoCapitalize="none"
+          testID="cp-new-password"
         />
         <TextField
           label="Confirm new password"
@@ -104,6 +108,7 @@ export default function ProfileScreen() {
           value={confirmPw}
           onChangeText={setConfirmPw}
           autoCapitalize="none"
+          testID="cp-confirm-password"
         />
         <Button
           title="Change password"
@@ -111,6 +116,7 @@ export default function ProfileScreen() {
           loading={changeMutation.isPending}
           onPress={handleChangePassword}
           fullWidth
+          testID="cp-submit"
         />
         <Button
           title="Cancel"

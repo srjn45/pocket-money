@@ -82,35 +82,39 @@ export default function DashboardScreen() {
   }
 
   const renderHeadGroup = ({ item }: { item: GroupSummary }) => (
-    <Card onPress={() => router.push(`/(app)/groups/${item.id}`)} padded={false}>
-      <ListRow
-        left={<Avatar name={item.name} id={item.id} />}
-        title={item.name}
-        subtitle={`${item.member_count} ${item.member_count === 1 ? 'member' : 'members'}`}
-        right={
-          <View style={styles.groupRight}>
-            <AmountText minorUnits={item.summary_balance} variant="neutral" size="md" />
-            <Text style={styles.balanceCaption}>owed to members</Text>
-          </View>
-        }
-      />
-    </Card>
+    <View testID={`group-card-${item.id}`}>
+      <Card onPress={() => router.push(`/(app)/groups/${item.id}`)} padded={false}>
+        <ListRow
+          left={<Avatar name={item.name} id={item.id} />}
+          title={item.name}
+          subtitle={`${item.member_count} ${item.member_count === 1 ? 'member' : 'members'}`}
+          right={
+            <View style={styles.groupRight}>
+              <AmountText minorUnits={item.summary_balance} variant="neutral" size="md" />
+              <Text style={styles.balanceCaption}>owed to members</Text>
+            </View>
+          }
+        />
+      </Card>
+    </View>
   );
 
   const renderMemberGroup = ({ item }: { item: GroupSummary }) => (
-    <Card onPress={() => router.push(`/(app)/groups/${item.id}`)} padded={false}>
-      <ListRow
-        left={<Avatar name={item.name} id={item.id} />}
-        title={item.name}
-        right={
-          <AmountText
-            minorUnits={item.summary_balance}
-            variant={item.summary_balance < 0 ? 'debit' : item.summary_balance === 0 ? 'neutral' : 'credit'}
-            size="md"
-          />
-        }
-      />
-    </Card>
+    <View testID={`group-card-${item.id}`}>
+      <Card onPress={() => router.push(`/(app)/groups/${item.id}`)} padded={false}>
+        <ListRow
+          left={<Avatar name={item.name} id={item.id} />}
+          title={item.name}
+          right={
+            <AmountText
+              minorUnits={item.summary_balance}
+              variant={item.summary_balance < 0 ? 'debit' : item.summary_balance === 0 ? 'neutral' : 'credit'}
+              size="md"
+            />
+          }
+        />
+      </Card>
+    </View>
   );
 
   const sections = [
@@ -119,7 +123,7 @@ export default function DashboardScreen() {
   ].filter(s => s.data.length > 0);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="dashboard-root">
       <View style={styles.header}>
         <Text style={styles.welcome}>Welcome, {user?.name || 'User'}!</Text>
       </View>
@@ -131,6 +135,7 @@ export default function DashboardScreen() {
           title="Create Group"
           onPress={() => router.push('/(app)/groups/create')}
           style={{ flex: 1 }}
+          testID="dashboard-create-group"
         />
         <Button
           variant="secondary"
@@ -138,15 +143,18 @@ export default function DashboardScreen() {
           title="Join Group"
           onPress={() => setJoinVisible(true)}
           style={{ flex: 1 }}
+          testID="dashboard-join-group"
         />
       </View>
 
       {groups.length === 0 ? (
-        <EmptyState
-          icon="people-outline"
-          title="No groups yet"
-          subtitle="Create a group or join one with an invite link"
-        />
+        <View testID="dashboard-empty">
+          <EmptyState
+            icon="people-outline"
+            title="No groups yet"
+            subtitle="Create a group or join one with an invite link"
+          />
+        </View>
       ) : (
         <SectionList
           sections={sections}

@@ -40,9 +40,10 @@ export default function CreateGroupScreen() {
         value={name}
         onChangeText={setName}
         autoFocus
+        testID="create-group-name"
       />
 
-      <Button title="Create Group" onPress={handleCreate} loading={isLoading} fullWidth />
+      <Button title="Create Group" onPress={handleCreate} loading={isLoading} fullWidth testID="create-group-submit" />
     </View>
   );
 }
