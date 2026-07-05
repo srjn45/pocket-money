@@ -109,6 +109,11 @@ func (e *ledgerTestEnv) seedGroupWithMembers(t *testing.T, suffix string) (head,
 	require.NoError(t, err)
 	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID)
 	require.NoError(t, err)
+	// GroupRepo.Create only inserts the group row; the head must be added to
+	// group_members explicitly (the production CreateGroup handler does this).
+	// Without it, head-authenticated requests 403 as "not a member".
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
 	chore, err = e.choreRepo.Create(ctx, group.ID, "Dishes", nil, 1000)
