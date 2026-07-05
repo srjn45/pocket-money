@@ -23,7 +23,7 @@ func NewLedgerRepo(pool *pgxpool.Pool) *LedgerRepo {
 }
 
 // Create inserts a new ledger entry
-func (r *LedgerRepo) Create(ctx context.Context, groupID, userID, choreID, createdByUserID uuid.UUID, amount float64, status models.LedgerStatus, approvedByUserID *uuid.UUID) (*models.LedgerEntry, error) {
+func (r *LedgerRepo) Create(ctx context.Context, groupID, userID, choreID, createdByUserID uuid.UUID, amount int64, status models.LedgerStatus, approvedByUserID *uuid.UUID) (*models.LedgerEntry, error) {
 	entry := &models.LedgerEntry{
 		ID:               uuid.New(),
 		GroupID:          groupID,
@@ -178,10 +178,10 @@ func (r *LedgerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status mode
 func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) ([]*models.Balance, error) {
 	query := `
 		WITH ledger_totals AS (
-			SELECT 
+			SELECT
 				le.user_id,
-				COALESCE(SUM(CASE WHEN c.is_system = false THEN le.amount ELSE 0 END), 0) as earned,
-				COALESCE(SUM(CASE WHEN c.is_system = true THEN le.amount ELSE 0 END), 0) as settled
+				COALESCE(SUM(CASE WHEN c.is_system = false THEN le.amount ELSE 0 END), 0)::bigint AS earned,
+				COALESCE(SUM(CASE WHEN c.is_system = true  THEN le.amount ELSE 0 END), 0)::bigint AS settled
 			FROM ledger_entries le
 			INNER JOIN chores c ON le.chore_id = c.id
 			WHERE le.group_id = $1 AND le.status = 'approved'
@@ -193,11 +193,11 @@ func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) 
 			INNER JOIN users u ON gm.user_id = u.id
 			WHERE gm.group_id = $1
 		)
-		SELECT 
-			am.user_id, 
+		SELECT
+			am.user_id,
 			am.name,
 			am.role,
-			COALESCE(lt.earned, 0) - COALESCE(lt.settled, 0) as balance
+			(COALESCE(lt.earned, 0) - COALESCE(lt.settled, 0))::bigint AS balance
 		FROM all_members am
 		LEFT JOIN ledger_totals lt ON am.user_id = lt.user_id
 		ORDER BY am.role DESC, am.name

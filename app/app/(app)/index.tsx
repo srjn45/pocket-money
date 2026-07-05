@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { groupsApi, ledgerApi, Group } from '../../src/api';
+import { formatMinorUnits } from '../../src/money';
 import { useAuth } from '../../src/auth-context';
 import { useGroups, useJoinGroup } from '../../src/hooks/useGroups';
 import { qk } from '../../src/query-keys';
@@ -116,7 +117,7 @@ export default function DashboardScreen() {
       </View>
       <View style={styles.groupRight}>
         <Text style={[styles.balanceText, styles.owedAmount]}>
-          ${(item.totalBalance || 0).toFixed(2)}
+          {formatMinorUnits(item.totalBalance || 0)}
         </Text>
         <Text style={styles.balanceLabel}>owed</Text>
         <Ionicons name="chevron-forward" size={24} color="#ccc" />
@@ -134,7 +135,7 @@ export default function DashboardScreen() {
       </View>
       <View style={styles.groupRight}>
         <Text style={[styles.balanceText, (item.totalBalance || 0) >= 0 ? styles.earnedAmount : styles.owedAmount]}>
-          ${Math.abs(item.totalBalance || 0).toFixed(2)}
+          {formatMinorUnits(Math.abs(item.totalBalance || 0))}
         </Text>
         {(item.totalBalance || 0) > 0 && <Text style={styles.balanceLabel}>earned</Text>}
         {(item.totalBalance || 0) < 0 && <Text style={styles.balanceLabel}>owed</Text>}

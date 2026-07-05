@@ -17,7 +17,7 @@ import {
   LoadingSpinner,
   useToast,
 } from '../../../../src/components';
-import { rupeesToMinor } from '../../../../src/money';
+import { parseMoneyToMinorUnits } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { theme } from '../../../../src/theme';
 
@@ -59,7 +59,7 @@ export default function ChoresScreen() {
       setEditingChore(chore);
       setChoreName(chore.name);
       setChoreDescription(chore.description || '');
-      setChoreAmount(chore.amount.toString());
+      setChoreAmount((chore.amount / 100).toFixed(2));
     } else {
       setEditingChore(null);
       setChoreName('');
@@ -74,8 +74,7 @@ export default function ChoresScreen() {
   const closeModal = () => setModalVisible(false);
 
   const isFormValid = () => {
-    const parsed = parseFloat(choreAmount);
-    return choreName.trim().length > 0 && choreAmount.trim().length > 0 && !isNaN(parsed) && parsed > 0;
+    return choreName.trim().length > 0 && parseMoneyToMinorUnits(choreAmount) !== null;
   };
 
   const saving = createChoreMutation.isPending || updateChoreMutation.isPending;
@@ -83,7 +82,7 @@ export default function ChoresScreen() {
   const handleSave = async () => {
     if (!id) return;
     const trimmedName = choreName.trim();
-    const parsedAmount = parseFloat(choreAmount);
+    const parsedAmount = parseMoneyToMinorUnits(choreAmount);
 
     setNameError('');
     setAmountError('');
@@ -92,8 +91,8 @@ export default function ChoresScreen() {
       setNameError('Chore name is required.');
       return;
     }
-    if (!choreAmount.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
-      setAmountError('Amount must be a number greater than 0.');
+    if (parsedAmount === null) {
+      setAmountError('Enter a valid amount (e.g. 12.50).');
       return;
     }
 
@@ -146,7 +145,7 @@ export default function ChoresScreen() {
       ? <Text style={styles.variableText}>Variable</Text>
       : (
         <View style={styles.rightSlot}>
-          <AmountText minorUnits={rupeesToMinor(item.amount)} variant="neutral" />
+          <AmountText minorUnits={item.amount} variant="neutral" />
           {canEdit && (
             <Button
               variant="ghost"

@@ -1325,10 +1325,10 @@ components:
           nullable: true
           description: Chore description
         amount:
-          type: number
-          format: double
-          minimum: 0.01
-          description: Amount earned for completing the chore
+          type: integer
+          format: int64
+          minimum: 1
+          description: Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
       required:
         - name
         - amount
@@ -1345,10 +1345,10 @@ components:
           nullable: true
           description: Chore description
         amount:
-          type: number
-          format: double
+          type: integer
+          format: int64
           nullable: true
-          description: Amount earned for completing the chore
+          description: Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
 
     ChoreResponse:
       type: object
@@ -1369,9 +1369,9 @@ components:
           nullable: true
           description: Chore description
         amount:
-          type: number
-          format: double
-          description: Amount earned for completing the chore
+          type: integer
+          format: int64
+          description: Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
         is_system:
           type: boolean
           description: Whether this is a system-generated chore (e.g., Settlement)
@@ -1400,10 +1400,11 @@ components:
           format: uuid
           description: Chore ID
         amount:
-          type: number
-          format: double
+          type: integer
+          format: int64
           nullable: true
-          description: Custom amount (required only for system chores like Settlement)
+          minimum: 1
+          description: Custom amount (required only for system chores like Settlement), in minor units (paise); e.g. ₹12.50 = 1250
       required:
         - chore_id
 
@@ -1427,9 +1428,9 @@ components:
           format: uuid
           description: Chore ID
         amount:
-          type: number
-          format: double
-          description: Amount earned
+          type: integer
+          format: int64
+          description: Amount earned, in minor units (paise); e.g. ₹12.50 = 1250
         status:
           type: string
           enum: [approved, pending_approval, rejected]
@@ -1473,9 +1474,9 @@ components:
           type: string
           description: User's full name
         balance:
-          type: number
-          format: double
-          description: User's current balance (sum of approved ledger entries minus settlements)
+          type: integer
+          format: int64
+          description: User's current balance in minor units (paise); sum of approved ledger entries minus settlements; e.g. ₹12.50 = 1250
       required:
         - user_id
         - name
@@ -1489,10 +1490,10 @@ components:
           format: uuid
           description: User ID receiving the settlement
         amount:
-          type: number
-          format: double
-          minimum: 0.01
-          description: Settlement amount
+          type: integer
+          format: int64
+          minimum: 1
+          description: Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
         date:
           type: string
           format: date
@@ -1522,9 +1523,9 @@ components:
           format: uuid
           description: User who received the settlement
         amount:
-          type: number
-          format: double
-          description: Settlement amount
+          type: integer
+          format: int64
+          description: Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
         date:
           type: string
           format: date-time

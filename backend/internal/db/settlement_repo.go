@@ -22,7 +22,7 @@ func NewSettlementRepo(pool *pgxpool.Pool) *SettlementRepo {
 }
 
 // Create inserts a new settlement
-func (r *SettlementRepo) Create(ctx context.Context, groupID, userID uuid.UUID, amount float64, date time.Time, note *string) (*models.Settlement, error) {
+func (r *SettlementRepo) Create(ctx context.Context, groupID, userID uuid.UUID, amount int64, date time.Time, note *string) (*models.Settlement, error) {
 	settlement := &models.Settlement{
 		ID:      uuid.New(),
 		GroupID: groupID,

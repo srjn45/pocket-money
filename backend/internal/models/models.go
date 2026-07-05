@@ -56,7 +56,7 @@ type Chore struct {
 	GroupID     uuid.UUID  `json:"group_id"`
 	Name        string     `json:"name"`
 	Description *string    `json:"description,omitempty"`
-	Amount      float64    `json:"amount"`
+	Amount      int64      `json:"amount"`
 	IsSystem    bool       `json:"is_system"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -68,7 +68,7 @@ type LedgerEntry struct {
 	GroupID          uuid.UUID    `json:"group_id"`
 	UserID           uuid.UUID    `json:"user_id"`
 	ChoreID          uuid.UUID    `json:"chore_id"`
-	Amount           float64      `json:"amount"`
+	Amount           int64        `json:"amount"`
 	Status           LedgerStatus `json:"status"`
 	CreatedByUserID  uuid.UUID    `json:"created_by_user_id"`
 	ApprovedByUserID *uuid.UUID   `json:"approved_by_user_id,omitempty"`
@@ -81,7 +81,7 @@ type Settlement struct {
 	ID        uuid.UUID `json:"id"`
 	GroupID   uuid.UUID `json:"group_id"`
 	UserID    uuid.UUID `json:"user_id"`
-	Amount    float64   `json:"amount"`
+	Amount    int64     `json:"amount"`
 	Date      time.Time `json:"date"`
 	Note      *string   `json:"note,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -107,5 +107,5 @@ type MemberWithUser struct {
 type Balance struct {
 	UserID  uuid.UUID `json:"user_id"`
 	Name    string    `json:"name"`
-	Balance float64   `json:"balance"`
+	Balance int64     `json:"balance"`
 }

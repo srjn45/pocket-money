@@ -31,14 +31,14 @@ func NewChoreHandler(choreRepo *db.ChoreRepo, groupRepo *db.GroupRepo) *ChoreHan
 type CreateChoreRequest struct {
 	Name        string  `json:"name" binding:"required"`
 	Description *string `json:"description"`
-	Amount      float64 `json:"amount" binding:"required,gt=0"`
+	Amount      int64   `json:"amount" binding:"required,gt=0"`
 }
 
 // UpdateChoreRequest represents the request body for updating a chore
 type UpdateChoreRequest struct {
-	Name        *string  `json:"name"`
-	Description *string  `json:"description"`
-	Amount      *float64 `json:"amount"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Amount      *int64  `json:"amount"`
 }
 
 // ChoreResponse represents a chore in API responses
@@ -47,7 +47,7 @@ type ChoreResponse struct {
 	GroupID     uuid.UUID `json:"group_id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
-	Amount      float64   `json:"amount"`
+	Amount      int64     `json:"amount"`
 	IsSystem    bool      `json:"is_system"`
 	CreatedAt   time.Time `json:"created_at"`
 }

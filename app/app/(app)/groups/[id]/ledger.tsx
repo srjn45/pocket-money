@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { ledgerApi, choresApi, groupsApi, LedgerEntry, Chore, Member, Balance } from '../../../../src/api';
+import { formatMinorUnits, parseMoneyToMinorUnits } from '../../../../src/money';
 import { useAuth } from '../../../../src/auth-context';
 
 export default function LedgerScreen() {
@@ -89,19 +90,20 @@ export default function LedgerScreen() {
 
     // Validate amount for system chores
     if (chore.is_system) {
-      const amount = parseFloat(customAmount);
-      if (isNaN(amount) || amount <= 0) {
-        Alert.alert('Error', 'Please enter a valid amount for settlement');
+      const amount = parseMoneyToMinorUnits(customAmount);
+      if (amount === null) {
+        Alert.alert('Error', 'Please enter a valid amount for settlement (e.g. 12.50)');
         return;
       }
     }
 
     setSaving(true);
     try {
+      const settlementAmount = chore.is_system ? parseMoneyToMinorUnits(customAmount) : undefined;
       await ledgerApi.create(id, {
         user_id: isHead ? selectedMember : undefined,
         chore_id: selectedChore,
-        amount: chore.is_system ? parseFloat(customAmount) : undefined,
+        amount: settlementAmount ?? undefined,
       });
       setModalVisible(false);
       loadData();
@@ -177,7 +179,7 @@ export default function LedgerScreen() {
             isSettlement ? styles.settlementAmount : styles.earnedAmount,
             isRejected && styles.strikethrough
           ]}>
-            {isSettlement ? '-' : '+'}${item.amount.toFixed(2)}
+            {isSettlement ? '-' : '+'}{formatMinorUnits(item.amount)}
           </Text>
           
           {isPending && isHead ? (
@@ -249,7 +251,7 @@ export default function LedgerScreen() {
               {member_id ? `${member_name}'s Balance` : 'Your Balance'}
             </Text>
             <Text style={[styles.balanceAmount, memberBalance >= 0 ? styles.earnedAmount : styles.settlementAmount]}>
-              ${Math.abs(memberBalance).toFixed(2)}
+              {formatMinorUnits(Math.abs(memberBalance))}
             </Text>
             {memberBalance > 0 && <Text style={styles.balanceNote}>owed to you</Text>}
             {memberBalance < 0 && <Text style={styles.balanceNote}>overpaid</Text>}
@@ -296,7 +298,7 @@ export default function LedgerScreen() {
                       {availableChores.map(chore => (
                         <Picker.Item 
                           key={chore.id} 
-                          label={chore.is_system ? `${chore.name} (Custom amount)` : `${chore.name} - $${chore.amount}`}
+                          label={chore.is_system ? `${chore.name} (Custom amount)` : `${chore.name} - ${formatMinorUnits(chore.amount)}`}
                           value={chore.id} 
                         />
                       ))}
