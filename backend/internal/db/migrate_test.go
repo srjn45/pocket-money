@@ -40,6 +40,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		"chores",
 		"ledger_entries",
 		"invite_tokens",
+		"allowances",
 	}
 
 	for _, table := range tables {

@@ -20,6 +20,7 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/db"
 	"github.com/srjn45/pocket-money/backend/internal/handlers"
 	"github.com/srjn45/pocket-money/backend/internal/models"
+	"github.com/srjn45/pocket-money/backend/internal/posting"
 	"github.com/srjn45/pocket-money/backend/testutil"
 )
 
@@ -27,12 +28,13 @@ const testJWTSecret = "test-jwt-secret-for-ledger-integration"
 
 // ledgerTestEnv holds all wired-up deps for a ledger handler integration test.
 type ledgerTestEnv struct {
-	router     *gin.Engine
-	userRepo   *db.UserRepo
-	groupRepo  *db.GroupRepo
-	choreRepo  *db.ChoreRepo
-	ledgerRepo *db.LedgerRepo
-	cleanup    func()
+	router        *gin.Engine
+	userRepo      *db.UserRepo
+	groupRepo     *db.GroupRepo
+	choreRepo     *db.ChoreRepo
+	ledgerRepo    *db.LedgerRepo
+	allowanceRepo *db.AllowanceRepo
+	cleanup       func()
 }
 
 func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
@@ -51,8 +53,11 @@ func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
 	groupRepo := db.NewGroupRepo(pool)
 	choreRepo := db.NewChoreRepo(pool)
 	ledgerRepo := db.NewLedgerRepo(pool)
+	allowanceRepo := db.NewAllowanceRepo(pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo)
+	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, groupRepo, pool)
+
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
 
 	router := gin.New()
 	authMw := auth.AuthMiddleware(testJWTSecret)
@@ -64,11 +69,12 @@ func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
 	router.GET("/groups/:id/balance", lh.GetBalance)
 
 	return &ledgerTestEnv{
-		router:     router,
-		userRepo:   userRepo,
-		groupRepo:  groupRepo,
-		choreRepo:  choreRepo,
-		ledgerRepo: ledgerRepo,
+		router:        router,
+		userRepo:      userRepo,
+		groupRepo:     groupRepo,
+		choreRepo:     choreRepo,
+		ledgerRepo:    ledgerRepo,
+		allowanceRepo: allowanceRepo,
 		cleanup: func() {
 			testutil.CleanupTestDB(pool)
 			pool.Close()

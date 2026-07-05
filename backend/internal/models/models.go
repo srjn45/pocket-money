@@ -100,6 +100,27 @@ type LedgerEntry struct {
 	CreatedAt       time.Time       `json:"created_at"`
 }
 
+// Allowance is a per-member recurring monthly pocket-money configuration (§5.2).
+// A change is a new row with a later EffectiveFrom; history is preserved.
+type Allowance struct {
+	ID            uuid.UUID `json:"id"`
+	GroupID       uuid.UUID `json:"group_id"`
+	UserID        uuid.UUID `json:"user_id"`
+	Amount        int64     `json:"amount"`         // minor units; 0 = paused
+	EffectiveFrom string    `json:"effective_from"` // 'YYYY-MM'
+	CreatedBy     uuid.UUID `json:"created_by"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// AllowancePostingInput is the posting engine's read model: one allowance row
+// joined with the member's join date. Ordered by user then effective_from.
+type AllowancePostingInput struct {
+	UserID        uuid.UUID
+	Amount        int64
+	EffectiveFrom string
+	JoinedAt      time.Time
+}
+
 // InviteToken represents an invitation to join a group
 type InviteToken struct {
 	ID        uuid.UUID `json:"id"`

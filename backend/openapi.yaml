@@ -23,6 +23,8 @@ tags:
     description: Chore management
   - name: Ledger
     description: Ledger entries and balance tracking
+  - name: Allowances
+    description: Recurring monthly pocket money configuration and history
 
 paths:
   /health:
@@ -933,6 +935,125 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/groups/{id}/allowances:
+    get:
+      tags:
+        - Allowances
+      summary: List allowance rows for a group
+      description: >
+        Head sees all members' allowance history; member sees only their own.
+        Returns full history rows (all effective_from values per member).
+      operationId: listAllowances
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Group ID
+      responses:
+        '200':
+          description: Allowance rows (empty array when none configured)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AllowanceResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/allowances/{userId}:
+    put:
+      tags:
+        - Allowances
+      summary: Set or change a member's monthly pocket money
+      description: >
+        Head only. Sets or changes a member's monthly pocket money.
+        A new effective_from creates a new history row (past months not rewritten).
+        Amount 0 pauses the allowance. Setting the same effective_from twice
+        updates the amount (correction) — idempotent, still 200.
+      operationId: setAllowance
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Group ID
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Target member's user ID (must be a member, not the head)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAllowanceRequest'
+      responses:
+        '200':
+          description: Allowance set or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllowanceResponse'
+        '400':
+          description: Validation error (negative amount, invalid period, targeting head)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller is not the group head
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Target user is not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1374,4 +1495,54 @@ components:
         - user_id
         - name
         - balance
+
+    SetAllowanceRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monthly pocket money in minor units (paise). 0 pauses the allowance.
+        effective_from:
+          type: string
+          nullable: true
+          pattern: '^\d{4}-\d{2}$'
+          description: Month this amount takes effect (YYYY-MM). Defaults to the current month.
+      required:
+        - amount
+
+    AllowanceResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        group_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        amount:
+          type: integer
+          format: int64
+          description: Minor units; 0 = paused
+        effective_from:
+          type: string
+          description: 'YYYY-MM'
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - group_id
+        - user_id
+        - amount
+        - effective_from
+        - created_by
+        - created_at
 

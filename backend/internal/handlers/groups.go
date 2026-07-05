@@ -14,6 +14,7 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/auth"
 	"github.com/srjn45/pocket-money/backend/internal/db"
 	"github.com/srjn45/pocket-money/backend/internal/models"
+	"github.com/srjn45/pocket-money/backend/internal/posting"
 )
 
 // GroupHandler handles group-related requests
@@ -21,14 +22,16 @@ type GroupHandler struct {
 	groupRepo  *db.GroupRepo
 	inviteRepo *db.InviteRepo
 	choreRepo  *db.ChoreRepo
+	postingSvc *posting.Service
 }
 
 // NewGroupHandler creates a new GroupHandler
-func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo, choreRepo *db.ChoreRepo) *GroupHandler {
+func NewGroupHandler(groupRepo *db.GroupRepo, inviteRepo *db.InviteRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service) *GroupHandler {
 	return &GroupHandler{
 		groupRepo:  groupRepo,
 		inviteRepo: inviteRepo,
 		choreRepo:  choreRepo,
+		postingSvc: postingSvc,
 	}
 }
 
@@ -180,6 +183,11 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+
+	// Trigger due allowance posting before serving group detail (balance-sensitive).
+	if !runPosting(c, h.postingSvc, groupID) {
 		return
 	}
 
