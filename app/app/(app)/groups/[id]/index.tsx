@@ -1,295 +1,279 @@
-import { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, ActivityIndicator, Alert, Share, Platform } from 'react-native';
+import { useState } from 'react';
+import { FlatList, Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { groupsApi, ledgerApi, GroupDetail, Balance, Member } from '../../../../src/api';
-import { formatMinorUnits } from '../../../../src/money';
 import { useAuth } from '../../../../src/auth-context';
+import { useGroup } from '../../../../src/hooks/useGroup';
+import { useChores } from '../../../../src/hooks/useChores';
+import { useLedger, useBalance } from '../../../../src/hooks/useLedger';
+import { groupsApi } from '../../../../src/api';
+import type { Balance } from '../../../../src/api';
+import {
+  Button,
+  AmountText,
+  MemberCard,
+  LedgerList,
+  AddEntrySheet,
+  EmptyState,
+  ErrorMessage,
+  LoadingSpinner,
+  useToast,
+} from '../../../../src/components';
 
 export default function GroupOverviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
-  const [group, setGroup] = useState<GroupDetail | null>(null);
-  const [balances, setBalances] = useState<Balance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [isHead, setIsHead] = useState(false);
+  const { show: showToast } = useToast();
+
+  const [sheetVisible, setSheetVisible] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
 
-  const loadData = async () => {
-    if (!id || !user?.id) return;
-    try {
-      setError('');
-      const [groupData, balanceData] = await Promise.all([
-        groupsApi.get(id),
-        ledgerApi.getBalance(id),
-      ]);
-      setGroup(groupData);
-      setBalances(balanceData || []);
-      const currentMember = groupData.members.find((m: Member) => m.user_id === user?.id);
-      setIsHead(currentMember?.role === 'head');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load group');
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const groupQuery = useGroup(id ?? '');
+  const balanceQuery = useBalance(id ?? '');
+  const choresQuery = useChores(id ?? '');
 
-  useEffect(() => {
-    loadData();
-  }, [id, user?.id]);
+  const group = groupQuery.data;
+  const members = group?.members ?? [];
+  const isHead = members.find(m => m.user_id === user?.id)?.role === 'head';
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadData();
-  }, [id]);
+  const pendingLedgerQuery = useLedger(id ?? '', { status: 'pending_approval' });
+  const myLedgerQuery = useLedger(id ?? '', isHead ? undefined : {});
 
-  const handleGenerateInvite = async () => {
+  const isLoading = groupQuery.isLoading || balanceQuery.isLoading;
+  const error = groupQuery.error || balanceQuery.error;
+
+  const nonHeadMembers = members.filter(m => m.role !== 'head');
+  const myBalance = balanceQuery.data?.find(b => b.user_id === user?.id);
+
+  function countPendingFor(userId: string): number {
+    return (pendingLedgerQuery.data ?? []).filter(e => e.user_id === userId).length;
+  }
+
+  async function handleInvite() {
     if (!id) return;
     setInviteLoading(true);
     try {
       const invite = await groupsApi.createInvite(id);
-      
       if (Platform.OS === 'web') {
-        // Web: Copy to clipboard
         await Clipboard.setStringAsync(invite.invite_url);
-        Alert.alert('Invite Created', 'Invite link copied to clipboard!');
+        showToast({ message: 'Invite link copied to clipboard', tone: 'success' });
       } else {
-        // Mobile: Native share
         await Share.share({
           message: `Join my group "${group?.name}" on Pocket Money!\n\n${invite.invite_url}`,
-          url: invite.invite_url,  // iOS only
+          url: invite.invite_url,
           title: 'Join My Group',
         });
       }
-    } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create invite');
+    } catch (e) {
+      showToast({ message: e instanceof Error ? e.message : 'Failed to create invite', tone: 'danger' });
     } finally {
       setInviteLoading(false);
     }
-  };
-
-  const handleMemberPress = (memberId: string, memberName: string) => {
-    // Navigate to ledger screen filtered by this member
-    router.push({
-      pathname: `/(app)/groups/${id}/ledger`,
-      params: { member_id: memberId, member_name: memberName },
-    });
-  };
-
-  const renderMember = ({ item }: { item: Balance }) => (
-    <TouchableOpacity 
-      style={styles.memberCard}
-      onPress={() => handleMemberPress(item.user_id, item.name)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.memberInfo}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.memberName}>{item.name}</Text>
-      </View>
-      <View style={styles.balanceContainer}>
-        <Text style={[styles.balance, item.balance >= 0 ? styles.positive : styles.negative]}>
-          {formatMinorUnits(Math.abs(item.balance))}
-        </Text>
-        {item.balance > 0 && <Text style={styles.balanceLabel}>owed</Text>}
-        {item.balance < 0 && <Text style={styles.balanceLabel}>overpaid</Text>}
-        <Ionicons name="chevron-forward" size={20} color="#ccc" />
-      </View>
-    </TouchableOpacity>
-  );
+  }
 
   if (isLoading) {
+    return <View style={styles.centered}><LoadingSpinner /></View>;
+  }
+
+  if (error) {
+    return <ErrorMessage message={error instanceof Error ? error.message : 'Failed to load group'} />;
+  }
+
+  // ─── HEAD VIEW ─────────────────────────────────────────────────────────────
+  if (isHead) {
+    const balances = balanceQuery.data ?? [];
+    const memberBalanceMap = new Map<string, Balance>(balances.map(b => [b.user_id, b]));
+
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <Text style={styles.memberCount}>
+            {nonHeadMembers.length} {nonHeadMembers.length === 1 ? 'member' : 'members'}
+          </Text>
+          <Button
+            title="Invite"
+            variant="ghost"
+            icon="person-add"
+            loading={inviteLoading}
+            onPress={handleInvite}
+            size="sm"
+          />
+        </View>
+
+        <View style={styles.addButtonRow}>
+          <Button
+            title="Add entry"
+            variant="primary"
+            icon="add"
+            onPress={() => setSheetVisible(true)}
+            fullWidth
+          />
+        </View>
+
+        <Text style={styles.sectionTitle}>Members</Text>
+
+        <FlatList
+          data={nonHeadMembers}
+          keyExtractor={m => m.user_id}
+          renderItem={({ item: member }) => {
+            const bal = memberBalanceMap.get(member.user_id) ?? {
+              user_id: member.user_id,
+              name: member.name,
+              balance: 0,
+            };
+            return (
+              <MemberCard
+                balance={bal}
+                member={member}
+                pendingCount={countPendingFor(member.user_id)}
+                onPress={() =>
+                  router.push({
+                    pathname: `/(app)/groups/${id}/ledger`,
+                    params: { userId: member.user_id, name: member.name },
+                  })
+                }
+              />
+            );
+          }}
+          ListEmptyComponent={
+            <EmptyState
+              icon="people-outline"
+              title="No members yet"
+              subtitle="Tap Invite to add your family"
+            />
+          }
+          refreshing={groupQuery.isFetching || balanceQuery.isFetching}
+          onRefresh={() => {
+            groupQuery.refetch();
+            balanceQuery.refetch();
+            pendingLedgerQuery.refetch();
+          }}
+          contentContainerStyle={styles.listContent}
+        />
+
+        <AddEntrySheet
+          visible={sheetVisible}
+          onClose={() => setSheetVisible(false)}
+          groupId={id ?? ''}
+          chores={choresQuery.data ?? []}
+          mode="head"
+          members={nonHeadMembers}
+        />
       </View>
     );
   }
 
+  // ─── MEMBER VIEW ────────────────────────────────────────────────────────────
+  const myEntries = myLedgerQuery.data ?? [];
+
   return (
-    <View style={styles.container}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <View style={styles.header}>
-        <Text style={styles.membersCount}>
-          {balances.length} {balances.length === 1 ? 'member' : 'members'}
-        </Text>
-        {isHead && (
-          <TouchableOpacity 
-            style={styles.inviteButton}
-            onPress={handleGenerateInvite}
-            disabled={inviteLoading}
-          >
-            {inviteLoading ? (
-              <ActivityIndicator size="small" color="#007AFF" />
-            ) : (
-              <>
-                <Ionicons name="person-add" size={20} color="#007AFF" />
-                <Text style={styles.inviteText}>Invite</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <Text style={styles.sectionTitle}>Members & Balances</Text>
-      <Text style={styles.sectionSubtitle}>Tap a member to view their ledger</Text>
-
-      {balances.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="people-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No members yet</Text>
-          <Text style={styles.emptySubtext}>Invite members to get started</Text>
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.memberScroll}>
+        {/* Balance summary header */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Your balance</Text>
+          <AmountText
+            minorUnits={myBalance?.balance ?? 0}
+            variant={
+              (myBalance?.balance ?? 0) < 0 ? 'debit' : 'credit'
+            }
+            size="xl"
+          />
+          <Text style={styles.summaryHint}>
+            {(myBalance?.balance ?? 0) < 0 ? 'you owe' : 'owed to you'}
+          </Text>
         </View>
-      ) : (
-        <FlatList
-          data={balances}
-          renderItem={renderMember}
-          keyExtractor={(item) => item.user_id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          contentContainerStyle={styles.list}
-        />
-      )}
+
+        <View style={styles.addButtonRow}>
+          <Button
+            title="Log a chore"
+            variant="primary"
+            icon="add"
+            onPress={() => setSheetVisible(true)}
+            fullWidth
+          />
+        </View>
+      </ScrollView>
+
+      <LedgerList
+        entries={myEntries}
+        chores={choresQuery.data ?? []}
+        members={members}
+        isHead={false}
+        groupId={id ?? ''}
+        refreshing={myLedgerQuery.isFetching}
+        onRefresh={() => myLedgerQuery.refetch()}
+        emptyTitle="No entries yet"
+        emptySubtitle="Log a chore to start earning"
+      />
+
+      <AddEntrySheet
+        visible={sheetVisible}
+        onClose={() => setSheetVisible(false)}
+        groupId={id ?? ''}
+        chores={choresQuery.data ?? []}
+        mode="member"
+        selfUserId={user?.id}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F5F5',
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  error: {
-    color: '#ff3b30',
-    padding: 16,
-    textAlign: 'center',
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#E5E7EB',
   },
-  membersCount: {
-    fontSize: 16,
-    color: '#666',
+  memberCount: {
+    fontSize: 15,
+    color: '#6B7280',
   },
-  inviteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    padding: 8,
-  },
-  inviteText: {
-    color: '#007AFF',
-    fontWeight: '600',
+  addButtonRow: {
+    padding: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    color: '#333',
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
-  list: {
-    padding: 16,
-    paddingTop: 8,
+  listContent: {
+    paddingBottom: 16,
   },
-  memberCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  summaryCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  summaryLabel: {
+    fontSize: 15,
+    color: '#6B7280',
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
-  memberInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  memberName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  balanceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  balance: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  balanceLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  positive: {
-    color: '#34c759',
-  },
-  negative: {
-    color: '#ff3b30',
-  },
-  empty: {
-    flex: 1,
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#666',
+  summaryHint: {
+    fontSize: 13,
+    color: '#6B7280',
     marginTop: 4,
+  },
+  memberScroll: {
+    flexGrow: 0,
   },
 });
