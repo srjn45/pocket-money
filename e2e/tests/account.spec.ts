@@ -47,7 +47,7 @@ test('T-CP: wrong current password shows error and keeps session; correct change
   await registerUser(page, 'CP User', email, originalPass);
 
   // Navigate to Profile (register lands on the Dashboard tab).
-  await openTab(page, /profile/i);
+  await openTab(page, 'profile');
   await expect(page.getByTestId('profile-root')).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId('profile-change-password').click();

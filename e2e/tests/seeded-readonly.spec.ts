@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { login } from '../support/pages';
+import { login, openTab } from '../support/pages';
 import type { SeedSummary } from '../fixtures/seed';
 import { SEED } from '../fixtures/seed';
 
@@ -63,10 +63,7 @@ summaryTest('T-RO-4: head sees active and rejected loans on loans tab', async ({
   await expect(page.getByTestId('group-overview-root')).toBeVisible({ timeout: 15_000 });
 
   // Navigate to loans tab.
-  await page.getByRole('tab', { name: /loan/i }).click().catch(async () => {
-    // Tab bar might use different label.
-    await page.getByText(/loans/i).first().click();
-  });
+  await openTab(page, 'loans');
   await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
 
   // At least one loan card should be visible.

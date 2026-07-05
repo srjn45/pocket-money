@@ -23,6 +23,7 @@ export async function submitLogin(page: Page): Promise<void> {
 }
 
 export async function login(page: Page, email: string, password: string): Promise<void> {
+  await goToLogin(page);
   await fillLoginForm(page, email, password);
   await submitLogin(page);
   await expect(page.getByTestId('dashboard-root')).toBeVisible({ timeout: 15_000 });
@@ -121,9 +122,14 @@ export function groupIdFromUrl(page: Page): string {
   return m[1];
 }
 
-/** Click a bottom-tab by its accessible name (RN-Web renders role="tab"). */
-export async function openTab(page: Page, name: RegExp): Promise<void> {
-  await page.getByRole('tab', { name }).click();
+/**
+ * Click a bottom-tab by the suffix of its href (RN-Web renders each tab as
+ * <a role="tab" href="…/<suffix>">). Targeting the href avoids matching the
+ * Overview tab, whose accessible name is the group name (e.g. "LoanFam-…"
+ * would collide with a /loan/i name filter).
+ */
+export async function openTab(page: Page, suffix: 'loans' | 'chores' | 'profile'): Promise<void> {
+  await page.locator(`a[role="tab"][href$="/${suffix}"]`).click();
 }
 
 /**
@@ -204,7 +210,7 @@ export async function requestLoan(
   amount: string,
   installments: string,
 ): Promise<void> {
-  await openTab(page, /loan/i);
+  await openTab(page, 'loans');
   await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('loans-request-button').click();
   await page.getByTestId('loan-amount').fill(amount);
@@ -214,7 +220,7 @@ export async function requestLoan(
 
 /** Head approves the first requested loan (opens the approve sheet, confirms). */
 export async function approveFirstLoan(page: Page): Promise<void> {
-  await openTab(page, /loan/i);
+  await openTab(page, 'loans');
   await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
   const approve = page.getByTestId(/^loan-approve-/).first();
   await expect(approve).toBeVisible({ timeout: 15_000 });

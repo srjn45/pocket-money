@@ -53,7 +53,7 @@ test('T6: member requests loan, head approves, loan active', async ({ page, brow
     // Member: reload and reopen the loans tab → loan card present, no approve
     // control (members cannot approve their own loan).
     await memberPage.reload();
-    await openTab(memberPage, /loan/i);
+    await openTab(memberPage, 'loans');
     await expect(memberPage.getByTestId(/^loan-card-/).first()).toBeVisible({ timeout: 15_000 });
     await expect(memberPage.getByTestId(/^loan-approve-/)).toHaveCount(0);
   } finally {
@@ -66,6 +66,6 @@ test('T6-EMPTY: new group has empty loans state', async ({ page }) => {
   await registerUser(page, 'Head Loans Empty', uniqueEmail());
   await createGroup(page, `EmptyLoans-${Date.now()}`);
 
-  await openTab(page, /loan/i);
+  await openTab(page, 'loans');
   await expect(page.getByTestId('loans-empty')).toBeVisible({ timeout: 10_000 });
 });

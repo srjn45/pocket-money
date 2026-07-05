@@ -70,7 +70,7 @@ test('T-LOGIN: wrong password shows error; correct password enters app', async (
   // First register the user.
   await registerUser(page, 'Login Test', email);
   // Log out (register lands on the Dashboard tab → go to Profile first).
-  await openTab(page, /profile/i);
+  await openTab(page, 'profile');
   await expect(page.getByTestId('profile-logout')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('profile-logout').click();
   await expect(page.getByTestId('login-submit')).toBeVisible({ timeout: 15_000 });

@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
 import { Button, TextField } from '../../src/components';
 import { theme } from '../../src/theme';
-import { getPendingInviteToken, clearPendingInviteToken } from '../../src/storage';
 
 const isValidEmail = (email: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -45,13 +44,8 @@ export default function RegisterScreen() {
 
     try {
       await register(email, password, name);
-      const pending = await getPendingInviteToken();
-      if (pending) {
-        await clearPendingInviteToken();
-        router.replace({ pathname: '/invite', params: { token: pending } });
-      } else {
-        router.replace('/(app)');
-      }
+      // Post-auth navigation (including the pending-invite resume) is owned by
+      // the root AuthGate, which reacts to the new token.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

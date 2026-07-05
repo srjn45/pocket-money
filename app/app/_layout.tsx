@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../src/auth-context';
 import { ToastProvider } from '../src/components';
+import { getPendingInviteToken } from '../src/storage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,12 +31,35 @@ function AuthGate() {
   useEffect(() => {
     if (isLoading) return;
     const inAuthGroup = segments[0] === '(auth)';
-    if (!token && !inAuthGroup) {
+    // The /invite route owns the unauthenticated case itself (it saves the
+    // pending token before redirecting to login). AuthGate must NOT redirect it
+    // away, or it races that save and the register/login-via-invite resume loses
+    // the token (WP-4.6 §12 G1).
+    const onInvite = segments[0] === 'invite';
+    if (!token && !inAuthGroup && !onInvite) {
       router.replace('/(auth)/login');
-    } else if (token && inAuthGroup) {
-      router.replace('/(app)');
+      return;
     }
-  }, [token, isLoading, segments]);
+    if (token && inAuthGroup) {
+      // Single post-auth navigation authority: honor a pending invite so
+      // register/login-via-invite lands the user inside the group; otherwise
+      // drop into the app. Centralizing this here (rather than also in the auth
+      // screens) removes the AuthGate-vs-auth-screen navigation race.
+      let cancelled = false;
+      (async () => {
+        const pending = await getPendingInviteToken();
+        if (cancelled) return;
+        if (pending) {
+          router.replace({ pathname: '/invite', params: { token: pending } });
+        } else {
+          router.replace('/(app)');
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [token, isLoading, segments, router]);
 
   return null;
 }
