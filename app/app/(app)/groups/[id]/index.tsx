@@ -11,6 +11,8 @@ import { useLoans } from '../../../../src/hooks/useLoans';
 import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../src/allowance-format';
 import { groupsApi } from '../../../../src/api';
 import type { Balance } from '../../../../src/api';
+import { confirmAsync } from '../../../../src/confirm';
+import { useLeaveGroup } from '../../../../src/hooks/useHygiene';
 import { theme } from '../../../../src/theme';
 import {
   Button,
@@ -50,6 +52,8 @@ export default function GroupOverviewScreen() {
   const pendingLedgerQuery = useLedger(id ?? '', { status: 'pending_approval' });
   const myLedgerQuery = useLedger(id ?? '', isHead ? undefined : {});
 
+  const leaveMutation = useLeaveGroup(id ?? '');
+
   const memberPeriod = currentPeriod();
   const memberCurrentAllow = currentAllowanceFor(allowancesQuery.data ?? [], memberPeriod);
   const memberUpcomingAllow = upcomingAllowanceFor(allowancesQuery.data ?? [], memberPeriod);
@@ -62,6 +66,23 @@ export default function GroupOverviewScreen() {
 
   function countPendingFor(userId: string): number {
     return (pendingLedgerQuery.data ?? []).filter(e => e.user_id === userId).length;
+  }
+
+  async function handleLeaveGroup() {
+    const confirmed = await confirmAsync({
+      title: 'Leave group',
+      message: `Leave ${group?.name ?? 'this group'}? You can rejoin with a new invite. This only works if your balance is ₹0 and you have no active or pending loans.`,
+      confirmLabel: 'Leave',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await leaveMutation.mutateAsync(user?.id ?? '');
+      showToast({ tone: 'success', message: 'You left the group' });
+      router.replace('/(app)' as never);
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : 'Failed to leave group' });
+    }
   }
 
   async function handleInvite() {
@@ -237,6 +258,16 @@ export default function GroupOverviewScreen() {
             variant="primary"
             icon="add"
             onPress={() => setSheetVisible(true)}
+            fullWidth
+          />
+        </View>
+
+        <View style={styles.addButtonRow}>
+          <Button
+            title="Leave group"
+            variant="danger"
+            loading={leaveMutation.isPending}
+            onPress={handleLeaveGroup}
             fullWidth
           />
         </View>

@@ -61,7 +61,7 @@ func setupGroupsTestEnv(t *testing.T) *groupsTestEnv {
 	inviteRepo := db.NewInviteRepo(pool)
 	// appBaseURL is only consumed by CreateInvite (WP-4.3); these tests exercise
 	// GET /groups only, so the empty fall-back value is fine.
-	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, postingSvc, "")
+	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, postingSvc, pool, "")
 
 	router := gin.New()
 	authMw := auth.AuthMiddleware(testJWTSecret)

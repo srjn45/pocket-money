@@ -155,6 +155,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/auth/password:
+    put:
+      tags:
+        - Auth
+      summary: Change password (logged-in)
+      description: >
+        Changes the authenticated user's password. Verifies the current password
+        (bcrypt) before setting the new one. No email/reset flow. Does NOT rotate
+        the JWT — existing tokens remain valid until expiry (LAN v2 limitation).
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password changed successfully (no content)
+        '400':
+          description: Malformed body or new password too short (min 6)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated (missing/invalid token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/groups:
     get:
       tags:
@@ -322,6 +368,81 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/groups/{id}/members/{userId}:
+    delete:
+      tags:
+        - Groups
+      summary: Remove a member (head) or leave a group (self)
+      description: >
+        Removes a membership. The head may remove any non-head member; any member
+        may remove themselves (leave). Allowed ONLY when the target member's balance
+        is settled to exactly 0 AND they have no loan in `requested` or `active`
+        status. Ledger history and closed/rejected loans are KEPT (they reference the
+        user, not the membership); the member's allowance config rows are deleted and
+        any pending ledger entries are auto-rejected. The group head can neither leave
+        nor be removed. Triggers due allowance/EMI posting before evaluating the
+        balance so a stale un-posted entry cannot let a non-zero member out.
+      operationId: removeMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          description: ID of the member to remove (equal to the caller for "leave")
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Member removed / left successfully (no content)
+        '400':
+          description: Invalid group ID or user ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: A non-head member may only remove themselves
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Target user is not a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >
+            Removal blocked — the target is the group head, or their balance is not
+            zero, or they have an active/pending loan. The error message is
+            human-readable and states which.
           content:
             application/json:
               schema:
@@ -1412,6 +1533,20 @@ components:
         - email
         - password
         - name
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        current_password:
+          type: string
+          description: The user's current password, verified before the change.
+        new_password:
+          type: string
+          minLength: 6
+          description: The new password (minimum 6 characters).
+      required:
+        - current_password
+        - new_password
 
     LoginRequest:
       type: object
