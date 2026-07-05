@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import type { Allowance } from '../api';
@@ -36,14 +36,28 @@ export function AllowanceSheet({
   const thisPeriod = currentPeriod();
   const nextP = nextPeriod(thisPeriod);
 
-  function initialAmount(): string {
-    if (current && current.amount > 0) return formatMinor(current.amount);
-    return '';
-  }
+  const initialAmount = useCallback(
+    () => (current && current.amount > 0 ? formatMinor(current.amount) : ''),
+    [current],
+  );
 
   const [amountStr, setAmountStr] = useState(initialAmount);
   const [amountError, setAmountError] = useState('');
   const [effectiveMonth, setEffectiveMonth] = useState<string>(thisPeriod);
+
+  // Re-prefill from the latest `current` each time the sheet opens (the allowance
+  // may load/refetch after this component first mounts — e.g. a cold cache on web
+  // page-refresh, or a change we just PUT). Guarded to the closed→open edge so a
+  // background refetch never wipes what the head is mid-typing.
+  const prevVisible = useRef(visible);
+  useEffect(() => {
+    if (visible && !prevVisible.current) {
+      setAmountStr(initialAmount());
+      setAmountError('');
+      setEffectiveMonth(thisPeriod);
+    }
+    prevVisible.current = visible;
+  }, [visible, initialAmount, thisPeriod]);
 
   function resetForm() {
     setAmountStr(initialAmount());
