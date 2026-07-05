@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
+import { getPendingInviteToken, clearPendingInviteToken } from '../../src/storage';
 import { Button, TextField } from '../../src/components';
 import { theme } from '../../src/theme';
 
@@ -32,7 +33,14 @@ export default function LoginScreen() {
 
     try {
       await login(email, password);
-      router.replace('/(app)');
+      // Resume a pending invite if one was saved before redirect to login.
+      const pending = await getPendingInviteToken();
+      if (pending) {
+        await clearPendingInviteToken();
+        router.replace({ pathname: '/invite', params: { token: pending } });
+      } else {
+        router.replace('/(app)');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
