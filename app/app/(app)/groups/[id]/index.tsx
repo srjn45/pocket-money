@@ -140,8 +140,8 @@ export default function GroupOverviewScreen() {
                 pendingCount={countPendingFor(member.user_id)}
                 onPress={() =>
                   router.push({
-                    pathname: `/(app)/groups/${id}/ledger`,
-                    params: { userId: member.user_id, name: member.name },
+                    pathname: `/(app)/groups/${id}/members/${member.user_id}`,
+                    params: { name: member.name },
                   })
                 }
               />
