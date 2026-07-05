@@ -64,13 +64,15 @@ test('T-CP: wrong current password shows error and keeps session; correct change
   await expect(page.getByTestId('profile-root')).toBeVisible();
   await expect(page.getByTestId('login-submit')).not.toBeVisible();
 
-  // Correct current password → success, still logged in.
+  // Correct current password → success. The sheet closes only on a successful
+  // change (this is what makes the test verify the change actually went through,
+  // not merely that some toast appeared).
   await page.getByTestId('cp-current-password').fill(originalPass);
   await page.getByTestId('cp-new-password').fill(newPass);
   await page.getByTestId('cp-confirm-password').fill(newPass);
   await page.getByTestId('cp-submit').click();
 
-  await expect(page.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('cp-submit')).not.toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('profile-root')).toBeVisible();
   await expect(page.getByTestId('login-submit')).not.toBeVisible();
 });
