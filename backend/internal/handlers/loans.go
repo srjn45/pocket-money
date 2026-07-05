@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -330,7 +331,9 @@ func (h *LoanHandler) ApproveLoan(c *gin.Context) {
 	}
 
 	var req ApproveLoanRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// Body is optional — both override fields are optional, so an empty body
+	// (io.EOF) is a valid "approve with no overrides" request, not a 400.
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
