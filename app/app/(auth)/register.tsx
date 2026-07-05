@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
+import { Button, TextField } from '../../src/components';
+import { theme } from '../../src/theme';
 
 const isValidEmail = (email: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -51,7 +53,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
@@ -61,16 +63,14 @@ export default function RegisterScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <TextInput
-          style={styles.input}
+        <TextField
           placeholder="Name *"
           value={name}
           onChangeText={setName}
           autoComplete="name"
         />
 
-        <TextInput
-          style={styles.input}
+        <TextField
           placeholder="Email *"
           value={email}
           onChangeText={setEmail}
@@ -79,8 +79,7 @@ export default function RegisterScreen() {
           autoComplete="email"
         />
 
-        <TextInput
-          style={styles.input}
+        <TextField
           placeholder="Password *"
           value={password}
           onChangeText={setPassword}
@@ -88,8 +87,7 @@ export default function RegisterScreen() {
           autoComplete="new-password"
         />
 
-        <TextInput
-          style={styles.input}
+        <TextField
           placeholder="Confirm Password *"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
@@ -97,24 +95,14 @@ export default function RegisterScreen() {
           autoComplete="new-password"
         />
 
-        <TouchableOpacity 
-          style={[styles.button, isLoading && styles.buttonDisabled]} 
-          onPress={handleRegister}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Register</Text>
-          )}
-        </TouchableOpacity>
+        <Button title="Register" onPress={handleRegister} loading={isLoading} fullWidth />
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
           <Link href="/(auth)/login" asChild>
-            <TouchableOpacity>
+            <Pressable>
               <Text style={styles.link}>Login</Text>
-            </TouchableOpacity>
+            </Pressable>
           </Link>
         </View>
       </ScrollView>
@@ -125,7 +113,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.color.surface,
   },
   content: {
     flexGrow: 1,
@@ -138,41 +126,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
-    color: '#007AFF',
+    color: theme.color.primary,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: theme.color.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
   },
   error: {
-    color: '#ff3b30',
+    color: theme.color.danger,
     textAlign: 'center',
     marginBottom: 16,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
@@ -180,10 +145,10 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
-    color: '#666',
+    color: theme.color.textSecondary,
   },
   link: {
-    color: '#007AFF',
+    color: theme.color.primary,
     fontWeight: '600',
   },
 });

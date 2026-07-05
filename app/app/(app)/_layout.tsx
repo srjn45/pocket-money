@@ -1,7 +1,9 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useAuth } from '../../src/auth-context';
+import { LoadingSpinner } from '../../src/components';
+import { theme } from '../../src/theme';
 
 export default function AppLayout() {
   const { token, user, isLoading } = useAuth();
@@ -11,7 +13,7 @@ export default function AppLayout() {
   if (isLoading || !token || !user) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <LoadingSpinner />
       </View>
     );
   }
@@ -53,8 +55,6 @@ export default function AppLayout() {
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.color.background,
   },
 });

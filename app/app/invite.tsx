@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '../src/auth-context';
 import { setPendingInviteToken } from '../src/storage';
 import { useJoinGroup } from '../src/hooks/useGroups';
+import { LoadingSpinner, ErrorMessage } from '../src/components';
 
 export default function InviteScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
@@ -41,41 +41,12 @@ export default function InviteScreen() {
   }, [token, user, authLoading]);
 
   if (isLoading && !error) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.text}>Joining group...</Text>
-      </View>
-    );
+    return <LoadingSpinner message="Joining group…" />;
   }
 
   if (error) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.error}>{error}</Text>
-      </View>
-    );
+    return <ErrorMessage message={error} />;
   }
 
   return null;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 24,
-  },
-  text: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  error: {
-    fontSize: 16,
-    color: '#ff3b30',
-    textAlign: 'center',
-  },
-});
