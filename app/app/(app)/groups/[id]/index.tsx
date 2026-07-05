@@ -71,10 +71,17 @@ export default function GroupOverviewScreen() {
       const invite = await groupsApi.createInvite(id);
       if (Platform.OS === 'web') {
         try {
-          await Clipboard.setStringAsync(invite.invite_url);
-          showToast({ message: 'Invite link copied to clipboard', tone: 'success' });
+          // On non-secure http origins (LAN) navigator.clipboard is unavailable;
+          // expo-clipboard falls back to execCommand and RESOLVES false (it does
+          // not reject), so we must honor the boolean, not just catch a throw.
+          const copied = await Clipboard.setStringAsync(invite.invite_url);
+          if (copied) {
+            showToast({ message: 'Invite link copied to clipboard', tone: 'success' });
+          } else {
+            setFallbackUrl(invite.invite_url);
+            showToast({ message: 'Copy failed — select and copy the link below', tone: 'danger' });
+          }
         } catch {
-          // navigator.clipboard is unavailable on non-secure http origins (LAN).
           setFallbackUrl(invite.invite_url);
           showToast({ message: 'Copy failed — select and copy the link below', tone: 'danger' });
         }
