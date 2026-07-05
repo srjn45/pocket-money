@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { groupsApi, ledgerApi, GroupDetail, Balance, Member } from '../../../../src/api';
+import { formatMinorUnits } from '../../../../src/money';
 import { useAuth } from '../../../../src/auth-context';
 
 export default function GroupOverviewScreen() {
@@ -96,7 +97,7 @@ export default function GroupOverviewScreen() {
       </View>
       <View style={styles.balanceContainer}>
         <Text style={[styles.balance, item.balance >= 0 ? styles.positive : styles.negative]}>
-          ${Math.abs(item.balance).toFixed(2)}
+          {formatMinorUnits(Math.abs(item.balance))}
         </Text>
         {item.balance > 0 && <Text style={styles.balanceLabel}>owed</Text>}
         {item.balance < 0 && <Text style={styles.balanceLabel}>overpaid</Text>}

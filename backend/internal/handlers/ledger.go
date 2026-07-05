@@ -33,7 +33,7 @@ func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreR
 type CreateLedgerRequest struct {
 	UserID  *uuid.UUID `json:"user_id"` // Optional, only head can specify
 	ChoreID uuid.UUID  `json:"chore_id" binding:"required"`
-	Amount  *float64   `json:"amount"` // Required only for system chores (Settlement)
+	Amount  *int64     `json:"amount"` // Required only for system chores (Settlement)
 }
 
 // LedgerResponse represents a ledger entry in API responses
@@ -42,7 +42,7 @@ type LedgerResponse struct {
 	GroupID          uuid.UUID           `json:"group_id"`
 	UserID           uuid.UUID           `json:"user_id"`
 	ChoreID          uuid.UUID           `json:"chore_id"`
-	Amount           float64             `json:"amount"`
+	Amount           int64               `json:"amount"`
 	Status           models.LedgerStatus `json:"status"`
 	CreatedByUserID  uuid.UUID           `json:"created_by_user_id"`
 	ApprovedByUserID *uuid.UUID          `json:"approved_by_user_id,omitempty"`
@@ -54,7 +54,7 @@ type LedgerResponse struct {
 type BalanceResponse struct {
 	UserID  uuid.UUID `json:"user_id"`
 	Name    string    `json:"name"`
-	Balance float64   `json:"balance"`
+	Balance int64     `json:"balance"`
 }
 
 // ListLedger returns ledger entries for a group
@@ -199,7 +199,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 	}
 
 	// Determine amount based on chore type
-	var amount float64
+	var amount int64
 	if chore.IsSystem {
 		// System chores (Settlement) require custom amount and can only be created by head
 		if member.Role != models.RoleHead {

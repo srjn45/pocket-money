@@ -26,12 +26,12 @@ func NewChoreRepo(pool *pgxpool.Pool) *ChoreRepo {
 }
 
 // Create inserts a new chore into the database
-func (r *ChoreRepo) Create(ctx context.Context, groupID uuid.UUID, name string, description *string, amount float64) (*models.Chore, error) {
+func (r *ChoreRepo) Create(ctx context.Context, groupID uuid.UUID, name string, description *string, amount int64) (*models.Chore, error) {
 	return r.CreateWithSystem(ctx, groupID, name, description, amount, false)
 }
 
 // CreateWithSystem inserts a new chore with system flag
-func (r *ChoreRepo) CreateWithSystem(ctx context.Context, groupID uuid.UUID, name string, description *string, amount float64, isSystem bool) (*models.Chore, error) {
+func (r *ChoreRepo) CreateWithSystem(ctx context.Context, groupID uuid.UUID, name string, description *string, amount int64, isSystem bool) (*models.Chore, error) {
 	chore := &models.Chore{
 		ID:          uuid.New(),
 		GroupID:     groupID,
@@ -122,7 +122,7 @@ func (r *ChoreRepo) ListForGroup(ctx context.Context, groupID uuid.UUID) ([]*mod
 }
 
 // Update updates a chore (cannot update system chores)
-func (r *ChoreRepo) Update(ctx context.Context, id uuid.UUID, name *string, description *string, amount *float64) (*models.Chore, error) {
+func (r *ChoreRepo) Update(ctx context.Context, id uuid.UUID, name *string, description *string, amount *int64) (*models.Chore, error) {
 	// First check if it's a system chore
 	existing, err := r.GetByID(ctx, id)
 	if err != nil {

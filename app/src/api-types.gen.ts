@@ -528,8 +528,8 @@ export interface components {
             /** @description Chore description */
             description?: string | null;
             /**
-             * Format: double
-             * @description Amount earned for completing the chore
+             * Format: int64
+             * @description Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount: number;
         };
@@ -539,8 +539,8 @@ export interface components {
             /** @description Chore description */
             description?: string | null;
             /**
-             * Format: double
-             * @description Amount earned for completing the chore
+             * Format: int64
+             * @description Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount?: number | null;
         };
@@ -560,8 +560,8 @@ export interface components {
             /** @description Chore description */
             description?: string | null;
             /**
-             * Format: double
-             * @description Amount earned for completing the chore
+             * Format: int64
+             * @description Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount: number;
             /** @description Whether this is a system-generated chore (e.g., Settlement) */
@@ -584,8 +584,8 @@ export interface components {
              */
             chore_id: string;
             /**
-             * Format: double
-             * @description Custom amount (required only for system chores like Settlement)
+             * Format: int64
+             * @description Custom amount (required only for system chores like Settlement), in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount?: number | null;
         };
@@ -611,8 +611,8 @@ export interface components {
              */
             chore_id: string;
             /**
-             * Format: double
-             * @description Amount earned
+             * Format: int64
+             * @description Amount earned, in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount: number;
             /**
@@ -650,8 +650,8 @@ export interface components {
             /** @description User's full name */
             name: string;
             /**
-             * Format: double
-             * @description User's current balance (sum of approved ledger entries minus settlements)
+             * Format: int64
+             * @description User's current balance in minor units (paise); sum of approved ledger entries minus settlements; e.g. ₹12.50 = 1250
              */
             balance: number;
         };
@@ -662,8 +662,8 @@ export interface components {
              */
             user_id: string;
             /**
-             * Format: double
-             * @description Settlement amount
+             * Format: int64
+             * @description Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount: number;
             /**
@@ -691,8 +691,8 @@ export interface components {
              */
             user_id: string;
             /**
-             * Format: double
-             * @description Settlement amount
+             * Format: int64
+             * @description Settlement amount, in minor units (paise); e.g. ₹12.50 = 1250
              */
             amount: number;
             /**

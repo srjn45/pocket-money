@@ -30,7 +30,7 @@ func NewSettlementHandler(settlementRepo *db.SettlementRepo, groupRepo *db.Group
 // CreateSettlementRequest represents the request body for creating a settlement
 type CreateSettlementRequest struct {
 	UserID uuid.UUID `json:"user_id" binding:"required"`
-	Amount float64   `json:"amount" binding:"required,gt=0"`
+	Amount int64     `json:"amount" binding:"required,gt=0"`
 	Date   string    `json:"date" binding:"required"` // YYYY-MM-DD format
 	Note   *string   `json:"note"`
 }
@@ -40,7 +40,7 @@ type SettlementResponse struct {
 	ID        uuid.UUID `json:"id"`
 	GroupID   uuid.UUID `json:"group_id"`
 	UserID    uuid.UUID `json:"user_id"`
-	Amount    float64   `json:"amount"`
+	Amount    int64     `json:"amount"`
 	Date      time.Time `json:"date"`
 	Note      *string   `json:"note,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
