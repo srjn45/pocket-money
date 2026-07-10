@@ -61,27 +61,6 @@ export async function apiAddEntry(
   });
 }
 
-export async function apiApproveEntry(token: string, groupId: string, entryId: string): Promise<unknown> {
-  return request(`/groups/${groupId}/ledger/${entryId}/approve`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-// Toggle a group's member chore-submission flag (D2, default off since V3-3.2).
-// Member chore logging is inert until an admin enables this.
-export async function apiSetChoreSubmission(
-  token: string,
-  groupId: string,
-  enabled: boolean,
-): Promise<unknown> {
-  return request(`/groups/${groupId}`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ member_chore_submission_enabled: enabled }),
-  });
-}
-
 export async function apiCreateChore(
   token: string,
   groupId: string,
@@ -94,5 +73,28 @@ export async function apiCreateChore(
     headers: { Authorization: `Bearer ${token}` },
     // amount is a Money object now (currency must match the group's, V3-1.1).
     body: JSON.stringify({ name, amount: { currency, value: amountMinor } }),
+  });
+}
+
+/**
+ * Admin creates a pre-approved `active` loan for a member (openapi `createLoan`,
+ * admin path — `user_id` is required). This lets the golden path assert the loan
+ * leg within the shadow-member journey without the member claiming first: shadow
+ * users cannot authenticate, so a member-*requested* loan is impossible pre-claim.
+ * The active loan's start_period is next calendar month, so its first EMI does not
+ * post in the current statement (golden-path §1.3 payable arithmetic).
+ */
+export async function apiCreateLoan(
+  token: string,
+  groupId: string,
+  userId: string,
+  principalMinor: number,
+  installments: number,
+  currency: Currency = 'INR',
+): Promise<{ id: string }> {
+  return request(`/groups/${groupId}/loans`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ user_id: userId, principal: { currency, value: principalMinor }, installments }),
   });
 }

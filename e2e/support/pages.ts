@@ -194,17 +194,6 @@ export function autoAcceptDialogs(page: Page): void {
 
 // ─── Ledger helpers ───────────────────────────────────────────────────────────
 
-/** Member logs a chore (member Overview → "Log a chore" → pick first chore → Save). */
-export async function memberLogChore(page: Page): Promise<void> {
-  await page.getByTestId('member-log-chore').click();
-  const picker = page.getByTestId('entry-chore-picker');
-  await expect(picker).toBeVisible({ timeout: 10_000 });
-  // Wait for chore options to populate, then pick the first (sets selectedChoreId).
-  await expect(picker.locator('option')).not.toHaveCount(0, { timeout: 10_000 });
-  await picker.selectOption({ index: 0 });
-  await page.getByTestId('entry-submit').click();
-}
-
 /**
  * Head adds a settlement/adjustment entry from a member's detail screen
  * (member-detail add-entry is head mode with a fixed user → auto-approved).
@@ -261,28 +250,6 @@ export async function headDeleteEntry(page: Page, entryId?: string): Promise<voi
 export async function openLoanDetail(page: Page, loanId: string): Promise<void> {
   await page.getByTestId(`loan-card-${loanId}`).click();
   await expect(page.getByTestId('loan-detail-root')).toBeVisible({ timeout: 15_000 });
-}
-
-/**
- * Approve the first pending ledger row. Captures that row's exact testID before
- * clicking so the "disappeared" assertion is not confused by other pending rows
- * that still carry an approve control.
- */
-export async function approveFirstPending(page: Page): Promise<void> {
-  const btn = page.getByTestId(/^ledger-approve-/).first();
-  await expect(btn).toBeVisible({ timeout: 15_000 });
-  const tid = await btn.getAttribute('data-testid');
-  await btn.click();
-  await expect(page.getByTestId(tid!)).toHaveCount(0, { timeout: 10_000 });
-}
-
-/** Reject the first pending ledger row (same exact-testID capture as approve). */
-export async function rejectFirstPending(page: Page): Promise<void> {
-  const btn = page.getByTestId(/^ledger-reject-/).first();
-  await expect(btn).toBeVisible({ timeout: 15_000 });
-  const tid = await btn.getAttribute('data-testid');
-  await btn.click();
-  await expect(page.getByTestId(tid!)).toHaveCount(0, { timeout: 10_000 });
 }
 
 // ─── Statement helpers (V3-4.2) ───────────────────────────────────────────────
