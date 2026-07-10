@@ -198,6 +198,11 @@ export default function MemberDetailScreen() {
         {/* Balance header */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>{name ? `${name}'s balance` : 'Balance'}</Text>
+          {viewedMember?.status === 'shadow' && (
+            <View testID="member-detail-shadow-badge" style={styles.shadowBadge}>
+              <StatusBadge label="Not registered yet" tone="neutral" />
+            </View>
+          )}
           <AmountText
             minorUnits={balValue}
             currency={balCurrency}
@@ -322,6 +327,9 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: theme.fontSize.sm,
     color: theme.color.textSecondary,
+    marginBottom: theme.spacing.sm,
+  },
+  shadowBadge: {
     marginBottom: theme.spacing.sm,
   },
   summaryHint: {

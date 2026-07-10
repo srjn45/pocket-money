@@ -1,5 +1,16 @@
 import { test, expect, type BrowserContext } from '@playwright/test';
-import { uniqueEmail, registerUser, createGroup, inviteAndCaptureToken, openTab } from '../support/pages';
+import {
+  uniqueEmail,
+  registerUser,
+  createGroup,
+  addMemberByEmail,
+  groupIdFromUrl,
+  goToRegister,
+  fillRegisterForm,
+  submitRegister,
+  headAddEntry,
+  openTab,
+} from '../support/pages';
 
 // T1: Register → auto-login → lands on dashboard (no separate login step).
 test('T1: register auto-logs-in and lands on dashboard', async ({ page }) => {
@@ -10,14 +21,16 @@ test('T1: register auto-logs-in and lands on dashboard', async ({ page }) => {
   expect(page.url()).not.toContain('/login');
 });
 
-// T2: Create group → invite button renders the overview.
-test('T2: create group shows overview with invite button', async ({ page }) => {
+// T2: Create group → add-member button renders the overview (invite hidden by
+// the default build flag, D8 — add-by-email is the sole visible membership path).
+test('T2: create group shows overview with add-member button', async ({ page }) => {
   const email = uniqueEmail();
   const groupName = `Family-${Date.now()}`;
   await registerUser(page, 'Head User', email);
   await createGroup(page, groupName);
   await expect(page.getByTestId('group-overview-root')).toBeVisible();
-  await expect(page.getByTestId('group-invite-button')).toBeVisible();
+  await expect(page.getByTestId('group-add-member-button')).toBeVisible();
+  await expect(page.getByTestId('group-invite-button')).toHaveCount(0);
 });
 
 // T2-EUR: Create a group in EUR via the currency picker → its balance renders
@@ -39,45 +52,48 @@ test('T2-EUR: create EUR group renders euro balance on dashboard', async ({ page
   await expect(page.getByText(/€0\.00/).first()).toBeVisible({ timeout: 10_000 });
 });
 
-// T3: Register via invite → lands inside the group (member view).
-test('T3: invite link → register → lands inside group', async ({ page, browser }) => {
-  // ── Head registers and creates a group ────────────────────────────────────
-  const headEmail = uniqueEmail();
-  await registerUser(page, 'Head T3', headEmail);
-  await createGroup(page, `InviteFamily-${Date.now()}`);
+// T3: the §8 golden path — admin adds an unregistered email (shadow created) →
+// shadow badge shows → admin bookkeeps against the shadow → the user registers
+// with that email (claim) → member sees their group and only their own rows.
+test('T3: add-by-email → shadow badge → bookkeep → claim → member sees own rows', async ({ page, browser }) => {
+  // 1. Admin registers and creates a group.
+  const adminEmail = uniqueEmail();
+  await registerUser(page, 'Head T3', adminEmail);
+  await createGroup(page, `AddByEmailFamily-${Date.now()}`);
+  const gid = groupIdFromUrl(page);
 
-  // ── Head generates an invite token (captured from the API response) ───────
-  const token = await inviteAndCaptureToken(page);
+  // 2. Admin adds an unregistered email → shadow member row appears with badge.
+  const memberEmail = uniqueEmail();
+  await addMemberByEmail(page, memberEmail, 'Member T3');
+  await expect(page.getByTestId(/^member-shadow-badge-/).first()).toBeVisible({ timeout: 10_000 });
 
-  // ── Second context: member navigates to the invite link ───────────────────
+  // 3. Admin bookkeeps against the shadow: open the member card → detail →
+  //    credit adjustment of ₹50 (proves shadow bookkeeping works — §3.1).
+  const memberCard = page.getByTestId(/^member-card-/).first();
+  await expect(memberCard).toBeVisible({ timeout: 10_000 });
+  await memberCard.click();
+  await expect(page.getByTestId('member-detail-root')).toBeVisible({ timeout: 10_000 });
+  await headAddEntry(page, 'adjustment', '50', 'credit');
+  await expect(page.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
+
+  // 4. Member context: register with the SAME email → claims the shadow →
+  //    auto-login lands on the dashboard.
   const memberCtx: BrowserContext = await browser.newContext();
   const memberPage = await memberCtx.newPage();
 
   try {
-    const webBase = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
-    await memberPage.goto(`${webBase}/invite?token=${token}`);
+    await goToRegister(memberPage);
+    await fillRegisterForm(memberPage, 'Member T3', memberEmail, 'member123!');
+    await submitRegister(memberPage);
+    await expect(memberPage.getByTestId('dashboard-root')).toBeVisible({ timeout: 20_000 });
 
-    // invite.tsx: no auth → saves token → redirects to /login.
-    await expect(memberPage.getByTestId('login-submit')).toBeVisible({ timeout: 15_000 });
-
-    // Navigate to register form.
-    await memberPage.getByTestId('login-link-register').click();
-    await expect(memberPage.getByTestId('register-submit')).toBeVisible({ timeout: 10_000 });
-
-    const memberEmail = uniqueEmail();
-    await memberPage.getByTestId('register-name').fill('Member T3');
-    await memberPage.getByTestId('register-email').fill(memberEmail);
-    await memberPage.getByTestId('register-password').fill('member123!');
-    await memberPage.getByTestId('register-confirm').fill('member123!');
-    await memberPage.getByTestId('register-submit').click();
-
-    // After registration the pending invite token is consumed → member lands
-    // inside the group (group-overview-root visible as the member view).
+    // 5. Member opens the group by URL → member view: leave button visible,
+    //    invite button hidden, and their own balance reflects the ₹50 booked.
+    await memberPage.goto(`/groups/${gid}`);
     await expect(memberPage.getByTestId('group-overview-root')).toBeVisible({ timeout: 20_000 });
-
-    // Member view should show leave button, not invite button.
     await expect(memberPage.getByTestId('group-leave-button')).toBeVisible();
-    await expect(memberPage.getByTestId('group-invite-button')).not.toBeVisible();
+    await expect(memberPage.getByTestId('group-invite-button')).toHaveCount(0);
+    await expect(memberPage.getByText(/₹50\.00/).first()).toBeVisible({ timeout: 10_000 });
   } finally {
     await memberCtx.close();
   }

@@ -20,6 +20,11 @@ export function MemberCard({ balance, member, pendingCount, onPress }: MemberCar
         <Avatar name={member.name} id={member.user_id} size={44} />
         <View style={styles.nameCol}>
           <Text style={styles.name}>{member.name}</Text>
+          {member.status === 'shadow' && (
+            <View testID={`member-shadow-badge-${member.user_id}`}>
+              <StatusBadge label="Not registered" tone="neutral" />
+            </View>
+          )}
           {pendingCount > 0 && (
             <StatusBadge label={`${pendingCount} pending`} tone="warning" />
           )}

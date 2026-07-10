@@ -98,6 +98,12 @@ export const groupsApi = {
 
   getMembers: (id: string) => request<Member[]>(`/groups/${id}/members`),
 
+  addMember: (id: string, data: { email: string; name: string }) =>
+    request<Member>(`/groups/${id}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   createInvite: (id: string, expiresInDays?: number) =>
     request<InviteResponse>(`/groups/${id}/invite`, {
       method: 'POST',

@@ -24,3 +24,15 @@ export function useJoinGroup() {
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.groups() }),
   });
 }
+
+export function useAddMember(groupId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { email: string; name: string }) =>
+      groupsApi.addMember(groupId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.group(groupId) });   // refresh member list
+      qc.invalidateQueries({ queryKey: qk.balance(groupId) }); // new member's balance row
+    },
+  });
+}

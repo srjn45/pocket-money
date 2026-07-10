@@ -226,7 +226,7 @@ export default function ChoresScreen() {
             title="No chores yet"
             subtitle={isHead
               ? 'Add your first chore — the amount your family earns for doing it'
-              : "Your family head hasn't added any chores yet — check back soon"}
+              : "Your family admin hasn't added any chores yet — check back soon"}
           />
         </View>
       ) : (

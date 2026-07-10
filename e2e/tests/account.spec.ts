@@ -1,38 +1,15 @@
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
   uniqueEmail,
   registerUser,
   createGroup,
-  inviteAndCaptureToken,
+  addMemberAndClaim,
+  groupIdFromUrl,
   openTab,
   reloadInto,
   autoAcceptDialogs,
   headAddEntry,
 } from '../support/pages';
-
-const WEB_BASE = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
-
-async function joinGroupAsMember(
-  browser: Browser,
-  token: string,
-  name: string,
-  password = 'member123!',
-): Promise<{ ctx: BrowserContext; page: Page; email: string }> {
-  const ctx = await browser.newContext();
-  const pg = await ctx.newPage();
-  await pg.goto(`${WEB_BASE}/invite?token=${token}`);
-  await expect(pg.getByTestId('login-submit')).toBeVisible({ timeout: 15_000 });
-  await pg.getByTestId('login-link-register').click();
-  await expect(pg.getByTestId('register-submit')).toBeVisible({ timeout: 10_000 });
-  const email = uniqueEmail();
-  await pg.getByTestId('register-name').fill(name);
-  await pg.getByTestId('register-email').fill(email);
-  await pg.getByTestId('register-password').fill(password);
-  await pg.getByTestId('register-confirm').fill(password);
-  await pg.getByTestId('register-submit').click();
-  await expect(pg.getByTestId('group-overview-root')).toBeVisible({ timeout: 20_000 });
-  return { ctx, page: pg, email };
-}
 
 // T-CP: change password. A wrong current password returns 403 and MUST NOT log
 // the user out (the fetch client force-logs-out only on 401). A correct change
@@ -84,8 +61,7 @@ test('T-LEAVE: leave blocked by balance (409) → settle → leave succeeds', as
   await registerUser(page, 'Head Leave', uniqueEmail());
   await createGroup(page, `LeaveFam-${Date.now()}`);
 
-  const token = await inviteAndCaptureToken(page);
-  const { ctx: memberCtx, page: memberPage } = await joinGroupAsMember(browser, token, 'Member Leave');
+  const { ctx: memberCtx, page: memberPage } = await addMemberAndClaim(page, browser, groupIdFromUrl(page), 'Member Leave');
   autoAcceptDialogs(memberPage); // window.confirm() on web — auto-accept the leave prompt
 
   try {

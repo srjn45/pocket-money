@@ -50,6 +50,9 @@ summaryTest('T-RO-2: head sees both members in group overview', async ({ page })
 
   await expect(page.getByText(SEED.AARAV.name)).toBeVisible();
   await expect(page.getByText(SEED.DIYA.name)).toBeVisible();
+
+  // Add-by-email is the visible membership path for the admin (D8).
+  await expect(page.getByTestId('group-add-member-button')).toBeVisible();
 });
 
 // T-RO-3: Aarav's member detail shows an active loan.
