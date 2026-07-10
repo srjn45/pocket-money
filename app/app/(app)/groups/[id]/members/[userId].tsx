@@ -246,6 +246,7 @@ export default function MemberDetailScreen() {
           entries={entries}
           chores={choresQuery.data ?? []}
           members={members}
+          loans={memberLoans}
           isHead={true}
           groupId={id ?? ''}
           currency={currency}
