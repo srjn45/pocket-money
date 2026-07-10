@@ -11,7 +11,7 @@ import {
   approveFirstPending,
   rejectFirstPending,
 } from '../support/pages';
-import { apiLogin, apiCreateChore } from '../support/api';
+import { apiLogin, apiCreateChore, apiSetChoreSubmission } from '../support/api';
 
 // T4: member logs chores (pending) → head approves one and rejects the other.
 // Head-created entries auto-approve, so a *pending* entry (with approve/reject
@@ -26,6 +26,9 @@ test('T4: member logs chores; head approves one and rejects another', async ({ p
   // Seed an earnable chore via the API so the member has something to log.
   const { token: headToken } = await apiLogin(headEmail, headPass);
   await apiCreateChore(headToken, groupId, 'Wash dishes', 2000);
+  // Member chore submission is gated off by default (D2, V3-3.2) — the admin
+  // enables it so members can log chores for approval, the flow under test.
+  await apiSetChoreSubmission(headToken, groupId, true);
 
   const { ctx: memberCtx, page: memberPage } = await addMemberAndClaim(page, browser, groupId, 'Member T4');
   autoAcceptDialogs(page); // reject shows a window.confirm() on web

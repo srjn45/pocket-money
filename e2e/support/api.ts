@@ -68,6 +68,20 @@ export async function apiApproveEntry(token: string, groupId: string, entryId: s
   });
 }
 
+// Toggle a group's member chore-submission flag (D2, default off since V3-3.2).
+// Member chore logging is inert until an admin enables this.
+export async function apiSetChoreSubmission(
+  token: string,
+  groupId: string,
+  enabled: boolean,
+): Promise<unknown> {
+  return request(`/groups/${groupId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ member_chore_submission_enabled: enabled }),
+  });
+}
+
 export async function apiCreateChore(
   token: string,
   groupId: string,
