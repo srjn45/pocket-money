@@ -78,12 +78,41 @@ func (r *GroupRepo) GetCurrency(ctx context.Context, groupID uuid.UUID) (string,
 	return currency, nil
 }
 
+// GetChoreSubmissionEnabled returns just the group's member_chore_submission_enabled
+// flag (D2). Cheap getter (like GetCurrency) for the ledger handler's flag gate.
+func (r *GroupRepo) GetChoreSubmissionEnabled(ctx context.Context, groupID uuid.UUID) (bool, error) {
+	var enabled bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT member_chore_submission_enabled FROM groups WHERE id = $1`, groupID).Scan(&enabled)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("failed to get chore submission flag: %w", err)
+	}
+	return enabled, nil
+}
+
+// SetChoreSubmissionEnabled updates the group's member_chore_submission_enabled
+// flag (D2 admin toggle, §3.2). ErrNotFound when the group does not exist.
+func (r *GroupRepo) SetChoreSubmissionEnabled(ctx context.Context, groupID uuid.UUID, enabled bool) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE groups SET member_chore_submission_enabled = $2 WHERE id = $1`, groupID, enabled)
+	if err != nil {
+		return fmt.Errorf("failed to set chore submission flag: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // GetByID retrieves a group by ID
 func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, error) {
 	group := &models.Group{}
 
 	query := `
-		SELECT id, name, admin_user_id, currency, created_at
+		SELECT id, name, admin_user_id, currency, member_chore_submission_enabled, created_at
 		FROM groups
 		WHERE id = $1
 	`
@@ -93,6 +122,7 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 		&group.Name,
 		&group.AdminUserID,
 		&group.Currency,
+		&group.MemberChoreSubmissionEnabled,
 		&group.CreatedAt,
 	)
 	if err != nil {

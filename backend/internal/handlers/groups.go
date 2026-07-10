@@ -72,11 +72,18 @@ type CreateGroupRequest struct {
 
 // GroupResponse represents a group in API responses
 type GroupResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	AdminUserID uuid.UUID `json:"admin_user_id"`
-	Currency    string    `json:"currency"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                           uuid.UUID `json:"id"`
+	Name                         string    `json:"name"`
+	AdminUserID                  uuid.UUID `json:"admin_user_id"`
+	Currency                     string    `json:"currency"`
+	MemberChoreSubmissionEnabled bool      `json:"member_chore_submission_enabled"` // D2 flag (V3-3.2 §3)
+	CreatedAt                    time.Time `json:"created_at"`
+}
+
+// UpdateGroupRequest is the body for PATCH /api/v1/groups/:id (V3-3.2 §3.2). The
+// D2 flag is the only editable group field in this WP; name/currency are immutable.
+type UpdateGroupRequest struct {
+	MemberChoreSubmissionEnabled bool `json:"member_chore_submission_enabled"`
 }
 
 // GroupSummaryResponse is one dashboard-listing row (see openapi GroupSummaryResponse).
@@ -109,13 +116,14 @@ type AddMemberRequest struct {
 
 // GroupDetailResponse represents detailed group information
 type GroupDetailResponse struct {
-	ID          uuid.UUID        `json:"id"`
-	Name        string           `json:"name"`
-	AdminUserID uuid.UUID        `json:"admin_user_id"`
-	Currency    string           `json:"currency"`
-	CreatedAt   time.Time        `json:"created_at"`
-	Members     []MemberResponse `json:"members"`
-	ChoresCount int              `json:"chores_count"`
+	ID                           uuid.UUID        `json:"id"`
+	Name                         string           `json:"name"`
+	AdminUserID                  uuid.UUID        `json:"admin_user_id"`
+	Currency                     string           `json:"currency"`
+	MemberChoreSubmissionEnabled bool             `json:"member_chore_submission_enabled"` // D2 flag (V3-3.2 §3)
+	CreatedAt                    time.Time        `json:"created_at"`
+	Members                      []MemberResponse `json:"members"`
+	ChoresCount                  int              `json:"chores_count"`
 }
 
 // CreateGroup handles group creation
@@ -168,11 +176,12 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, GroupResponse{
-		ID:          group.ID,
-		Name:        group.Name,
-		AdminUserID: group.AdminUserID,
-		Currency:    group.Currency,
-		CreatedAt:   group.CreatedAt,
+		ID:                           group.ID,
+		Name:                         group.Name,
+		AdminUserID:                  group.AdminUserID,
+		Currency:                     group.Currency,
+		MemberChoreSubmissionEnabled: group.MemberChoreSubmissionEnabled, // false on a fresh group (D2 default OFF)
+		CreatedAt:                    group.CreatedAt,
 	})
 }
 
@@ -290,13 +299,14 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, GroupDetailResponse{
-		ID:          group.ID,
-		Name:        group.Name,
-		AdminUserID: group.AdminUserID,
-		Currency:    group.Currency,
-		CreatedAt:   group.CreatedAt,
-		Members:     memberResponses,
-		ChoresCount: choresCount,
+		ID:                           group.ID,
+		Name:                         group.Name,
+		AdminUserID:                  group.AdminUserID,
+		Currency:                     group.Currency,
+		MemberChoreSubmissionEnabled: group.MemberChoreSubmissionEnabled,
+		CreatedAt:                    group.CreatedAt,
+		Members:                      memberResponses,
+		ChoresCount:                  choresCount,
 	})
 }
 
@@ -649,11 +659,78 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, GroupResponse{
-		ID:          group.ID,
-		Name:        group.Name,
-		AdminUserID: group.AdminUserID,
-		Currency:    group.Currency,
-		CreatedAt:   group.CreatedAt,
+		ID:                           group.ID,
+		Name:                         group.Name,
+		AdminUserID:                  group.AdminUserID,
+		Currency:                     group.Currency,
+		MemberChoreSubmissionEnabled: group.MemberChoreSubmissionEnabled,
+		CreatedAt:                    group.CreatedAt,
+	})
+}
+
+// UpdateGroup toggles the group's member_chore_submission_enabled flag (D2,
+// §3.2). Admin-only. It is the API path by which an admin turns member chore
+// submission ON/OFF; name and currency remain immutable in this WP.
+// PATCH /api/v1/groups/:id
+func (h *GroupHandler) UpdateGroup(c *gin.Context) {
+	userIDStr, exists := auth.GetUserID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID"})
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group ID"})
+		return
+	}
+
+	member, err := h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can update the group"})
+		return
+	}
+
+	var req UpdateGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.groupRepo.SetChoreSubmissionEnabled(c.Request.Context(), groupID, req.MemberChoreSubmissionEnabled); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update group"})
+		return
+	}
+
+	group, err := h.groupRepo.GetByID(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group"})
+		return
+	}
+
+	c.JSON(http.StatusOK, GroupResponse{
+		ID:                           group.ID,
+		Name:                         group.Name,
+		AdminUserID:                  group.AdminUserID,
+		Currency:                     group.Currency,
+		MemberChoreSubmissionEnabled: group.MemberChoreSubmissionEnabled,
+		CreatedAt:                    group.CreatedAt,
 	})
 }
 

@@ -107,6 +107,64 @@ func (r *LedgerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.LedgerE
 	return entry, nil
 }
 
+// GetForUpdate re-reads a ledger entry FOR UPDATE on the caller's Querier (tx).
+// It both locks the row for the edit/delete and is the snapshot source for the
+// entry_audit old_row (V3-3.2 §1.4a). ErrNotFound when the row is gone (lost race).
+func (r *LedgerRepo) GetForUpdate(ctx context.Context, q Querier, id uuid.UUID) (*models.LedgerEntry, error) {
+	query := `SELECT ` + selectLedgerColumns + ` FROM ledger_entries WHERE id = $1 FOR UPDATE`
+
+	entry, err := scanEntry(q.QueryRow(ctx, query, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get ledger entry for update: %w", err)
+	}
+	return entry, nil
+}
+
+// UpdateManualEntry mutates only the editable fields of a manual entry (V3-3.2
+// §1.2): amount (always), direction (only when non-nil — adjustments), and note
+// (full-replace: a nil note clears it to NULL). entry_type/user_id/chore_id/
+// created_at/period/status stay immutable, which keeps the edited entry in the
+// same effMonth (invariant-safe, §5). Runs on the caller's Querier so it joins
+// the correction tx alongside the audit insert.
+func (r *LedgerRepo) UpdateManualEntry(ctx context.Context, q Querier, id uuid.UUID,
+	amount int64, direction *models.LedgerDirection, note *string) (*models.LedgerEntry, error) {
+
+	query := `
+		UPDATE ledger_entries
+		SET amount = $2,
+		    direction = COALESCE($3::ledger_direction, direction),
+		    note = $4
+		WHERE id = $1
+		RETURNING ` + selectLedgerColumns
+
+	entry, err := scanEntry(q.QueryRow(ctx, query, id, amount, direction, note))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to update manual ledger entry: %w", err)
+	}
+	return entry, nil
+}
+
+// DeleteEntry hard-deletes a ledger entry (V3-3.2 §0). The entry_audit row's
+// entry_id FK is ON DELETE SET NULL, so the audit snapshot survives the delete.
+// Runs on the caller's Querier so it joins the correction tx after the audit
+// insert. ErrNotFound when the row is already gone.
+func (r *LedgerRepo) DeleteEntry(ctx context.Context, q Querier, id uuid.UUID) error {
+	tag, err := q.Exec(ctx, `DELETE FROM ledger_entries WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete ledger entry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListForGroup retrieves all ledger entries for a group with optional status filter
 func (r *LedgerRepo) ListForGroup(ctx context.Context, groupID uuid.UUID, status *models.LedgerStatus) ([]*models.LedgerEntry, error) {
 	return r.ListForGroupWithUser(ctx, groupID, status, nil, nil, nil)

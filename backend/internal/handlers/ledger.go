@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/srjn45/pocket-money/backend/internal/auth"
 	"github.com/srjn45/pocket-money/backend/internal/db"
@@ -14,21 +15,32 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/posting"
 )
 
+// errChoreSubmissionDisabled is the D2 flag-gate message returned (403) by the
+// three member chore-submission endpoints when member_chore_submission_enabled is
+// OFF (V3-3.2 §3.1).
+const errChoreSubmissionDisabled = "member chore submission is disabled for this group"
+
 // LedgerHandler handles ledger-related requests
 type LedgerHandler struct {
 	ledgerRepo *db.LedgerRepo
 	groupRepo  *db.GroupRepo
 	choreRepo  *db.ChoreRepo
 	postingSvc *posting.Service
+	pool       *pgxpool.Pool // edit/delete correction transaction (V3-3.2 §1.4)
+	auditRepo  *db.AuditRepo // entry_audit writer for corrections (V3-3.2 §2)
 }
 
-// NewLedgerHandler creates a new LedgerHandler
-func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service) *LedgerHandler {
+// NewLedgerHandler creates a new LedgerHandler. pool + auditRepo back the
+// edit/delete correction transaction (V3-3.2 §1.4/§2); they may be nil in tests
+// that never exercise the correction endpoints.
+func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service, pool *pgxpool.Pool, auditRepo *db.AuditRepo) *LedgerHandler {
 	return &LedgerHandler{
 		ledgerRepo: ledgerRepo,
 		groupRepo:  groupRepo,
 		choreRepo:  choreRepo,
 		postingSvc: postingSvc,
+		pool:       pool,
+		auditRepo:  auditRepo,
 	}
 }
 
@@ -331,6 +343,18 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 			decidedBy = &userID
 			decidedAt = &now
 		} else {
+			// D2 gate (§3.1): a member may submit a chore for approval only when the
+			// group has member_chore_submission_enabled ON. Checked before creating
+			// the pending entry. Admin-created chore entries are unaffected.
+			enabled, err := h.groupRepo.GetChoreSubmissionEnabled(c.Request.Context(), groupID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check group config"})
+				return
+			}
+			if !enabled {
+				c.JSON(http.StatusForbidden, gin.H{"error": errChoreSubmissionDisabled})
+				return
+			}
 			targetUserID = userID
 			status = models.StatusPendingApproval
 		}
@@ -477,6 +501,17 @@ func (h *LedgerHandler) ApproveLedger(c *gin.Context) {
 		return
 	}
 
+	// D2 gate (§3.1): approving a member chore submission requires the flag ON.
+	enabled, err := h.groupRepo.GetChoreSubmissionEnabled(c.Request.Context(), entry.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check group config"})
+		return
+	}
+	if !enabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": errChoreSubmissionDisabled})
+		return
+	}
+
 	if entry.Status != models.StatusPendingApproval {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "entry is not pending approval"})
 		return
@@ -541,6 +576,17 @@ func (h *LedgerHandler) RejectLedger(c *gin.Context) {
 
 	if member.Role != models.RoleAdmin {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can reject entries"})
+		return
+	}
+
+	// D2 gate (§3.1): rejecting a member chore submission requires the flag ON.
+	enabled, err := h.groupRepo.GetChoreSubmissionEnabled(c.Request.Context(), entry.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check group config"})
+		return
+	}
+	if !enabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": errChoreSubmissionDisabled})
 		return
 	}
 

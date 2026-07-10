@@ -86,6 +86,14 @@ const (
 	NotificationShadowClaimed = "shadow_claimed" // N-2
 )
 
+// Audit actions recorded in entry_audit for manual ledger-entry corrections
+// (V3-3.2 §2). One row is written, capturing the prior values, before every
+// edit and delete.
+const (
+	AuditActionEdit   = "edit"
+	AuditActionDelete = "delete"
+)
+
 // User represents a user in the system
 type User struct {
 	ID           uuid.UUID  `json:"id"`
@@ -101,11 +109,12 @@ type User struct {
 
 // Group represents a family or group
 type Group struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	AdminUserID uuid.UUID `json:"admin_user_id"`
-	Currency    string    `json:"currency"` // immutable ISO-4217 code (D7)
-	CreatedAt   time.Time `json:"created_at"`
+	ID                           uuid.UUID `json:"id"`
+	Name                         string    `json:"name"`
+	AdminUserID                  uuid.UUID `json:"admin_user_id"`
+	Currency                     string    `json:"currency"`                        // immutable ISO-4217 code (D7)
+	MemberChoreSubmissionEnabled bool      `json:"member_chore_submission_enabled"` // D2 gate (V3-3.2 §3); default false
+	CreatedAt                    time.Time `json:"created_at"`
 }
 
 // GroupMember represents a user's membership in a group
