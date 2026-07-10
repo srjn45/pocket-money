@@ -15,6 +15,8 @@ import {
   TextField,
   EmptyState,
   LoadingSpinner,
+  ScreenContainer,
+  GroupSectionTabs,
   useToast,
 } from '../../../../src/components';
 import { parseMoneyToMinorUnits, formatMinor, currencySymbol } from '../../../../src/money';
@@ -201,7 +203,8 @@ export default function ChoresScreen() {
   );
 
   return (
-    <View style={styles.container} testID="chores-root">
+    <ScreenContainer style={styles.container} testID="chores-root">
+      <GroupSectionTabs groupId={id ?? ''} active="chores" />
       {loadError ? (
         <Text style={styles.loadError}>{loadError}</Text>
       ) : null}
@@ -269,7 +272,7 @@ export default function ChoresScreen() {
           error={amountError || undefined}
         />
       </Sheet>
-    </View>
+    </ScreenContainer>
   );
 }
 

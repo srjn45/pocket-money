@@ -19,7 +19,10 @@ export default function AppLayout() {
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: true }}>
+    // headerShown:false → the (app) Tabs is the SOLE nav chrome (bottom bar on
+    // native / top nav on web) with NO tab-level header. Each screen owns its one
+    // meaningful header in-body (Dashboard/Profile) or via its own Stack (groups).
+    <Tabs screenOptions={{ headerShown: false }}>
       <Tabs.Screen
         name="index"
         options={{
@@ -31,7 +34,9 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="groups"
-        options={{ href: null }}
+        // headerShown:false kills the leaked lowercase "groups" folder-name header
+        // that the outer Tabs otherwise derived for this hidden route.
+        options={{ href: null, headerShown: false }}
       />
       <Tabs.Screen
         name="profile"

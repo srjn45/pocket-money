@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorMessage,
   LoadingSpinner,
+  ScreenContainer,
   useToast,
 } from '../../src/components';
 import { theme } from '../../src/theme';
@@ -125,7 +126,7 @@ export default function DashboardScreen() {
   ].filter(s => s.data.length > 0);
 
   return (
-    <View style={styles.container} testID="dashboard-root">
+    <ScreenContainer style={styles.container} testID="dashboard-root">
       <View style={styles.header}>
         <Text style={styles.welcome}>Welcome, {user?.name || 'User'}!</Text>
       </View>
@@ -209,7 +210,7 @@ export default function DashboardScreen() {
           />
         </Sheet>
       )}
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -225,8 +226,8 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.color.border,
   },
   welcome: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.bold,
     color: theme.color.text,
   },
   actions: {
@@ -235,8 +236,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.semibold,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
     color: theme.color.text,

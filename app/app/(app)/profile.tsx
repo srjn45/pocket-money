@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '../../src/auth-context';
-import { Card, Avatar, Button, Sheet, TextField, useToast } from '../../src/components';
+import { Card, Avatar, Button, Sheet, TextField, ScreenContainer, useToast } from '../../src/components';
 import { useChangePassword } from '../../src/hooks/useHygiene';
 import { theme } from '../../src/theme';
 
@@ -62,7 +62,9 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.container} testID="profile-root">
+    <ScreenContainer style={styles.container} testID="profile-root">
+      {/* In-body title — the one meaningful header now that the tab header is off. */}
+      <Text style={styles.title}>Profile</Text>
       <Card style={styles.profileCard}>
         <Avatar name={user?.name ?? 'User'} id={user?.id ?? ''} size={80} />
         <Text style={styles.name}>{user?.name || 'User'}</Text>
@@ -126,7 +128,7 @@ export default function ProfileScreen() {
           style={styles.cancelButton}
         />
       </Sheet>
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -136,18 +138,24 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.background,
     padding: theme.spacing.lg,
   },
+  title: {
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.color.text,
+    marginBottom: theme.spacing.lg,
+  },
   profileCard: {
     alignItems: 'center',
     padding: theme.spacing.xl,
   },
   name: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: theme.fontSize.xl,
+    fontWeight: theme.fontWeight.bold,
     color: theme.color.text,
     marginTop: theme.spacing.lg,
   },
   email: {
-    fontSize: 16,
+    fontSize: theme.fontSize.md,
     color: theme.color.textSecondary,
     marginTop: theme.spacing.xs,
   },

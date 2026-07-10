@@ -89,6 +89,7 @@ const styles = StyleSheet.create({
   sm: {
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
+    minHeight: 44, // ≥44pt touch target (§4.4)
   },
   fullWidth: {
     alignSelf: 'stretch',

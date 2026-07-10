@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FlatList, Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../../../../src/auth-context';
 import { useGroup } from '../../../../src/hooks/useGroup';
@@ -29,6 +30,8 @@ import {
   EmptyState,
   ErrorMessage,
   LoadingSpinner,
+  ScreenContainer,
+  GroupSectionTabs,
   useToast,
 } from '../../../../src/components';
 
@@ -36,6 +39,7 @@ export default function GroupOverviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets(); // native: home-indicator inset; web: 0
   const { show: showToast } = useToast();
 
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -145,7 +149,8 @@ export default function GroupOverviewScreen() {
     const memberBalanceMap = new Map<string, Balance>(balances.map(b => [b.user_id, b]));
 
     return (
-      <View style={styles.screen} testID="group-overview-root">
+      <ScreenContainer style={styles.screen} testID="group-overview-root">
+        <GroupSectionTabs groupId={id ?? ''} active="overview" />
         <View style={styles.header}>
           <Text style={styles.memberCount}>
             {nonHeadMembers.length} {nonHeadMembers.length === 1 ? 'member' : 'members'}
@@ -225,7 +230,7 @@ export default function GroupOverviewScreen() {
             balanceQuery.refetch();
             pendingLedgerQuery.refetch();
           }}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: theme.spacing.lg + insets.bottom }]}
         />
 
         <AddEntrySheet
@@ -257,7 +262,7 @@ export default function GroupOverviewScreen() {
             />
           </Sheet>
         )}
-      </View>
+      </ScreenContainer>
     );
   }
 
@@ -265,7 +270,8 @@ export default function GroupOverviewScreen() {
   const myEntries = myLedgerQuery.data ?? [];
 
   return (
-    <View style={styles.screen} testID="group-overview-root">
+    <ScreenContainer style={styles.screen} testID="group-overview-root">
+      <GroupSectionTabs groupId={id ?? ''} active="overview" />
       <ScrollView contentContainerStyle={styles.memberScroll}>
         {/* Balance summary header */}
         <View style={styles.summaryCard}>
@@ -336,7 +342,7 @@ export default function GroupOverviewScreen() {
         mode="member"
         selfUserId={user?.id}
       />
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -354,13 +360,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: theme.spacing.lg,
     backgroundColor: theme.color.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.color.border,
   },
   memberCount: {
-    fontSize: 15,
+    fontSize: theme.fontSize.sm,
     color: theme.color.textSecondary,
   },
   headerActions: {
@@ -369,34 +375,34 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   addButtonRow: {
-    padding: 16,
+    padding: theme.spacing.lg,
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
     color: theme.color.textSecondary,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
   },
   listContent: {
-    paddingBottom: 16,
+    paddingBottom: theme.spacing.lg,
   },
   summaryCard: {
     backgroundColor: theme.color.surface,
-    padding: 24,
+    padding: theme.spacing.xl,
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: theme.color.border,
   },
   summaryLabel: {
-    fontSize: 15,
+    fontSize: theme.fontSize.sm,
     color: theme.color.textSecondary,
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
   },
   summaryHint: {
-    fontSize: 13,
+    fontSize: theme.fontSize.xs,
     color: theme.color.textSecondary,
-    marginTop: 4,
+    marginTop: theme.spacing.xs,
   },
   memberScroll: {
     flexGrow: 0,

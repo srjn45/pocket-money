@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable, ScrollView } from 'react-native';
 import { Link } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
-import { Button, TextField } from '../../src/components';
+import { Button, TextField, ScreenContainer } from '../../src/components';
 import { theme } from '../../src/theme';
 
 const isValidEmail = (email: string) => {
@@ -58,8 +58,9 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Create Account</Text>
+      <ScreenContainer>
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Join Pocket Money today</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -110,7 +111,8 @@ export default function RegisterScreen() {
             </Pressable>
           </Link>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </ScreenContainer>
     </KeyboardAvoidingView>
   );
 }

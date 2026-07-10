@@ -4,7 +4,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '../src/auth-context';
 import { setPendingInviteToken, clearPendingInviteToken } from '../src/storage';
 import { useJoinGroup } from '../src/hooks/useGroups';
-import { LoadingSpinner, ErrorMessage, Button } from '../src/components';
+import { LoadingSpinner, ErrorMessage, Button, ScreenContainer } from '../src/components';
 import { theme } from '../src/theme';
 
 type ErrorKind = 'invalid' | 'already-member' | 'network';
@@ -78,7 +78,7 @@ export default function InviteScreen() {
 
   if (error) {
     return (
-      <View style={styles.container} testID="invite-error">
+      <ScreenContainer style={styles.container} testID="invite-error">
         <ErrorMessage message={error} />
         {errorKind === 'network' ? (
           <Button
@@ -95,7 +95,7 @@ export default function InviteScreen() {
             testID="invite-back"
           />
         )}
-      </View>
+      </ScreenContainer>
     );
   }
 
