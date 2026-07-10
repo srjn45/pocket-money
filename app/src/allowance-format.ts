@@ -17,6 +17,15 @@ export function nextPeriod(period: string): string {
   return `${ny}-${nm}`;
 }
 
+/** The month before `period` ('2027-01' → '2026-12'). Integer arithmetic, no Date rollover. */
+export function prevPeriod(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  const total = y * 12 + (m - 1) - 1;
+  const py = Math.floor(total / 12);
+  const pm = String((total % 12) + 1).padStart(2, '0');
+  return `${py}-${pm}`;
+}
+
 /** The allowance in force at `period` = greatest effective_from <= period. Null if all-future. */
 export function currentAllowanceFor(rows: Allowance[], period: string): Allowance | null {
   let best: Allowance | null = null;

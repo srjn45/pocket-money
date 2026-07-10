@@ -6,6 +6,10 @@ export const qk = {
   ledger: (groupId: string, filters?: { status?: string; user_id?: string; type?: string; period?: string }) =>
     ['ledger', groupId, filters ?? {}] as const,
   balance: (groupId: string) => ['balance', groupId] as const,
+  // Monthly statement (V3-4.2). Prefix form (no period) invalidates every cached
+  // month for the group; the period form keys a specific month's query.
+  statement: (groupId: string, period?: string) =>
+    period ? (['statement', groupId, period] as const) : (['statement', groupId] as const),
   // reserved for later WPs (WP-2.x, WP-3.x):
   loans: (groupId: string) => ['loans', groupId] as const,
   allowances: (groupId: string) => ['allowances', groupId] as const,

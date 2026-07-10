@@ -25,6 +25,9 @@ export type Loan                 = Schemas['LoanResponse'];
 export type ChangePasswordRequest = Schemas['ChangePasswordRequest'];
 export type Money                = Schemas['Money'];
 export type CurrencyCode         = Money['currency'];
+export type Statement            = Schemas['StatementResponse'];
+export type MemberStatement      = Schemas['MemberStatementResponse'];
+export type StatementTotals      = Schemas['StatementTotals'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -198,4 +201,12 @@ export const ledgerApi = {
     request<LedgerEntry>(`/ledger/${id}/reject`, { method: 'POST' }),
 
   getBalance: (groupId: string) => request<Balance[]>(`/groups/${groupId}/balance`),
+};
+
+// Statement API (V3-3.1 endpoint; consumed by the V3-4.2 Statement screen).
+// Role-scoped server-side: admin → all non-admin rows + group_total; member →
+// own row only, group_total null. Every Money is stamped with the group currency.
+export const statementApi = {
+  get: (groupId: string, period: string) =>
+    request<Statement>(`/groups/${groupId}/statement?period=${period}`),
 };

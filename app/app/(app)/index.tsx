@@ -93,7 +93,7 @@ export default function DashboardScreen() {
           right={
             <View style={styles.groupRight}>
               <AmountText minorUnits={item.summary_balance.value} currency={item.summary_balance.currency} variant="neutral" size="md" />
-              <Text style={styles.balanceCaption}>owed to members</Text>
+              <Text style={styles.balanceCaption}>remaining to pay this month</Text>
             </View>
           }
         />
@@ -108,12 +108,15 @@ export default function DashboardScreen() {
           left={<Avatar name={item.name} id={item.id} />}
           title={item.name}
           right={
-            <AmountText
-              minorUnits={item.summary_balance.value}
-              currency={item.summary_balance.currency}
-              variant={item.summary_balance.value < 0 ? 'debit' : item.summary_balance.value === 0 ? 'neutral' : 'credit'}
-              size="md"
-            />
+            <View style={styles.groupRight}>
+              <AmountText
+                minorUnits={item.summary_balance.value}
+                currency={item.summary_balance.currency}
+                variant={item.summary_balance.value < 0 ? 'debit' : item.summary_balance.value === 0 ? 'neutral' : 'credit'}
+                size="md"
+              />
+              <Text style={styles.balanceCaption}>to receive this month</Text>
+            </View>
           }
         />
       </Card>

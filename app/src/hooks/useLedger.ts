@@ -26,6 +26,11 @@ function useInvalidateGroup(groupId: string) {
     qc.invalidateQueries({ queryKey: qk.ledger(groupId) });
     qc.invalidateQueries({ queryKey: qk.balance(groupId) });
     qc.invalidateQueries({ queryKey: qk.group(groupId) });
+    // V3-4.2: refresh the statement (so `remaining` recomputes to 0 after a
+    // payment — prefix form invalidates all cached months) and the dashboard
+    // headline (summary_balance from GET /groups) so both track every mutation.
+    qc.invalidateQueries({ queryKey: qk.statement(groupId) });
+    qc.invalidateQueries({ queryKey: qk.groups() });
   };
 }
 

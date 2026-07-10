@@ -6,12 +6,19 @@ import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../../../../src/auth-context';
 import { useGroup } from '../../../../src/hooks/useGroup';
 import { useChores } from '../../../../src/hooks/useChores';
-import { useLedger, useBalance } from '../../../../src/hooks/useLedger';
+import { useLedger } from '../../../../src/hooks/useLedger';
+import { useStatement } from '../../../../src/hooks/useStatement';
 import { useAllowances } from '../../../../src/hooks/useAllowances';
 import { useLoans } from '../../../../src/hooks/useLoans';
-import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../src/allowance-format';
+import {
+  currentPeriod,
+  prevPeriod,
+  nextPeriod,
+  currentAllowanceFor,
+  upcomingAllowanceFor,
+} from '../../../../src/allowance-format';
 import { groupsApi } from '../../../../src/api';
-import type { Balance } from '../../../../src/api';
+import type { MemberStatement } from '../../../../src/api';
 import { currencySymbol } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { useLeaveGroup } from '../../../../src/hooks/useHygiene';
@@ -22,7 +29,9 @@ import {
   Sheet,
   TextField,
   AmountText,
-  MemberCard,
+  MonthHeader,
+  StatementRow,
+  RecordPaymentSheet,
   LedgerList,
   AddEntrySheet,
   AddMemberSheet,
@@ -37,44 +46,42 @@ import {
 
 export default function GroupOverviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const gid = id ?? '';
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets(); // native: home-indicator inset; web: 0
   const { show: showToast } = useToast();
 
+  // Statement month — LOCAL state, deliberately NOT a route param (keeps the
+  // expo-router web-param gotcha off the statement fetch; only `id` comes from the URL).
+  const [period, setPeriod] = useState(currentPeriod());
+
   const [sheetVisible, setSheetVisible] = useState(false);
   const [addMemberVisible, setAddMemberVisible] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<MemberStatement | null>(null);
 
-  const groupQuery = useGroup(id ?? '');
-  const balanceQuery = useBalance(id ?? '');
-  const choresQuery = useChores(id ?? '');
-  const allowancesQuery = useAllowances(id ?? '');
-  const loansQuery = useLoans(id ?? '');
+  const groupQuery = useGroup(gid);
+  const statementQuery = useStatement(gid, period);
+  const choresQuery = useChores(gid);
+  const allowancesQuery = useAllowances(gid);
+  const loansQuery = useLoans(gid);
 
   const group = groupQuery.data;
   const members = group?.members ?? [];
   const isHead = members.find(m => m.user_id === user?.id)?.role === 'admin';
 
-  const pendingLedgerQuery = useLedger(id ?? '', { status: 'pending_approval' });
-  const myLedgerQuery = useLedger(id ?? '', isHead ? undefined : {});
+  const myLedgerQuery = useLedger(gid, isHead ? undefined : {});
+  const leaveMutation = useLeaveGroup(gid);
 
-  const leaveMutation = useLeaveGroup(id ?? '');
+  const memberCurrentAllow = currentAllowanceFor(allowancesQuery.data ?? [], currentPeriod());
+  const memberUpcomingAllow = upcomingAllowanceFor(allowancesQuery.data ?? [], currentPeriod());
 
-  const memberPeriod = currentPeriod();
-  const memberCurrentAllow = currentAllowanceFor(allowancesQuery.data ?? [], memberPeriod);
-  const memberUpcomingAllow = upcomingAllowanceFor(allowancesQuery.data ?? [], memberPeriod);
+  // Shadow status lives on the group membership, not the statement row — join by user_id.
+  const shadowById = new Map(members.map(m => [m.user_id, m.status === 'shadow']));
 
-  const isLoading = groupQuery.isLoading || balanceQuery.isLoading;
-  const error = groupQuery.error || balanceQuery.error;
-
-  const nonHeadMembers = members.filter(m => m.role !== 'admin');
-  const myBalance = balanceQuery.data?.find(b => b.user_id === user?.id);
-
-  function countPendingFor(userId: string): number {
-    return (pendingLedgerQuery.data ?? []).filter(e => e.user_id === userId).length;
-  }
+  const isCurrentMonth = period === currentPeriod();
 
   async function handleLeaveGroup() {
     const confirmed = await confirmAsync({
@@ -94,10 +101,10 @@ export default function GroupOverviewScreen() {
   }
 
   async function handleInvite() {
-    if (!id) return;
+    if (!gid) return;
     setInviteLoading(true);
     try {
-      const invite = await groupsApi.createInvite(id);
+      const invite = await groupsApi.createInvite(gid);
       if (Platform.OS === 'web') {
         try {
           // On non-secure http origins (LAN) navigator.clipboard is unavailable;
@@ -129,28 +136,41 @@ export default function GroupOverviewScreen() {
     }
   }
 
-  if (isLoading) {
+  if (groupQuery.isLoading) {
     return <View style={styles.centered}><LoadingSpinner /></View>;
   }
 
-  if (error) {
-    return <ErrorMessage message={error instanceof Error ? error.message : 'Failed to load group'} />;
+  if (groupQuery.error) {
+    return <ErrorMessage message={groupQuery.error instanceof Error ? groupQuery.error.message : 'Failed to load group'} />;
   }
 
   if (!group) {
     return <ErrorMessage message="Failed to load group" />;
   }
 
-  const currency = group.currency;
+  const currency = statementQuery.data?.currency ?? group.currency;
+  const stmt = statementQuery.data;
+  const nonHeadMembers = members.filter(m => m.role !== 'admin');
+
+  const monthSwitcher = (
+    <MonthHeader
+      period={period}
+      onPrev={() => setPeriod(prevPeriod(period))}
+      onNext={() => setPeriod(nextPeriod(period))}
+      nextDisabled={isCurrentMonth}
+      totalMinorUnits={stmt?.group_total?.closing_balance.value}
+      currency={stmt?.group_total ? currency : undefined}
+      totalVariant="neutral"
+    />
+  );
 
   // ─── HEAD VIEW ─────────────────────────────────────────────────────────────
   if (isHead) {
-    const balances = balanceQuery.data ?? [];
-    const memberBalanceMap = new Map<string, Balance>(balances.map(b => [b.user_id, b]));
+    const groupTotal = stmt?.group_total ?? null;
 
     return (
       <ScreenContainer style={styles.screen} testID="group-overview-root">
-        <GroupSectionTabs groupId={id ?? ''} active="overview" />
+        <GroupSectionTabs groupId={gid} active="overview" />
         <View style={styles.header}>
           <Text style={styles.memberCount}>
             {nonHeadMembers.length} {nonHeadMembers.length === 1 ? 'member' : 'members'}
@@ -178,6 +198,28 @@ export default function GroupOverviewScreen() {
           </View>
         </View>
 
+        {monthSwitcher}
+
+        {groupTotal && (
+          <View style={styles.totalCard} testID="statement-group-total">
+            <Text style={styles.totalLabel}>Remaining to pay this month</Text>
+            <AmountText
+              minorUnits={groupTotal.closing_balance.value}
+              currency={currency}
+              variant={groupTotal.closing_balance.value === 0 ? 'neutral' : 'credit'}
+              size="xl"
+            />
+            <View style={styles.totalSubRow}>
+              <Text style={styles.totalSub}>
+                Payable <AmountText minorUnits={groupTotal.total_due.value} currency={currency} variant="neutral" size="sm" />
+              </Text>
+              <Text style={styles.totalSub}>
+                Paid <AmountText minorUnits={groupTotal.cleared.value} currency={currency} variant="neutral" size="sm" />
+              </Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.addButtonRow}>
           <Button
             title="Add entry"
@@ -185,68 +227,70 @@ export default function GroupOverviewScreen() {
             icon="add"
             onPress={() => setSheetVisible(true)}
             fullWidth
+            testID="statement-add-entry"
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Members</Text>
-
-        <FlatList
-          data={nonHeadMembers}
-          keyExtractor={m => m.user_id}
-          renderItem={({ item: member }) => {
-            const bal = memberBalanceMap.get(member.user_id) ?? {
-              user_id: member.user_id,
-              name: member.name,
-              balance: { currency, value: 0 },
-            };
-            return (
-              <View testID={`member-card-${member.user_id}`}>
-                <MemberCard
-                  balance={bal}
-                  member={member}
-                  pendingCount={countPendingFor(member.user_id)}
-                  onPress={() =>
-                    router.push({
-                      pathname: `/(app)/groups/${id}/members/${member.user_id}`,
-                      params: { name: member.name },
-                    })
-                  }
+        {statementQuery.isLoading ? (
+          <View style={styles.centered}><LoadingSpinner /></View>
+        ) : (
+          <FlatList
+            data={stmt?.members ?? []}
+            keyExtractor={m => m.user_id}
+            renderItem={({ item }) => (
+              <StatementRow
+                member={item}
+                currency={currency}
+                isShadow={shadowById.get(item.user_id)}
+                onPress={() =>
+                  router.push({
+                    pathname: `/(app)/groups/${gid}/members/${item.user_id}`,
+                    params: { name: item.name },
+                  })
+                }
+                onRecordPayment={isCurrentMonth ? () => setPaymentTarget(item) : undefined}
+              />
+            )}
+            ListEmptyComponent={
+              <View testID="statement-empty">
+                <EmptyState
+                  icon="people-outline"
+                  title="No members yet"
+                  subtitle="Tap Add member to add your family"
                 />
               </View>
-            );
-          }}
-          ListEmptyComponent={
-            <View testID="members-empty">
-              <EmptyState
-                icon="people-outline"
-                title="No members yet"
-                subtitle="Tap Add member to add your family"
-              />
-            </View>
-          }
-          refreshing={groupQuery.isFetching || balanceQuery.isFetching}
-          onRefresh={() => {
-            groupQuery.refetch();
-            balanceQuery.refetch();
-            pendingLedgerQuery.refetch();
-          }}
-          contentContainerStyle={[styles.listContent, { paddingBottom: theme.spacing.lg + insets.bottom }]}
-        />
+            }
+            refreshing={groupQuery.isFetching || statementQuery.isFetching}
+            onRefresh={() => {
+              groupQuery.refetch();
+              statementQuery.refetch();
+            }}
+            contentContainerStyle={[styles.listContent, { paddingBottom: theme.spacing.lg + insets.bottom }]}
+          />
+        )}
 
         <AddEntrySheet
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
-          groupId={id ?? ''}
+          groupId={gid}
           currency={currency}
           chores={choresQuery.data ?? []}
           mode="head"
           members={nonHeadMembers}
         />
 
+        <RecordPaymentSheet
+          visible={!!paymentTarget}
+          onClose={() => setPaymentTarget(null)}
+          groupId={gid}
+          currency={currency}
+          member={paymentTarget}
+        />
+
         <AddMemberSheet
           visible={addMemberVisible}
           onClose={() => setAddMemberVisible(false)}
-          groupId={id ?? ''}
+          groupId={gid}
         />
 
         {INVITES_ENABLED && (
@@ -267,34 +311,56 @@ export default function GroupOverviewScreen() {
   }
 
   // ─── MEMBER VIEW ────────────────────────────────────────────────────────────
+  const myRow = stmt?.members?.[0] ?? null;
   const myEntries = myLedgerQuery.data ?? [];
 
   return (
     <ScreenContainer style={styles.screen} testID="group-overview-root">
-      <GroupSectionTabs groupId={id ?? ''} active="overview" />
+      <GroupSectionTabs groupId={gid} active="overview" />
       <ScrollView contentContainerStyle={styles.memberScroll}>
-        {/* Balance summary header */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Your balance</Text>
-          <AmountText
-            minorUnits={myBalance?.balance.value ?? 0}
-            currency={myBalance?.balance.currency ?? currency}
-            variant={
-              (myBalance?.balance.value ?? 0) < 0 ? 'debit' : 'credit'
-            }
-            size="xl"
-          />
-          <Text style={styles.summaryHint}>
-            {(myBalance?.balance.value ?? 0) < 0 ? 'you owe' : 'owed to you'}
-          </Text>
-          {!allowancesQuery.isError && (
+        {monthSwitcher}
+
+        {statementQuery.isLoading ? (
+          <View style={styles.centered}><LoadingSpinner /></View>
+        ) : myRow ? (
+          <>
+            <View style={styles.bannerCard} testID="statement-receive-banner">
+              {myRow.closing_balance.value >= 0 ? (
+                <Text style={styles.bannerText}>
+                  You'll receive{' '}
+                  <AmountText minorUnits={myRow.closing_balance.value} currency={currency} variant="credit" size="lg" />
+                  {' '}this month.
+                </Text>
+              ) : (
+                <Text style={styles.bannerText}>
+                  You owe{' '}
+                  <AmountText minorUnits={myRow.closing_balance.value} currency={currency} variant="debit" size="lg" />
+                  {' '}this month.
+                </Text>
+              )}
+            </View>
+
+            <StatementRow member={myRow} currency={currency} />
+          </>
+        ) : (
+          <View testID="statement-empty">
+            <EmptyState
+              icon="calendar-outline"
+              title="No statement for this month"
+              subtitle="Nothing has been posted for you in this period yet."
+            />
+          </View>
+        )}
+
+        {!allowancesQuery.isError && (
+          <View style={styles.allowanceCard}>
             <AllowanceSummary
               current={memberCurrentAllow}
               upcoming={memberUpcomingAllow}
               currency={currency}
             />
-          )}
-        </View>
+          </View>
+        )}
 
         <View style={styles.addButtonRow}>
           <Button
@@ -324,7 +390,7 @@ export default function GroupOverviewScreen() {
         chores={choresQuery.data ?? []}
         members={members}
         isHead={false}
-        groupId={id ?? ''}
+        groupId={gid}
         currency={currency}
         loans={loansQuery.data ?? []}
         refreshing={myLedgerQuery.isFetching}
@@ -336,7 +402,7 @@ export default function GroupOverviewScreen() {
       <AddEntrySheet
         visible={sheetVisible}
         onClose={() => setSheetVisible(false)}
-        groupId={id ?? ''}
+        groupId={gid}
         currency={currency}
         chores={choresQuery.data ?? []}
         mode="member"
@@ -355,6 +421,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: theme.spacing.xl,
   },
   header: {
     flexDirection: 'row',
@@ -377,32 +444,43 @@ const styles = StyleSheet.create({
   addButtonRow: {
     padding: theme.spacing.lg,
   },
-  sectionTitle: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.color.textSecondary,
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.sm,
-  },
   listContent: {
     paddingBottom: theme.spacing.lg,
   },
-  summaryCard: {
+  totalCard: {
     backgroundColor: theme.color.surface,
     padding: theme.spacing.xl,
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: theme.color.border,
+    gap: theme.spacing.xs,
   },
-  summaryLabel: {
+  totalLabel: {
     fontSize: theme.fontSize.sm,
     color: theme.color.textSecondary,
-    marginBottom: theme.spacing.sm,
   },
-  summaryHint: {
+  totalSubRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.lg,
+    marginTop: theme.spacing.xs,
+  },
+  totalSub: {
     fontSize: theme.fontSize.xs,
     color: theme.color.textSecondary,
-    marginTop: theme.spacing.xs,
+  },
+  bannerCard: {
+    backgroundColor: theme.color.surface,
+    padding: theme.spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.color.border,
+  },
+  bannerText: {
+    fontSize: theme.fontSize.md,
+    color: theme.color.text,
+    lineHeight: 26,
+  },
+  allowanceCard: {
+    paddingHorizontal: theme.spacing.lg,
   },
   memberScroll: {
     flexGrow: 0,
