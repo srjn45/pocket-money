@@ -129,7 +129,7 @@ func (e *ledgerTestEnv) seedGroupWithMembers(t *testing.T, suffix string) (head,
 	// GroupRepo.Create only inserts the group row; the head must be added to
 	// group_members explicitly (the production CreateGroup handler does this).
 	// Without it, head-authenticated requests 403 as "not a member".
-	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
@@ -162,22 +162,81 @@ func TestLedger_MemberCannotSeeOthers(t *testing.T) {
 
 	path := fmt.Sprintf("/groups/%s/ledger", group.ID)
 
-	// memberA sees only their own entries (even if user_id=memberB supplied)
+	// D6: memberA explicitly requesting memberB's rows is a 403 (not a silent narrow).
 	w := doRequest(env.router, http.MethodGet, path+"?user_id="+memberB.ID.String(), nil, bearerToken(t, memberA.ID))
-	require.Equal(t, http.StatusOK, w.Code)
-	var resp []handlers.LedgerResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	for _, e := range resp {
-		assert.Equal(t, memberA.ID, e.UserID, "member should only see own entries")
-	}
-	assert.Len(t, resp, 1)
+	require.Equal(t, http.StatusForbidden, w.Code)
+	var errResp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errResp))
+	assert.Equal(t, "members can only access their own data", errResp["error"])
 
-	// head can filter by memberB and see memberB's entries
+	// memberA scoping to self (user_id=self) is allowed → own rows.
+	var resp []handlers.LedgerResponse
+	w = doRequest(env.router, http.MethodGet, path+"?user_id="+memberA.ID.String(), nil, bearerToken(t, memberA.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Len(t, resp, 1)
+	assert.Equal(t, memberA.ID, resp[0].UserID)
+
+	// memberA with no user_id param → own rows only.
+	w = doRequest(env.router, http.MethodGet, path, nil, bearerToken(t, memberA.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Len(t, resp, 1)
+	assert.Equal(t, memberA.ID, resp[0].UserID)
+
+	// admin can filter by memberB and see memberB's entries.
 	w = doRequest(env.router, http.MethodGet, path+"?user_id="+memberB.ID.String(), nil, bearerToken(t, head.ID))
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Len(t, resp, 1)
 	assert.Equal(t, memberB.ID, resp[0].UserID)
+}
+
+// --- TestBalance_MemberScopedToOwn: D6 balance scoping ---
+
+// A member GET /balance sees only their own balance row; an admin sees every
+// member's row (the admin/payer is excluded by GetBalanceForGroup).
+func TestBalance_MemberScopedToOwn(t *testing.T) {
+	env := setupLedgerTestEnv(t)
+	defer env.cleanup()
+
+	ctx := t.Context()
+	head, memberA, group, chore := env.seedGroupWithMembers(t, "bal")
+	memberB, err := env.userRepo.Create(ctx, "memberb-bal@example.com", "hash", "MemberB", nil, nil)
+	require.NoError(t, err)
+	_, err = env.groupRepo.AddMember(ctx, group.ID, memberB.ID, models.RoleMember)
+	require.NoError(t, err)
+
+	now := time.Now()
+	_, err = env.ledgerRepo.Create(ctx, group.ID, memberA.ID, &chore.ID, head.ID, 1000,
+		models.EntryTypeChore, models.DirectionCredit, models.StatusApproved, nil, &head.ID, &now)
+	require.NoError(t, err)
+	_, err = env.ledgerRepo.Create(ctx, group.ID, memberB.ID, &chore.ID, head.ID, 2000,
+		models.EntryTypeChore, models.DirectionCredit, models.StatusApproved, nil, &head.ID, &now)
+	require.NoError(t, err)
+
+	path := fmt.Sprintf("/groups/%s/balance", group.ID)
+
+	// memberA sees only their own single balance row.
+	w := doRequest(env.router, http.MethodGet, path, nil, bearerToken(t, memberA.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp []handlers.BalanceResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, memberA.ID, resp[0].UserID)
+
+	// admin sees both members' rows, and NOT the admin/payer.
+	w = doRequest(env.router, http.MethodGet, path, nil, bearerToken(t, head.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp, 2)
+	ids := map[uuid.UUID]bool{}
+	for _, b := range resp {
+		ids[b.UserID] = true
+	}
+	assert.True(t, ids[memberA.ID], "admin should see memberA")
+	assert.True(t, ids[memberB.ID], "admin should see memberB")
+	assert.False(t, ids[head.ID], "admin/payer must be excluded from the balance list")
 }
 
 // --- Test #3: Head-only settlement/adjustment ---

@@ -22,7 +22,7 @@ var ErrDuplicateMember = errors.New("already a member")
 type GroupSummary struct {
 	ID             uuid.UUID
 	Name           string
-	HeadUserID     uuid.UUID
+	AdminUserID    uuid.UUID
 	Currency       string
 	CreatedAt      time.Time
 	Role           models.MemberRole
@@ -42,21 +42,21 @@ func NewGroupRepo(pool *pgxpool.Pool) *GroupRepo {
 
 // Create inserts a new group into the database. currency is the group's
 // immutable ISO-4217 code (D7) and must be validated by the caller.
-func (r *GroupRepo) Create(ctx context.Context, name string, headUserID uuid.UUID, currency string) (*models.Group, error) {
+func (r *GroupRepo) Create(ctx context.Context, name string, adminUserID uuid.UUID, currency string) (*models.Group, error) {
 	group := &models.Group{
-		ID:         uuid.New(),
-		Name:       name,
-		HeadUserID: headUserID,
-		Currency:   currency,
+		ID:          uuid.New(),
+		Name:        name,
+		AdminUserID: adminUserID,
+		Currency:    currency,
 	}
 
 	query := `
-		INSERT INTO groups (id, name, head_user_id, currency)
+		INSERT INTO groups (id, name, admin_user_id, currency)
 		VALUES ($1, $2, $3, $4)
 		RETURNING created_at
 	`
 
-	err := r.pool.QueryRow(ctx, query, group.ID, name, headUserID, currency).Scan(&group.CreatedAt)
+	err := r.pool.QueryRow(ctx, query, group.ID, name, adminUserID, currency).Scan(&group.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create group: %w", err)
 	}
@@ -83,7 +83,7 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 	group := &models.Group{}
 
 	query := `
-		SELECT id, name, head_user_id, currency, created_at
+		SELECT id, name, admin_user_id, currency, created_at
 		FROM groups
 		WHERE id = $1
 	`
@@ -91,7 +91,7 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&group.ID,
 		&group.Name,
-		&group.HeadUserID,
+		&group.AdminUserID,
 		&group.Currency,
 		&group.CreatedAt,
 	)
@@ -106,13 +106,13 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 }
 
 // ListForUserWithSummary returns every group the user belongs to, each enriched with the caller's
-// role, the member count, and a summary balance: for head groups the sum of all non-head members'
+// role, the member count, and a summary balance: for admin groups the sum of all non-admin members'
 // balances (total owed); for member groups the caller's own balance. Balances come from currently
 // approved ledger entries only (no posting is triggered — see WP-4.2 §0.2).
 func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID) ([]*GroupSummary, error) {
 	query := `
 		WITH my_groups AS (
-			SELECT g.id, g.name, g.head_user_id, g.currency, g.created_at, gm.role
+			SELECT g.id, g.name, g.admin_user_id, g.currency, g.created_at, gm.role
 			FROM groups g
 			JOIN group_members gm ON gm.group_id = g.id
 			WHERE gm.user_id = $1
@@ -132,22 +132,22 @@ func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID
 			  AND le.group_id IN (SELECT id FROM my_groups)
 			GROUP BY le.group_id, le.user_id
 		),
-		head_totals AS (
+		admin_totals AS (
 			SELECT mb.group_id, COALESCE(SUM(mb.balance), 0)::bigint AS total_owed
 			FROM member_balances mb
 			JOIN group_members gm ON gm.group_id = mb.group_id AND gm.user_id = mb.user_id
-			WHERE gm.role <> 'head'
+			WHERE gm.role <> 'admin'
 			GROUP BY mb.group_id
 		)
-		SELECT mg.id, mg.name, mg.head_user_id, mg.currency, mg.created_at, mg.role,
+		SELECT mg.id, mg.name, mg.admin_user_id, mg.currency, mg.created_at, mg.role,
 			COALESCE(mc.member_count, 0) AS member_count,
-			CASE WHEN mg.role = 'head'
+			CASE WHEN mg.role = 'admin'
 				 THEN COALESCE(ht.total_owed, 0)
 				 ELSE COALESCE(ob.balance, 0)
 			END::bigint AS summary_balance
 		FROM my_groups mg
 		LEFT JOIN member_counts mc ON mc.group_id = mg.id
-		LEFT JOIN head_totals   ht ON ht.group_id = mg.id
+		LEFT JOIN admin_totals  ht ON ht.group_id = mg.id
 		LEFT JOIN member_balances ob ON ob.group_id = mg.id AND ob.user_id = $1
 		ORDER BY mg.created_at DESC
 	`
@@ -160,7 +160,7 @@ func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID
 	summaries := make([]*GroupSummary, 0)
 	for rows.Next() {
 		s := &GroupSummary{}
-		if err := rows.Scan(&s.ID, &s.Name, &s.HeadUserID, &s.Currency, &s.CreatedAt,
+		if err := rows.Scan(&s.ID, &s.Name, &s.AdminUserID, &s.Currency, &s.CreatedAt,
 			&s.Role, &s.MemberCount, &s.SummaryBalance); err != nil {
 			return nil, fmt.Errorf("failed to scan group summary: %w", err)
 		}
@@ -221,14 +221,14 @@ func (r *GroupRepo) AddMemberTx(ctx context.Context, q Querier, groupID, userID 
 	return member, nil
 }
 
-// ListHeadUserIDs returns the user ids of every head-role member of a group.
+// ListAdminUserIDs returns the user ids of every admin-role member of a group.
 // Used by the claim flow to notify admins (N-2). Runs on the caller's Querier.
-func (r *GroupRepo) ListHeadUserIDs(ctx context.Context, q Querier, groupID uuid.UUID) ([]uuid.UUID, error) {
+func (r *GroupRepo) ListAdminUserIDs(ctx context.Context, q Querier, groupID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.Query(ctx,
-		`SELECT user_id FROM group_members WHERE group_id = $1 AND role = 'head'`,
+		`SELECT user_id FROM group_members WHERE group_id = $1 AND role = 'admin'`,
 		groupID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list head user ids: %w", err)
+		return nil, fmt.Errorf("failed to list admin user ids: %w", err)
 	}
 	defer rows.Close()
 
@@ -236,7 +236,7 @@ func (r *GroupRepo) ListHeadUserIDs(ctx context.Context, q Querier, groupID uuid
 	for rows.Next() {
 		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("failed to scan head user id: %w", err)
+			return nil, fmt.Errorf("failed to scan admin user id: %w", err)
 		}
 		ids = append(ids, id)
 	}

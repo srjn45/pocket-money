@@ -38,7 +38,7 @@ export default function ChoresScreen() {
   const groupQuery = useGroup(id ?? '');
 
   const chores = choresQuery.data ?? [];
-  const isHead = groupQuery.data?.members.find(m => m.user_id === user?.id)?.role === 'head';
+  const isHead = groupQuery.data?.members.find(m => m.user_id === user?.id)?.role === 'admin';
   const currency = groupQuery.data?.currency ?? 'INR';
 
   const isLoading = choresQuery.isLoading || groupQuery.isLoading;

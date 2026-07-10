@@ -79,7 +79,7 @@ func setupIdentityTestEnv(t *testing.T) *identityTestEnv {
 }
 
 // seedHead creates a registered head user + group with the head in group_members
-// as RoleHead (GroupRepo.Create does NOT add the creator — §9.10).
+// as RoleAdmin (GroupRepo.Create does NOT add the creator — §9.10).
 func (e *identityTestEnv) seedHead(t *testing.T, suffix string) (head *models.User, group *models.Group) {
 	t.Helper()
 	ctx := t.Context()
@@ -88,7 +88,7 @@ func (e *identityTestEnv) seedHead(t *testing.T, suffix string) (head *models.Us
 	require.NoError(t, err)
 	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	return
 }

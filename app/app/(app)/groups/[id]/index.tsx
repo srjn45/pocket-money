@@ -48,7 +48,7 @@ export default function GroupOverviewScreen() {
 
   const group = groupQuery.data;
   const members = group?.members ?? [];
-  const isHead = members.find(m => m.user_id === user?.id)?.role === 'head';
+  const isHead = members.find(m => m.user_id === user?.id)?.role === 'admin';
 
   const pendingLedgerQuery = useLedger(id ?? '', { status: 'pending_approval' });
   const myLedgerQuery = useLedger(id ?? '', isHead ? undefined : {});
@@ -62,7 +62,7 @@ export default function GroupOverviewScreen() {
   const isLoading = groupQuery.isLoading || balanceQuery.isLoading;
   const error = groupQuery.error || balanceQuery.error;
 
-  const nonHeadMembers = members.filter(m => m.role !== 'head');
+  const nonHeadMembers = members.filter(m => m.role !== 'admin');
   const myBalance = balanceQuery.data?.find(b => b.user_id === user?.id);
 
   function countPendingFor(userId: string): number {

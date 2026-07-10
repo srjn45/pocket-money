@@ -6,6 +6,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -145,4 +149,67 @@ func TestMigrations_Idempotent(t *testing.T) {
 	// Clean up
 	err = db.RunMigrationsDown(dbURL)
 	require.NoError(t, err)
+}
+
+// TestMigration015_RenamesHeadToAdmin drives golang-migrate to v14 (schema still
+// has role 'head' and groups.head_user_id), inserts a raw 'head' membership, then
+// applies 015 and asserts the row was rewritten to 'admin', the column renamed to
+// admin_user_id, and the enum ends as exactly {admin, member}.
+func TestMigration015_RenamesHeadToAdmin(t *testing.T) {
+	dbURL := testutil.GetTestDatabaseURL()
+
+	pool, err := testutil.NewTestPool()
+	if err != nil {
+		t.Skipf("Skipping test: could not connect to test database: %v", err)
+	}
+	defer pool.Close()
+
+	require.NoError(t, testutil.ResetTestDB(pool))
+
+	// Tests run with CWD = package dir (backend/internal/db), so this resolves to
+	// backend/migrations.
+	m, err := migrate.New("file://../../migrations", dbURL)
+	require.NoError(t, err)
+	defer m.Close()
+
+	// Migrate to v14 — before the rename. role 'head' and groups.head_user_id valid.
+	require.NoError(t, m.Migrate(14))
+
+	ctx := context.Background()
+	userID := uuid.New()
+	groupID := uuid.New()
+	_, err = pool.Exec(ctx,
+		`INSERT INTO users (id, email, password_hash, name) VALUES ($1, $2, $3, $4)`,
+		userID, "mig015@example.com", "hash", "Mig")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO groups (id, name, head_user_id, currency) VALUES ($1, $2, $3, $4)`,
+		groupID, "MigGroup", userID, "INR")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'head')`,
+		groupID, userID)
+	require.NoError(t, err)
+
+	// Apply 015.
+	require.NoError(t, m.Migrate(15))
+
+	// The pre-existing row was rewritten from 'head' to 'admin' in place.
+	var role string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT role::text FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, userID).Scan(&role))
+	assert.Equal(t, "admin", role)
+
+	// The owner column was renamed head_user_id → admin_user_id (value preserved).
+	var adminUserID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT admin_user_id FROM groups WHERE id = $1`, groupID).Scan(&adminUserID))
+	assert.Equal(t, userID, adminUserID)
+
+	// The enum ends as exactly {admin, member} — no 'head' label survives.
+	var labels []string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT array(SELECT unnest(enum_range(NULL::member_role))::text)`).Scan(&labels))
+	assert.ElementsMatch(t, []string{"admin", "member"}, labels)
 }

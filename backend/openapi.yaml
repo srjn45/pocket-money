@@ -240,7 +240,7 @@ paths:
       tags:
         - Groups
       summary: Create a new group
-      description: Creates a new group with the authenticated user as head
+      description: Creates a new group with the authenticated user as admin
       operationId: createGroup
       security:
         - BearerAuth: []
@@ -386,7 +386,7 @@ paths:
         - Groups
       summary: Add a member by email (add-by-email lifecycle)
       description: >
-        Head-only. Resolves the email to a user and attaches them to the group as
+        Admin-only. Resolves the email to a user and attaches them to the group as
         a `member`: an unknown email creates a new SHADOW user (no password, cannot
         log in) with the given name; an existing registered user is attached and
         notified (N-1 `added_to_group`); an existing shadow is attached with no
@@ -429,7 +429,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Caller is not the group head
+          description: Caller is not the group admin
           content:
             application/json:
               schema:
@@ -457,14 +457,14 @@ paths:
     delete:
       tags:
         - Groups
-      summary: Remove a member (head) or leave a group (self)
+      summary: Remove a member (admin) or leave a group (self)
       description: >
-        Removes a membership. The head may remove any non-head member; any member
+        Removes a membership. The admin may remove any non-admin member; any member
         may remove themselves (leave). Allowed ONLY when the target member's balance
         is settled to exactly 0 AND they have no loan in `requested` or `active`
         status. Ledger history and closed/rejected loans are KEPT (they reference the
         user, not the membership); the member's allowance config rows are deleted and
-        any pending ledger entries are auto-rejected. The group head can neither leave
+        any pending ledger entries are auto-rejected. The group admin can neither leave
         nor be removed. Triggers due allowance/EMI posting before evaluating the
         balance so a stale un-posted entry cannot let a non-zero member out.
       operationId: removeMember
@@ -501,7 +501,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: A non-head member may only remove themselves
+          description: A non-admin member may only remove themselves
           content:
             application/json:
               schema:
@@ -514,7 +514,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >
-            Removal blocked — the target is the group head, or their balance is not
+            Removal blocked — the target is the group admin, or their balance is not
             zero, or they have an active/pending loan. The error message is
             human-readable and states which.
           content:
@@ -533,7 +533,7 @@ paths:
       tags:
         - Groups
       summary: Create group invite
-      description: Creates an invite token for joining the group (head only)
+      description: Creates an invite token for joining the group (admin only)
       operationId: createInvite
       security:
         - BearerAuth: []
@@ -570,7 +570,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Only group head can create invites
+          description: Only group admin can create invites
           content:
             application/json:
               schema:
@@ -678,7 +678,7 @@ paths:
       tags:
         - Chores
       summary: Create chore
-      description: Creates a new chore for the group (head only)
+      description: Creates a new chore for the group (admin only)
       operationId: createChore
       security:
         - BearerAuth: []
@@ -716,7 +716,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Only group head can create chores
+          description: Only group admin can create chores
           content:
             application/json:
               schema:
@@ -733,7 +733,7 @@ paths:
       tags:
         - Chores
       summary: Update chore
-      description: Updates a chore (head only)
+      description: Updates a chore (admin only)
       operationId: updateChore
       security:
         - BearerAuth: []
@@ -771,7 +771,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Only group head can update chores or cannot modify system chore
+          description: Only group admin can update chores or cannot modify system chore
           content:
             application/json:
               schema:
@@ -793,7 +793,7 @@ paths:
       tags:
         - Chores
       summary: Delete chore
-      description: Soft deletes a chore (head only)
+      description: Soft deletes a chore (admin only)
       operationId: deleteChore
       security:
         - BearerAuth: []
@@ -821,7 +821,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Only group head can delete chores or cannot delete system chore
+          description: Only group admin can delete chores or cannot delete system chore
           content:
             application/json:
               schema:
@@ -844,7 +844,10 @@ paths:
       tags:
         - Ledger
       summary: List ledger entries
-      description: Returns ledger entries for a group. Members see only their entries, head sees all.
+      description: >-
+        Returns ledger entries for a group. Members see only their own entries;
+        admin sees all. A member supplying `user_id` for another member gets 403
+        (D6) — they may only scope to themselves.
       operationId: listLedger
       security:
         - BearerAuth: []
@@ -866,7 +869,7 @@ paths:
         - name: user_id
           in: query
           required: false
-          description: Filter by user ID (head only)
+          description: Filter by user ID (admin only)
           schema:
             type: string
             format: uuid
@@ -906,7 +909,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Not a member of this group
+          description: Not a member of this group, or a member requesting another member's data (D6).
           content:
             application/json:
               schema:
@@ -922,7 +925,7 @@ paths:
       tags:
         - Ledger
       summary: Create ledger entry
-      description: Creates a new ledger entry. Members create pending entries for themselves, head can create approved entries for any member.
+      description: Creates a new ledger entry. Members create pending entries for themselves, admin can create approved entries for any member.
       operationId: createLedger
       security:
         - BearerAuth: []
@@ -960,7 +963,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Permission denied (e.g., only head can create settlement entries)
+          description: Permission denied (e.g., only admin can create settlement entries)
           content:
             application/json:
               schema:
@@ -977,7 +980,7 @@ paths:
       tags:
         - Ledger
       summary: Approve ledger entry
-      description: Approves a pending ledger entry (head only)
+      description: Approves a pending ledger entry (admin only)
       operationId: approveLedger
       security:
         - BearerAuth: []
@@ -1009,7 +1012,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Only group head can approve entries
+          description: Only group admin can approve entries
           content:
             application/json:
               schema:
@@ -1032,7 +1035,7 @@ paths:
       tags:
         - Ledger
       summary: Reject ledger entry
-      description: Rejects a pending ledger entry (head only)
+      description: Rejects a pending ledger entry (admin only)
       operationId: rejectLedger
       security:
         - BearerAuth: []
@@ -1064,7 +1067,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Only group head can reject entries
+          description: Only group admin can reject entries
           content:
             application/json:
               schema:
@@ -1087,7 +1090,9 @@ paths:
       tags:
         - Ledger
       summary: Get group balances
-      description: Returns balance for each member in the group
+      description: >-
+        Admin sees every member's balance; a member sees only their own balance
+        row (D6).
       operationId: getBalance
       security:
         - BearerAuth: []
@@ -1139,7 +1144,7 @@ paths:
         - Allowances
       summary: List allowance rows for a group
       description: >
-        Head sees all members' allowance history; member sees only their own.
+        Admin sees all members' allowance history; member sees only their own.
         Returns full history rows (all effective_from values per member).
       operationId: listAllowances
       security:
@@ -1186,7 +1191,7 @@ paths:
         - Allowances
       summary: Set or change a member's monthly pocket money
       description: >
-        Head only. Sets or changes a member's monthly pocket money.
+        Admin only. Sets or changes a member's monthly pocket money.
         A new effective_from creates a new history row (past months not rewritten).
         Amount 0 pauses the allowance. Setting the same effective_from twice
         updates the amount (correction) — idempotent, still 200.
@@ -1207,7 +1212,7 @@ paths:
           schema:
             type: string
             format: uuid
-          description: Target member's user ID (must be a member, not the head)
+          description: Target member's user ID (must be a member, not the admin)
       requestBody:
         required: true
         content:
@@ -1222,7 +1227,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AllowanceResponse'
         '400':
-          description: Validation error (negative amount, invalid period, targeting head)
+          description: Validation error (negative amount, invalid period, targeting admin)
           content:
             application/json:
               schema:
@@ -1234,7 +1239,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Caller is not the group head
+          description: Caller is not the group admin
           content:
             application/json:
               schema:
@@ -1257,7 +1262,10 @@ paths:
       tags:
         - Loans
       summary: List loans for a group
-      description: Head sees all loans; member sees only their own.
+      description: >-
+        Admin sees all loans; member sees only their own. A member supplying
+        `user_id` for another member gets 403 (D6) — they may only scope to
+        themselves.
       operationId: listLoans
       security:
         - BearerAuth: []
@@ -1276,7 +1284,7 @@ paths:
             type: string
             format: uuid
             nullable: true
-          description: Filter by borrower user ID (head only)
+          description: Filter by borrower user ID (admin only)
         - name: status
           in: query
           required: false
@@ -1307,7 +1315,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Not a member of this group
+          description: Not a member of this group, or a member requesting another member's data (D6).
           content:
             application/json:
               schema:
@@ -1324,7 +1332,7 @@ paths:
       summary: Create a loan or loan request
       description: >
         Member creates a `requested` loan for themselves;
-        head creates a pre-approved `active` loan for a member.
+        admin creates a pre-approved `active` loan for a member.
         Disbursement is not a ledger entry; repayment is via monthly EMI debits.
       operationId: createLoan
       security:
@@ -1369,7 +1377,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Target user not a member (head-created loans)
+          description: Target user not a member (admin-created loans)
           content:
             application/json:
               schema:
@@ -1387,7 +1395,7 @@ paths:
         - Loans
       summary: Approve a loan request
       description: >
-        Head only. Transitions `requested` → `active`; may override principal/installments;
+        Admin only. Transitions `requested` → `active`; may override principal/installments;
         sets start_period to next calendar month.
       operationId: approveLoan
       security:
@@ -1426,7 +1434,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Caller is not the group head
+          description: Caller is not the group admin
           content:
             application/json:
               schema:
@@ -1455,7 +1463,7 @@ paths:
       tags:
         - Loans
       summary: Reject a loan request
-      description: Head only. Transitions `requested` → `rejected`.
+      description: Admin only. Transitions `requested` → `rejected`.
       operationId: rejectLoan
       security:
         - BearerAuth: []
@@ -1481,7 +1489,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Caller is not the group head
+          description: Caller is not the group admin
           content:
             application/json:
               schema:
@@ -1511,7 +1519,7 @@ paths:
         - Loans
       summary: Early payoff — close an active loan
       description: >
-        Head only. Posts one final EMI debit for the outstanding amount
+        Admin only. Posts one final EMI debit for the outstanding amount
         (principal − Σ posted EMIs) and sets status to `closed`.
       operationId: closeLoan
       security:
@@ -1538,7 +1546,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Caller is not the group head
+          description: Caller is not the group admin
           content:
             application/json:
               schema:
@@ -1732,10 +1740,10 @@ components:
         name:
           type: string
           description: Group name
-        head_user_id:
+        admin_user_id:
           type: string
           format: uuid
-          description: ID of the group head (admin)
+          description: ID of the group admin
         currency:
           type: string
           enum: [EUR, USD, INR]
@@ -1747,7 +1755,7 @@ components:
       required:
         - id
         - name
-        - head_user_id
+        - admin_user_id
         - currency
         - created_at
 
@@ -1765,10 +1773,10 @@ components:
         name:
           type: string
           description: Group name
-        head_user_id:
+        admin_user_id:
           type: string
           format: uuid
-          description: ID of the group head
+          description: ID of the group admin
         currency:
           type: string
           enum: [EUR, USD, INR]
@@ -1779,24 +1787,24 @@ components:
           description: Group creation timestamp
         role:
           type: string
-          enum: [head, member]
+          enum: [admin, member]
           description: The caller's role in this group.
         member_count:
           type: integer
-          description: Number of members in the group (includes the head).
+          description: Number of members in the group (includes the admin).
         summary_balance:
           allOf:
             - $ref: '#/components/schemas/Money'
           description: >-
-            Role-dependent summary in the group's currency. For role=head, the sum of all NON-head
-            members' balances (= total the head owes members; typically >= 0). For role=member, the
+            Role-dependent summary in the group's currency. For role=admin, the sum of all NON-admin
+            members' balances (= total the admin owes members; typically >= 0). For role=member, the
             caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe
-            the head). Computed as Σ approved credits − Σ approved debits. A member never receives
+            the admin). Computed as Σ approved credits − Σ approved debits. A member never receives
             another member's figure.
       required:
         - id
         - name
-        - head_user_id
+        - admin_user_id
         - currency
         - created_at
         - role
@@ -1813,10 +1821,10 @@ components:
         name:
           type: string
           description: Group name
-        head_user_id:
+        admin_user_id:
           type: string
           format: uuid
-          description: ID of the group head (admin)
+          description: ID of the group admin
         currency:
           type: string
           enum: [EUR, USD, INR]
@@ -1836,7 +1844,7 @@ components:
       required:
         - id
         - name
-        - head_user_id
+        - admin_user_id
         - currency
         - created_at
         - members
@@ -1858,7 +1866,7 @@ components:
           description: User's email address
         role:
           type: string
-          enum: [head, member]
+          enum: [admin, member]
           description: User's role in the group
         status:
           type: string
@@ -2015,7 +2023,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Target user ID (head may specify any member; member defaults to self)
+          description: Target user ID (admin may specify any member; member defaults to self)
         chore_id:
           type: string
           format: uuid
@@ -2193,7 +2201,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Borrower. Required when the head creates a pre-approved loan; ignored/self for member requests.
+          description: Borrower. Required when the admin creates a pre-approved loan; ignored/self for member requests.
         principal:
           allOf:
             - $ref: '#/components/schemas/Money'

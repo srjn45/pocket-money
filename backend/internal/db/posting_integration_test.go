@@ -42,7 +42,7 @@ func TestInsertAllowancePosting_UniqueConflict(t *testing.T) {
 
 	group, err := groupRepo.Create(ctx, "Posting Family", head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestAllowanceLedgerFields(t *testing.T) {
 
 	group, err := groupRepo.Create(ctx, "Fields Family", head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)

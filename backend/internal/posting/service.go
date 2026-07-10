@@ -51,12 +51,12 @@ func (s *storeAdapter) PostedAllowancePeriods(ctx context.Context, groupID uuid.
 	return s.ledgerRepo.PostedAllowancePeriods(ctx, groupID)
 }
 
-func (s *storeAdapter) GroupHead(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error) {
+func (s *storeAdapter) GroupAdmin(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error) {
 	group, err := s.groupRepo.GetByID(ctx, groupID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("get group head: %w", err)
+		return uuid.Nil, fmt.Errorf("get group admin: %w", err)
 	}
-	return group.HeadUserID, nil
+	return group.AdminUserID, nil
 }
 
 func (s *storeAdapter) WithTx(ctx context.Context, fn func(q db.Querier) error) error {

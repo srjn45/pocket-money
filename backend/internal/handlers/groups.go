@@ -72,18 +72,18 @@ type CreateGroupRequest struct {
 
 // GroupResponse represents a group in API responses
 type GroupResponse struct {
-	ID         uuid.UUID `json:"id"`
-	Name       string    `json:"name"`
-	HeadUserID uuid.UUID `json:"head_user_id"`
-	Currency   string    `json:"currency"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	AdminUserID uuid.UUID `json:"admin_user_id"`
+	Currency    string    `json:"currency"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // GroupSummaryResponse is one dashboard-listing row (see openapi GroupSummaryResponse).
 type GroupSummaryResponse struct {
 	ID             uuid.UUID         `json:"id"`
 	Name           string            `json:"name"`
-	HeadUserID     uuid.UUID         `json:"head_user_id"`
+	AdminUserID    uuid.UUID         `json:"admin_user_id"`
 	Currency       string            `json:"currency"`
 	CreatedAt      time.Time         `json:"created_at"`
 	Role           models.MemberRole `json:"role"`
@@ -111,7 +111,7 @@ type AddMemberRequest struct {
 type GroupDetailResponse struct {
 	ID          uuid.UUID        `json:"id"`
 	Name        string           `json:"name"`
-	HeadUserID  uuid.UUID        `json:"head_user_id"`
+	AdminUserID uuid.UUID        `json:"admin_user_id"`
 	Currency    string           `json:"currency"`
 	CreatedAt   time.Time        `json:"created_at"`
 	Members     []MemberResponse `json:"members"`
@@ -151,8 +151,8 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	// Add creator as head member
-	_, err = h.groupRepo.AddMember(c.Request.Context(), group.ID, userID, models.RoleHead)
+	// Add creator as admin member
+	_, err = h.groupRepo.AddMember(c.Request.Context(), group.ID, userID, models.RoleAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member"})
 		return
@@ -168,11 +168,11 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, GroupResponse{
-		ID:         group.ID,
-		Name:       group.Name,
-		HeadUserID: group.HeadUserID,
-		Currency:   group.Currency,
-		CreatedAt:  group.CreatedAt,
+		ID:          group.ID,
+		Name:        group.Name,
+		AdminUserID: group.AdminUserID,
+		Currency:    group.Currency,
+		CreatedAt:   group.CreatedAt,
 	})
 }
 
@@ -203,7 +203,7 @@ func (h *GroupHandler) ListGroups(c *gin.Context) {
 		response = append(response, GroupSummaryResponse{
 			ID:             s.ID,
 			Name:           s.Name,
-			HeadUserID:     s.HeadUserID,
+			AdminUserID:    s.AdminUserID,
 			Currency:       s.Currency,
 			CreatedAt:      s.CreatedAt,
 			Role:           s.Role,
@@ -292,7 +292,7 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, GroupDetailResponse{
 		ID:          group.ID,
 		Name:        group.Name,
-		HeadUserID:  group.HeadUserID,
+		AdminUserID: group.AdminUserID,
 		Currency:    group.Currency,
 		CreatedAt:   group.CreatedAt,
 		Members:     memberResponses,
@@ -385,7 +385,7 @@ func (h *GroupHandler) AddMemberByEmail(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Authorization: the caller must be the group head (matches CreateInvite).
+	// Authorization: the caller must be the group admin (matches CreateInvite).
 	caller, err := h.groupRepo.GetMember(ctx, groupID, callerID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -395,8 +395,8 @@ func (h *GroupHandler) AddMemberByEmail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
 		return
 	}
-	if caller.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only the group head can add members"})
+	if caller.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only the group admin can add members"})
 		return
 	}
 
@@ -520,7 +520,7 @@ func (h *GroupHandler) CreateInvite(c *gin.Context) {
 		return
 	}
 
-	// Check if user is head of the group
+	// Check if user is admin of the group
 	member, err := h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -531,8 +531,8 @@ func (h *GroupHandler) CreateInvite(c *gin.Context) {
 		return
 	}
 
-	if member.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can create invites"})
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can create invites"})
 		return
 	}
 
@@ -649,11 +649,11 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, GroupResponse{
-		ID:         group.ID,
-		Name:       group.Name,
-		HeadUserID: group.HeadUserID,
-		Currency:   group.Currency,
-		CreatedAt:  group.CreatedAt,
+		ID:          group.ID,
+		Name:        group.Name,
+		AdminUserID: group.AdminUserID,
+		Currency:    group.Currency,
+		CreatedAt:   group.CreatedAt,
 	})
 }
 
@@ -692,10 +692,10 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 
-	// Authz: head may remove others; anyone may remove self; a non-head may NOT remove another member.
+	// Authz: admin may remove others; anyone may remove self; a non-admin may NOT remove another member.
 	isSelf := targetID == callerID
-	if !isSelf && caller.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only the group head can remove other members"})
+	if !isSelf && caller.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only the group admin can remove other members"})
 		return
 	}
 
@@ -723,9 +723,9 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to lock membership"})
 		return
 	}
-	// D6: the head can neither leave nor be removed.
-	if role == models.RoleHead {
-		c.JSON(http.StatusConflict, gin.H{"error": "the group head cannot leave or be removed"})
+	// D6: the admin can neither leave nor be removed.
+	if role == models.RoleAdmin {
+		c.JSON(http.StatusConflict, gin.H{"error": "the group admin cannot leave or be removed"})
 		return
 	}
 

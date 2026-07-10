@@ -32,7 +32,7 @@ export default function DashboardScreen() {
   const joinMutation = useJoinGroup();
 
   const groups = groupsQuery.data ?? [];
-  const headGroups = groups.filter(g => g.role === 'head');
+  const headGroups = groups.filter(g => g.role === 'admin');
   const memberGroups = groups.filter(g => g.role === 'member');
 
   const onRefresh = useCallback(() => {

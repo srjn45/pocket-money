@@ -92,7 +92,7 @@ func (e *allowanceTestEnv) seedGroup(t *testing.T, suffix string) (head, member 
 	require.NoError(t, err)
 	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)

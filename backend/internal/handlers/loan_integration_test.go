@@ -98,7 +98,7 @@ func (e *loanTestEnv) seedGroup(t *testing.T, suffix string) (head, member *mode
 	require.NoError(t, err)
 	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
@@ -547,6 +547,21 @@ func TestLoan_AuthZ(t *testing.T) {
 	for _, l := range memberLoans {
 		assert.Equal(t, member.ID, l.UserID, "member must only see own loans")
 	}
+
+	// D6: member explicitly requesting another member's loans → 403 (not silent narrow).
+	w = doRequest(env.router, http.MethodGet, loansPath+"?user_id="+extra.ID.String(), nil, bearerToken(t, member.ID))
+	require.Equal(t, http.StatusForbidden, w.Code)
+	var loanErr map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loanErr))
+	assert.Equal(t, "members can only access their own data", loanErr["error"])
+
+	// Member scoping to self via user_id is allowed → 200.
+	w = doRequest(env.router, http.MethodGet, loansPath+"?user_id="+member.ID.String(), nil, bearerToken(t, member.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// Admin filtering by another member → 200.
+	w = doRequest(env.router, http.MethodGet, loansPath+"?user_id="+member.ID.String(), nil, bearerToken(t, head.ID))
+	require.Equal(t, http.StatusOK, w.Code)
 
 	// Head POST targeting head as borrower → 400.
 	w = doRequest(env.router, http.MethodPost, loansPath, map[string]interface{}{

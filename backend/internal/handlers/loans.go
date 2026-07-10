@@ -147,7 +147,7 @@ func (h *LoanHandler) ListLoans(c *gin.Context) {
 	var filterUserID *uuid.UUID
 	var filterStatus *models.LoanStatus
 
-	if caller.Role == models.RoleHead {
+	if caller.Role == models.RoleAdmin {
 		if uidStr := c.Query("user_id"); uidStr != "" {
 			uid, err := uuid.Parse(uidStr)
 			if err != nil {
@@ -157,7 +157,18 @@ func (h *LoanHandler) ListLoans(c *gin.Context) {
 			filterUserID = &uid
 		}
 	} else {
-		// Member sees only own loans regardless of any user_id query param.
+		// Member: may only scope to self. An explicit user_id for anyone else is 403.
+		if uidStr := c.Query("user_id"); uidStr != "" {
+			uid, err := uuid.Parse(uidStr)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+				return
+			}
+			if uid != callerID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "members can only access their own data"})
+				return
+			}
+		}
 		filterUserID = &callerID
 	}
 
@@ -251,10 +262,10 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 
 	var loan *models.Loan
 
-	if caller.Role == models.RoleHead {
-		// Head creates a pre-approved active loan for a member.
+	if caller.Role == models.RoleAdmin {
+		// Admin creates a pre-approved active loan for a member.
 		if req.UserID == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required for head-created loans"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required for admin-created loans"})
 			return
 		}
 		target, err := h.groupRepo.GetMember(c.Request.Context(), groupID, *req.UserID)
@@ -266,8 +277,8 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check target membership"})
 			return
 		}
-		if target.Role == models.RoleHead {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot create a loan for the group head"})
+		if target.Role == models.RoleAdmin {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot create a loan for the group admin"})
 			return
 		}
 
@@ -341,8 +352,8 @@ func (h *LoanHandler) ApproveLoan(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
 		return
 	}
-	if caller.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can approve loans"})
+	if caller.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can approve loans"})
 		return
 	}
 
@@ -451,8 +462,8 @@ func (h *LoanHandler) RejectLoan(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
 		return
 	}
-	if caller.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can reject loans"})
+	if caller.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can reject loans"})
 		return
 	}
 
@@ -487,7 +498,7 @@ func (h *LoanHandler) RejectLoan(c *gin.Context) {
 	c.JSON(http.StatusOK, loanToResponse(updated, 0, updated.Principal, currency))
 }
 
-// CloseLoan handles POST /api/v1/loans/:id/close (early payoff, head only).
+// CloseLoan handles POST /api/v1/loans/:id/close (early payoff, admin only).
 func (h *LoanHandler) CloseLoan(c *gin.Context) {
 	callerIDStr, exists := auth.GetUserID(c)
 	if !exists {
@@ -525,8 +536,8 @@ func (h *LoanHandler) CloseLoan(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
 		return
 	}
-	if caller.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can close loans"})
+	if caller.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can close loans"})
 		return
 	}
 
