@@ -31,8 +31,9 @@ export function useAddMember(groupId: string) {
     mutationFn: (data: { email: string; name: string }) =>
       groupsApi.addMember(groupId, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.group(groupId) });   // refresh member list
-      qc.invalidateQueries({ queryKey: qk.balance(groupId) }); // new member's balance row
+      qc.invalidateQueries({ queryKey: qk.group(groupId) });     // refresh member list
+      qc.invalidateQueries({ queryKey: qk.balance(groupId) });   // new member's balance row
+      qc.invalidateQueries({ queryKey: qk.statement(groupId) }); // V3-4.2: statement rows drive the group home now
     },
   });
 }

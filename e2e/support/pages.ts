@@ -246,6 +246,29 @@ export async function rejectFirstPending(page: Page): Promise<void> {
   await expect(page.getByTestId(tid!)).toHaveCount(0, { timeout: 10_000 });
 }
 
+// ─── Statement helpers (V3-4.2) ───────────────────────────────────────────────
+
+/**
+ * Admin records a payment for a member on the statement screen: opens the
+ * per-row Record-payment sheet (specific uid, or the first row), asserts the
+ * amount is pre-filled (visible), submits, and awaits the success toast.
+ */
+export async function recordPayment(page: Page, uid?: string): Promise<void> {
+  const btn = uid
+    ? page.getByTestId(`statement-record-payment-${uid}`)
+    : page.getByTestId(/^statement-record-payment-/).first();
+  await expect(btn).toBeVisible({ timeout: 10_000 });
+  await btn.click();
+  await expect(page.getByTestId('record-payment-amount')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('record-payment-submit').click();
+  await expect(page.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
+}
+
+/** Navigate the statement month switcher one step (prev/next). */
+export async function openStatementMonth(page: Page, dir: 'prev' | 'next'): Promise<void> {
+  await page.getByTestId(`statement-${dir}-month`).click();
+}
+
 // ─── Loan helpers ─────────────────────────────────────────────────────────────
 
 export async function requestLoan(

@@ -15,6 +15,8 @@ export { LedgerRow } from './LedgerRow';
 export { LedgerList } from './LedgerList';
 export { AddEntrySheet } from './AddEntrySheet';
 export { MemberCard } from './MemberCard';
+export { StatementRow } from './StatementRow';
+export { RecordPaymentSheet } from './RecordPaymentSheet';
 export { AllowanceSummary } from './AllowanceSummary';
 export { AllowanceSheet } from './AllowanceSheet';
 export { AddMemberSheet } from './AddMemberSheet';
