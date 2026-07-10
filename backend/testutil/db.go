@@ -66,6 +66,8 @@ func CleanupTestDB(pool *pgxpool.Pool) error {
 	// so TRUNCATE loans CASCADE also truncates ledger_entries. Since ledger_entries
 	// is in the list anyway, the net effect is correct regardless of order.
 	tables := []string{
+		"entry_audit",
+		"notifications",
 		"loans",
 		"allowances",
 		"invite_tokens",
@@ -96,6 +98,8 @@ func ResetTestDB(pool *pgxpool.Pool) error {
 	// loans must come before ledger_entries (FK ledger_entries.loan_id → loans).
 	tables := []string{
 		"schema_migrations",
+		"entry_audit",
+		"notifications",
 		"loans",
 		"allowances",
 		"invite_tokens",
