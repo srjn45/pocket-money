@@ -161,15 +161,19 @@ export default function ChoresScreen() {
         </View>
       );
 
+    // Reference-data presentation (§5): the description is the always-present
+    // secondary line so each row reads as documentation of what the chore means.
+    const subtitle = isSystemChore
+      ? "Used to record payouts — can't be edited or deleted"
+      : item.description?.trim()
+        ? item.description
+        : 'No description yet — tap to add what counts as done';
+
     return (
       <View testID={`chore-row-${item.id}`}>
         <ListRow
           title={item.name}
-          subtitle={
-            isSystemChore
-              ? 'Used to record payouts — can\'t be edited or deleted'
-              : item.description ?? undefined
-          }
+          subtitle={subtitle}
           left={leftSlot}
           right={rightSlot}
           onPress={canEdit ? () => openModal(item) : undefined}
@@ -237,6 +241,14 @@ export default function ChoresScreen() {
           data={chores}
           renderItem={renderChore}
           keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            <View style={styles.referenceHeader}>
+              <Text style={styles.referenceTitle}>Chores &amp; amounts</Text>
+              <Text style={styles.referenceHint}>
+                Reference data for this group — the tasks members can log and what each pays.
+              </Text>
+            </View>
+          }
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} />
           }
@@ -293,6 +305,23 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
+  },
+  referenceHeader: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+  },
+  referenceTitle: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.color.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  referenceHint: {
+    fontSize: theme.fontSize.xs,
+    color: theme.color.textSecondary,
+    marginTop: theme.spacing.xs,
   },
   systemRow: {
     backgroundColor: theme.color.surfaceMuted,

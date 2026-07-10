@@ -86,7 +86,16 @@ summaryTest('T-RO-4: head sees active and rejected loans on loans tab', async ({
   await expect(page.getByTestId('loans-root')).toBeVisible({ timeout: 10_000 });
 
   // At least one loan card should be visible.
-  await expect(page.getByTestId(/^loan-card-/).first()).toBeVisible({ timeout: 10_000 });
+  const card = page.getByTestId(/^loan-card-/).first();
+  await expect(card).toBeVisible({ timeout: 10_000 });
+
+  // V3-4.3: tapping a card opens the read-only loan detail with a derived
+  // repayment schedule (buildLoanSchedule) — one installment row per month.
+  const loanId = (await card.getAttribute('data-testid'))!.replace('loan-card-', '');
+  await card.click();
+  await expect(page.getByTestId('loan-detail-root')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('loan-schedule')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId(`loan-installment-${loanId}-1`)).toBeVisible({ timeout: 10_000 });
 });
 
 // T-RO-6: The seeded EUR group ("Sharma Europe Trip") renders its Gelato-treat

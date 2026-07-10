@@ -13,9 +13,12 @@ export type GroupSection = 'overview' | 'chores' | 'loans';
 // gotcha — the same reason e2e reaches these routes via page.goto). `replace`
 // (not `push`) keeps section switches off the history stack, matching tab
 // semantics.
+// V3-4.3 (§5, option A): Chores is no longer a primary tab — it is reference data
+// reached from the admin Overview (`overview-chores-link`). The /chores route and
+// its testIDs are preserved (e2e reaches it by full-URL nav, not the segment), so
+// GroupSection still admits 'chores' for the chores screen's own active prop.
 const SECTIONS: { key: GroupSection; label: string; path: (id: string) => string }[] = [
   { key: 'overview', label: 'Overview', path: (id) => `/(app)/groups/${id}` },
-  { key: 'chores', label: 'Chores', path: (id) => `/(app)/groups/${id}/chores` },
   { key: 'loans', label: 'Loans', path: (id) => `/(app)/groups/${id}/loans` },
 ];
 

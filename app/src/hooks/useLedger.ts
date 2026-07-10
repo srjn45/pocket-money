@@ -58,3 +58,22 @@ export function useRejectLedger(groupId: string) {
     onSuccess: invalidate,
   });
 }
+
+// Corrections (D3). Reuses useInvalidateGroup so editing a chore's amount fans
+// out to ledger + balance + statement (payable/remaining recompute) + dashboard.
+export function useEditLedgerEntry(groupId: string) {
+  const invalidate = useInvalidateGroup(groupId);
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & Parameters<typeof ledgerApi.edit>[1]) =>
+      ledgerApi.edit(id, data),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteLedgerEntry(groupId: string) {
+  const invalidate = useInvalidateGroup(groupId);
+  return useMutation({
+    mutationFn: (id: string) => ledgerApi.remove(id),
+    onSuccess: invalidate,
+  });
+}

@@ -72,7 +72,7 @@ export function entryTitle(entry: LedgerEntry, chores: Chore[], loans?: Loan[]):
       return entry.note ? `EMI — ${entry.note}` : 'EMI';
     }
     case 'settlement':
-      return 'Settlement';
+      return 'Payment'; // D9 user-facing copy (internal entry_type stays 'settlement')
     case 'adjustment':
       return 'Adjustment';
     default:

@@ -23,6 +23,12 @@ export interface LedgerListProps {
   emptySubtitle?: string;
   /** Optional loans so EMI rows can render "EMI k/n"; omit for the plain fallback. */
   loans?: Loan[];
+  /** Corrections (D3): thread admin edit/delete + session "Edited" badge to rows. */
+  canEdit?: boolean;
+  onEditEntry?: (entry: LedgerEntry) => void;
+  onDeleteEntry?: (entry: LedgerEntry) => void;
+  /** Entry ids that were edited this session (in-memory, §4.3). */
+  editedIds?: Set<string>;
 }
 
 export function LedgerList({
@@ -39,6 +45,10 @@ export function LedgerList({
   emptyTitle,
   emptySubtitle,
   loans,
+  canEdit,
+  onEditEntry,
+  onDeleteEntry,
+  editedIds,
 }: LedgerListProps) {
   const sections = groupEntriesByMonth(entries);
 
@@ -66,6 +76,10 @@ export function LedgerList({
           onReject={onReject}
           processing={processingId === item.id}
           loans={loans}
+          canEdit={canEdit}
+          onEdit={onEditEntry}
+          onDelete={onDeleteEntry}
+          edited={editedIds?.has(item.id)}
         />
       )}
       renderSectionHeader={({ section }) => (

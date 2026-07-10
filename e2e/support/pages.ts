@@ -225,6 +225,45 @@ export async function headAddEntry(
 }
 
 /**
+ * Corrections (V3-4.3, D3): open the edit sheet for a manual ledger row, change
+ * the amount, and submit. Targets the given entry's `ledger-edit-${id}` control,
+ * or the first one when omitted. Returns the edited entry's id (for the
+ * `ledger-edited-${id}` badge assertion).
+ */
+export async function headEditEntry(page: Page, newAmount: string, entryId?: string): Promise<string> {
+  const btn = entryId
+    ? page.getByTestId(`ledger-edit-${entryId}`)
+    : page.getByTestId(/^ledger-edit-/).first();
+  await expect(btn).toBeVisible({ timeout: 15_000 });
+  const tid = await btn.getAttribute('data-testid');
+  const id = tid!.replace('ledger-edit-', '');
+  await btn.click();
+  await expect(page.getByTestId('entry-amount')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('entry-amount').fill(newAmount);
+  await page.getByTestId('entry-submit').click();
+  return id;
+}
+
+/**
+ * Corrections (D3): delete a manual ledger row via its `ledger-delete-${id}`
+ * trash control (or the first one when omitted). The destructive confirm is a
+ * native window.confirm on web — call autoAcceptDialogs(page) first.
+ */
+export async function headDeleteEntry(page: Page, entryId?: string): Promise<void> {
+  const btn = entryId
+    ? page.getByTestId(`ledger-delete-${entryId}`)
+    : page.getByTestId(/^ledger-delete-/).first();
+  await expect(btn).toBeVisible({ timeout: 15_000 });
+  await btn.click();
+}
+
+/** Open a loan's read-only detail (schedule) from its card. */
+export async function openLoanDetail(page: Page, loanId: string): Promise<void> {
+  await page.getByTestId(`loan-card-${loanId}`).click();
+  await expect(page.getByTestId('loan-detail-root')).toBeVisible({ timeout: 15_000 });
+}
+
+/**
  * Approve the first pending ledger row. Captures that row's exact testID before
  * clicking so the "disappeared" assertion is not confused by other pending rows
  * that still carry an approve control.
