@@ -38,7 +38,9 @@ func setupAuthTestRouter(t *testing.T) (*gin.Engine, func()) {
 	require.NoError(t, err)
 
 	userRepo := db.NewUserRepo(pool)
-	authHandler := handlers.NewAuthHandler(userRepo, authTestJWTSecret)
+	groupRepo := db.NewGroupRepo(pool)
+	notificationRepo := db.NewNotificationRepo(pool)
+	authHandler := handlers.NewAuthHandler(userRepo, groupRepo, notificationRepo, pool, authTestJWTSecret)
 
 	router := gin.New()
 	router.POST("/api/v1/auth/register", authHandler.Register)

@@ -42,6 +42,7 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		"invite_tokens",
 		"allowances",
 		"loans",
+		"notifications", // V3-2.1
 	}
 
 	for _, table := range tables {
@@ -79,6 +80,27 @@ func TestMigrations_UpAndDown(t *testing.T) {
 		`, typeName).Scan(&exists)
 		require.NoError(t, err)
 		assert.True(t, exists, "Type %s should exist after migration up", typeName)
+	}
+
+	// V3-2.1: users gained shadow-user columns and password_hash became nullable.
+	var pwNullable string
+	err = pool.QueryRow(ctx, `
+		SELECT is_nullable FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'password_hash'
+	`).Scan(&pwNullable)
+	require.NoError(t, err)
+	assert.Equal(t, "YES", pwNullable, "users.password_hash should be nullable after 014")
+
+	for _, col := range []string{"status", "claimed_at"} {
+		var exists bool
+		err = pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'users' AND column_name = $1
+			)
+		`, col).Scan(&exists)
+		require.NoError(t, err)
+		assert.True(t, exists, "users.%s should exist after migration 014", col)
 	}
 
 	// Run migrations down

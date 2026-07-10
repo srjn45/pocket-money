@@ -40,13 +40,14 @@ func main() {
 	inviteRepo := db.NewInviteRepo(pool)
 	allowanceRepo := db.NewAllowanceRepo(pool)
 	loanRepo := db.NewLoanRepo(pool)
+	notificationRepo := db.NewNotificationRepo(pool)
 
 	// Build posting service (lazy allowance + EMI posting engine)
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
 	// Create handlers
-	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, postingSvc, pool, cfg.AppBaseURL)
+	authHandler := handlers.NewAuthHandler(userRepo, groupRepo, notificationRepo, pool, cfg.JWTSecret)
+	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, cfg.AppBaseURL)
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
 	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
 	allowanceHandler := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
@@ -81,6 +82,7 @@ func main() {
 			protected.GET("/groups", groupHandler.ListGroups)
 			protected.GET("/groups/:id", groupHandler.GetGroup)
 			protected.GET("/groups/:id/members", groupHandler.ListMembers)
+			protected.POST("/groups/:id/members", groupHandler.AddMemberByEmail)
 			protected.DELETE("/groups/:id/members/:userId", groupHandler.RemoveMember)
 			protected.POST("/groups/:id/invite", groupHandler.CreateInvite)
 			protected.POST("/groups/join", groupHandler.JoinGroup)
