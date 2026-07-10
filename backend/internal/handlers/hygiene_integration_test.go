@@ -112,7 +112,7 @@ func (e *hygieneTestEnv) seedHygieneGroup(t *testing.T, suffix string, headPassw
 	member, err = e.userRepo.Create(ctx, fmt.Sprintf("member-%s@example.com", suffix), "hash", "Member"+suffix, nil, nil)
 	require.NoError(t, err)
 
-	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID)
+	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
 	require.NoError(t, err)

@@ -29,27 +29,27 @@ func NewAllowanceHandler(allowanceRepo *db.AllowanceRepo, groupRepo *db.GroupRep
 
 // AllowanceResponse is the API representation of an allowance row.
 type AllowanceResponse struct {
-	ID            uuid.UUID `json:"id"`
-	GroupID       uuid.UUID `json:"group_id"`
-	UserID        uuid.UUID `json:"user_id"`
-	Amount        int64     `json:"amount"`
-	EffectiveFrom string    `json:"effective_from"`
-	CreatedBy     uuid.UUID `json:"created_by"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            uuid.UUID    `json:"id"`
+	GroupID       uuid.UUID    `json:"group_id"`
+	UserID        uuid.UUID    `json:"user_id"`
+	Amount        models.Money `json:"amount"`
+	EffectiveFrom string       `json:"effective_from"`
+	CreatedBy     uuid.UUID    `json:"created_by"`
+	CreatedAt     time.Time    `json:"created_at"`
 }
 
 // SetAllowanceRequest is the body for PUT /groups/:id/allowances/:userId.
 type SetAllowanceRequest struct {
-	Amount        int64   `json:"amount"`
-	EffectiveFrom *string `json:"effective_from"`
+	Amount        models.Money `json:"amount"` // value >= 0 (0 = paused); currency must match group
+	EffectiveFrom *string      `json:"effective_from"`
 }
 
-func allowanceToResponse(a *models.Allowance) AllowanceResponse {
+func allowanceToResponse(a *models.Allowance, currency string) AllowanceResponse {
 	return AllowanceResponse{
 		ID:            a.ID,
 		GroupID:       a.GroupID,
 		UserID:        a.UserID,
-		Amount:        a.Amount,
+		Amount:        models.NewMoney(currency, a.Amount),
 		EffectiveFrom: a.EffectiveFrom,
 		CreatedBy:     a.CreatedBy,
 		CreatedAt:     a.CreatedAt,
@@ -89,6 +89,12 @@ func (h *AllowanceHandler) ListAllowances(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var allowances []*models.Allowance
 	if member.Role == models.RoleHead {
 		allowances, err = h.allowanceRepo.ListForGroup(c.Request.Context(), groupID)
@@ -102,7 +108,7 @@ func (h *AllowanceHandler) ListAllowances(c *gin.Context) {
 
 	response := make([]AllowanceResponse, 0, len(allowances))
 	for _, a := range allowances {
-		response = append(response, allowanceToResponse(a))
+		response = append(response, allowanceToResponse(a, currency))
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -167,13 +173,22 @@ func (h *AllowanceHandler) SetAllowance(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var req SetAllowanceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.Amount < 0 {
+	if !checkMoneyCurrency(c, req.Amount, currency) {
+		return
+	}
+	if req.Amount.Value < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "amount must be >= 0"})
 		return
 	}
@@ -187,11 +202,11 @@ func (h *AllowanceHandler) SetAllowance(c *gin.Context) {
 		effectiveFrom = *req.EffectiveFrom
 	}
 
-	allowance, err := h.allowanceRepo.SetAllowance(c.Request.Context(), groupID, targetID, req.Amount, effectiveFrom, callerID)
+	allowance, err := h.allowanceRepo.SetAllowance(c.Request.Context(), groupID, targetID, req.Amount.Value, effectiveFrom, callerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to set allowance"})
 		return
 	}
 
-	c.JSON(http.StatusOK, allowanceToResponse(allowance))
+	c.JSON(http.StatusOK, allowanceToResponse(allowance, currency))
 }

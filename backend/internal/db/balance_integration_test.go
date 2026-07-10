@@ -45,7 +45,7 @@ func TestGetBalanceForGroup_DirectionBased(t *testing.T) {
 	member, err := userRepo.Create(ctx, "member@example.com", "hash", "Member", nil, nil)
 	require.NoError(t, err)
 
-	group, err := groupRepo.Create(ctx, "Test Family", head.ID)
+	group, err := groupRepo.Create(ctx, "Test Family", head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestGetBalanceForGroup_AdjustmentBothDirections(t *testing.T) {
 	member, err := userRepo.Create(ctx, "member2@example.com", "hash", "Member", nil, nil)
 	require.NoError(t, err)
 
-	group, err := groupRepo.Create(ctx, "Family2", head.ID)
+	group, err := groupRepo.Create(ctx, "Family2", head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)

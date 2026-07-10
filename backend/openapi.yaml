@@ -1610,14 +1610,39 @@ components:
         - name
         - created_at
 
+    Money:
+      type: object
+      description: >
+        A monetary amount in a group's currency. `value` is in minor units
+        (cents/paise; all three supported currencies have exponent 2) and is NEVER a
+        float. `currency` always equals the owning group's currency (D7); the server
+        rejects any request whose currency differs from the group's.
+      properties:
+        currency:
+          type: string
+          enum: [EUR, USD, INR]
+          description: ISO-4217 code; always the owning group's currency.
+        value:
+          type: integer
+          format: int64
+          description: Amount in minor units (e.g. €12.50 = 1250). Always an integer.
+      required:
+        - currency
+        - value
+
     CreateGroupRequest:
       type: object
       properties:
         name:
           type: string
           description: Group name
+        currency:
+          type: string
+          enum: [EUR, USD, INR]
+          description: The group's immutable ISO-4217 currency (D7). Required.
       required:
         - name
+        - currency
 
     GroupResponse:
       type: object
@@ -1633,6 +1658,10 @@ components:
           type: string
           format: uuid
           description: ID of the group head (admin)
+        currency:
+          type: string
+          enum: [EUR, USD, INR]
+          description: The group's immutable ISO-4217 currency (D7).
         created_at:
           type: string
           format: date-time
@@ -1641,6 +1670,7 @@ components:
         - id
         - name
         - head_user_id
+        - currency
         - created_at
 
     GroupSummaryResponse:
@@ -1661,6 +1691,10 @@ components:
           type: string
           format: uuid
           description: ID of the group head
+        currency:
+          type: string
+          enum: [EUR, USD, INR]
+          description: The group's immutable ISO-4217 currency (D7).
         created_at:
           type: string
           format: date-time
@@ -1673,10 +1707,10 @@ components:
           type: integer
           description: Number of members in the group (includes the head).
         summary_balance:
-          type: integer
-          format: int64
+          allOf:
+            - $ref: '#/components/schemas/Money'
           description: >-
-            Role-dependent summary in minor units (paise). For role=head, the sum of all NON-head
+            Role-dependent summary in the group's currency. For role=head, the sum of all NON-head
             members' balances (= total the head owes members; typically >= 0). For role=member, the
             caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe
             the head). Computed as Σ approved credits − Σ approved debits. A member never receives
@@ -1685,6 +1719,7 @@ components:
         - id
         - name
         - head_user_id
+        - currency
         - created_at
         - role
         - member_count
@@ -1704,6 +1739,10 @@ components:
           type: string
           format: uuid
           description: ID of the group head (admin)
+        currency:
+          type: string
+          enum: [EUR, USD, INR]
+          description: The group's immutable ISO-4217 currency (D7).
         created_at:
           type: string
           format: date-time
@@ -1720,6 +1759,7 @@ components:
         - id
         - name
         - head_user_id
+        - currency
         - created_at
         - members
         - chores_count
@@ -1800,10 +1840,9 @@ components:
           nullable: true
           description: Chore description
         amount:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Amount earned for completing the chore. value >= 1; currency must equal the group's.
       required:
         - name
         - amount
@@ -1820,10 +1859,10 @@ components:
           nullable: true
           description: Chore description
         amount:
-          type: integer
-          format: int64
           nullable: true
-          description: Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Amount earned for completing the chore. value >= 1 when present; currency must equal the group's.
 
     ChoreResponse:
       type: object
@@ -1844,9 +1883,9 @@ components:
           nullable: true
           description: Chore description
         amount:
-          type: integer
-          format: int64
-          description: Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Amount earned for completing the chore, in the group's currency.
         is_system:
           type: boolean
           description: Whether this is a system-generated chore (e.g., Settlement)
@@ -1880,11 +1919,12 @@ components:
           nullable: true
           description: Chore ID (required when entry_type=chore; must be a non-system chore in this group)
         amount:
-          type: integer
-          format: int64
           nullable: true
-          minimum: 1
-          description: Amount in minor units (required for settlement/adjustment; ignored for chore — chore config amount is used instead)
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >-
+            Amount in the group's currency (value >= 1), required for settlement/adjustment; ignored for
+            chore — chore config amount is used instead. When supplied, currency must equal the group's.
         direction:
           type: string
           enum: [credit, debit]
@@ -1918,9 +1958,9 @@ components:
           nullable: true
           description: Chore ID (null for settlement/adjustment/allowance/emi)
         amount:
-          type: integer
-          format: int64
-          description: Amount in minor units (paise); e.g. ₹12.50 = 1250. Always positive — direction field indicates credit/debit.
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Amount in the group's currency. value is always positive — the direction field indicates credit/debit.
         status:
           type: string
           enum: [approved, pending_approval, rejected]
@@ -1986,9 +2026,9 @@ components:
           type: string
           description: User's full name
         balance:
-          type: integer
-          format: int64
-          description: Sum of approved credits minus approved debits, in minor units (paise); e.g. ₹12.50 = 1250
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Sum of approved credits minus approved debits, in the group's currency.
       required:
         - user_id
         - name
@@ -1998,10 +2038,9 @@ components:
       type: object
       properties:
         amount:
-          type: integer
-          format: int64
-          minimum: 0
-          description: Monthly pocket money in minor units (paise). 0 pauses the allowance.
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Monthly pocket money in the group's currency. value >= 0 (0 pauses the allowance); currency must equal the group's.
         effective_from:
           type: string
           nullable: true
@@ -2023,9 +2062,9 @@ components:
           type: string
           format: uuid
         amount:
-          type: integer
-          format: int64
-          description: Minor units; 0 = paused
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Monthly pocket money in the group's currency; value 0 = paused.
         effective_from:
           type: string
           description: 'YYYY-MM'
@@ -2053,10 +2092,9 @@ components:
           nullable: true
           description: Borrower. Required when the head creates a pre-approved loan; ignored/self for member requests.
         principal:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Loan principal in minor units (paise). > 0.
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Loan principal in the group's currency. value >= 1; currency must equal the group's.
         installments:
           type: integer
           minimum: 1
@@ -2072,10 +2110,10 @@ components:
       type: object
       properties:
         principal:
-          type: integer
-          format: int64
-          minimum: 1
           nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Optional principal override in the group's currency. value >= 1 when present; currency must equal the group's.
         installments:
           type: integer
           minimum: 1
@@ -2095,15 +2133,15 @@ components:
           type: string
           format: uuid
         principal:
-          type: integer
-          format: int64
-          description: Minor units
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Loan principal in the group's currency.
         installments:
           type: integer
         emi_amount:
-          type: integer
-          format: int64
-          description: ceil(principal/installments), minor units
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: ceil(principal/installments), in the group's currency.
         start_period:
           type: string
           nullable: true
@@ -2129,9 +2167,9 @@ components:
           type: integer
           description: Count of posted EMI entries
         outstanding:
-          type: integer
-          format: int64
-          description: principal − Σ posted EMIs, minor units
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: principal − Σ posted EMIs, in the group's currency.
       required:
         - id
         - group_id

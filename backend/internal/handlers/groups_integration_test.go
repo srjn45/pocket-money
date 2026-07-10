@@ -92,7 +92,7 @@ func (e *groupsTestEnv) seedGroupHead(t *testing.T, suffix string) (head *models
 	var err error
 	head, err = e.userRepo.Create(ctx, fmt.Sprintf("head-%s@example.com", suffix), "hash", "Head "+suffix, nil, nil)
 	require.NoError(t, err)
-	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID)
+	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
 	require.NoError(t, err)
@@ -170,8 +170,8 @@ func TestGroups_HeadTotalSumOfMemberBalances(t *testing.T) {
 	row := findGroup(t, rows, group.ID)
 
 	assert.Equal(t, models.RoleHead, row.Role)
-	assert.Equal(t, 3, row.MemberCount)              // head + 2 members
-	assert.Equal(t, int64(1000), row.SummaryBalance) // 1500 + (-500) = 1000
+	assert.Equal(t, 3, row.MemberCount)                    // head + 2 members
+	assert.Equal(t, int64(1000), row.SummaryBalance.Value) // 1500 + (-500) = 1000
 }
 
 // --- Test 2: Member sees own balance only ---
@@ -192,7 +192,7 @@ func TestGroups_MemberSeesOwnBalanceOnly(t *testing.T) {
 	row := findGroup(t, rows, group.ID)
 
 	assert.Equal(t, models.RoleMember, row.Role)
-	assert.Equal(t, int64(1500), row.SummaryBalance, "memberA sees own balance")
+	assert.Equal(t, int64(1500), row.SummaryBalance.Value, "memberA sees own balance")
 	// no way to check B's balance isn't leaked — verified structurally in test 3
 }
 
@@ -215,7 +215,7 @@ func TestGroups_MemberPrivacy(t *testing.T) {
 	row := findGroup(t, rows, group.ID)
 
 	assert.Equal(t, models.RoleMember, row.Role)
-	assert.Equal(t, int64(300), row.SummaryBalance,
+	assert.Equal(t, int64(300), row.SummaryBalance.Value,
 		"adding large credit to memberB must not change memberA's summary_balance")
 }
 
@@ -233,7 +233,7 @@ func TestGroups_EmptyGroup(t *testing.T) {
 
 	assert.Equal(t, models.RoleHead, row.Role)
 	assert.Equal(t, 1, row.MemberCount, "only head in group")
-	assert.Equal(t, int64(0), row.SummaryBalance, "no non-head members to owe")
+	assert.Equal(t, int64(0), row.SummaryBalance.Value, "no non-head members to owe")
 }
 
 // --- Test 5: Group with members but no ledger entries ---
@@ -250,12 +250,12 @@ func TestGroups_MembersNoLedger(t *testing.T) {
 	rowsHead := listGroups(t, env, head.ID)
 	rowHead := findGroup(t, rowsHead, group.ID)
 	assert.Equal(t, 3, rowHead.MemberCount)
-	assert.Equal(t, int64(0), rowHead.SummaryBalance)
+	assert.Equal(t, int64(0), rowHead.SummaryBalance.Value)
 
 	// member view: no ledger entries → COALESCE path
 	rowsMember := listGroups(t, env, memberA.ID)
 	rowMember := findGroup(t, rowsMember, group.ID)
-	assert.Equal(t, int64(0), rowMember.SummaryBalance)
+	assert.Equal(t, int64(0), rowMember.SummaryBalance.Value)
 
 	_ = memberB
 }
@@ -272,7 +272,7 @@ func TestGroups_MultiGroupMixedRoles(t *testing.T) {
 	require.NoError(t, err)
 
 	// G1: user is head
-	g1, err := env.groupRepo.Create(ctx, "G1 t6", user.ID)
+	g1, err := env.groupRepo.Create(ctx, "G1 t6", user.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = env.groupRepo.AddMember(ctx, g1.ID, user.ID, models.RoleHead)
 	require.NoError(t, err)
@@ -282,7 +282,7 @@ func TestGroups_MultiGroupMixedRoles(t *testing.T) {
 	// G2: user is member, head is someone else
 	head2, err := env.userRepo.Create(ctx, "head2-t6@example.com", "hash", "Head2", nil, nil)
 	require.NoError(t, err)
-	g2, err := env.groupRepo.Create(ctx, "G2 t6", head2.ID)
+	g2, err := env.groupRepo.Create(ctx, "G2 t6", head2.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = env.groupRepo.AddMember(ctx, g2.ID, head2.ID, models.RoleHead)
 	require.NoError(t, err)
@@ -295,11 +295,11 @@ func TestGroups_MultiGroupMixedRoles(t *testing.T) {
 
 	rowG1 := findGroup(t, rows, g1.ID)
 	assert.Equal(t, models.RoleHead, rowG1.Role)
-	assert.Equal(t, int64(800), rowG1.SummaryBalance, "G1: total owed to non-head members")
+	assert.Equal(t, int64(800), rowG1.SummaryBalance.Value, "G1: total owed to non-head members")
 
 	rowG2 := findGroup(t, rows, g2.ID)
 	assert.Equal(t, models.RoleMember, rowG2.Role)
-	assert.Equal(t, int64(500), rowG2.SummaryBalance, "G2: user's own balance")
+	assert.Equal(t, int64(500), rowG2.SummaryBalance.Value, "G2: user's own balance")
 }
 
 // --- Test 7: Rejected/pending entries excluded ---
@@ -321,12 +321,12 @@ func TestGroups_RejectedPendingExcluded(t *testing.T) {
 	// member view
 	rows := listGroups(t, env, member.ID)
 	row := findGroup(t, rows, group.ID)
-	assert.Equal(t, int64(200), row.SummaryBalance, "only approved entry counts")
+	assert.Equal(t, int64(200), row.SummaryBalance.Value, "only approved entry counts")
 
 	// head view
 	rowsH := listGroups(t, env, head.ID)
 	rowH := findGroup(t, rowsH, group.ID)
-	assert.Equal(t, int64(200), rowH.SummaryBalance, "head total reflects only approved")
+	assert.Equal(t, int64(200), rowH.SummaryBalance.Value, "head total reflects only approved")
 }
 
 // --- Test 8: No posting side-effect (D1) ---
@@ -383,7 +383,7 @@ func TestGroups_OrderByCreatedAtDesc(t *testing.T) {
 	// Create three groups; DB RETURNING created_at gives stable ordering.
 	var groupIDs []uuid.UUID
 	for i := 0; i < 3; i++ {
-		g, err := env.groupRepo.Create(ctx, fmt.Sprintf("Group %d", i), head.ID)
+		g, err := env.groupRepo.Create(ctx, fmt.Sprintf("Group %d", i), head.ID, models.CurrencyINR)
 		require.NoError(t, err)
 		_, err = env.groupRepo.AddMember(ctx, g.ID, head.ID, models.RoleHead)
 		require.NoError(t, err)

@@ -96,7 +96,7 @@ func (e *loanTestEnv) seedGroup(t *testing.T, suffix string) (head, member *mode
 	require.NoError(t, err)
 	member, err = e.userRepo.Create(ctx, fmt.Sprintf("member-%s@example.com", suffix), "hash", "Member", nil, nil)
 	require.NoError(t, err)
-	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID)
+	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
 	require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestLoan_EMI_AllowanceCoexistence(t *testing.T) {
 	var found bool
 	for _, b := range balances {
 		if b.UserID == member.ID {
-			assert.Equal(t, int64(200), b.Balance, "balance = 500 allowance - 300 EMI")
+			assert.Equal(t, int64(200), b.Balance.Value, "balance = 500 allowance - 300 EMI")
 			found = true
 		}
 	}
@@ -344,7 +344,7 @@ func TestLoan_NegativeBalance(t *testing.T) {
 	var found bool
 	for _, b := range balances {
 		if b.UserID == member.ID {
-			assert.Equal(t, int64(-3000), b.Balance, "balance must be negative when EMIs exceed credits")
+			assert.Equal(t, int64(-3000), b.Balance.Value, "balance must be negative when EMIs exceed credits")
 			found = true
 		}
 	}
@@ -406,7 +406,7 @@ func TestLoan_FinalInstallmentAndAutoClose(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loanResp))
 	require.Len(t, loanResp, 1)
 	assert.Equal(t, 3, loanResp[0].InstallmentsPosted)
-	assert.Equal(t, int64(0), loanResp[0].Outstanding)
+	assert.Equal(t, int64(0), loanResp[0].Outstanding.Value)
 	assert.Equal(t, models.LoanStatusClosed, loanResp[0].Status)
 }
 
@@ -441,7 +441,7 @@ func TestLoan_EarlyPayoff(t *testing.T) {
 	var resp handlers.LoanResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, models.LoanStatusClosed, resp.Status)
-	assert.Equal(t, int64(0), resp.Outstanding)
+	assert.Equal(t, int64(0), resp.Outstanding.Value)
 	assert.Equal(t, 2, resp.InstallmentsPosted)
 
 	// Σ of all EMIs must equal principal.
@@ -508,13 +508,13 @@ func TestLoan_AuthZ(t *testing.T) {
 
 	// Member POST naming another user → 400.
 	w := doRequest(env.router, http.MethodPost, loansPath, map[string]interface{}{
-		"user_id": extra.ID, "principal": 1000, "installments": 3,
+		"user_id": extra.ID, "principal": inr(1000), "installments": 3,
 	}, bearerToken(t, member.ID))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// Member creates their own loan → 201.
 	w = doRequest(env.router, http.MethodPost, loansPath, map[string]interface{}{
-		"principal": 1000, "installments": 3,
+		"principal": inr(1000), "installments": 3,
 	}, bearerToken(t, member.ID))
 	require.Equal(t, http.StatusCreated, w.Code)
 	var loanResp handlers.LoanResponse
@@ -550,13 +550,13 @@ func TestLoan_AuthZ(t *testing.T) {
 
 	// Head POST targeting head as borrower → 400.
 	w = doRequest(env.router, http.MethodPost, loansPath, map[string]interface{}{
-		"user_id": head.ID, "principal": 500, "installments": 2,
+		"user_id": head.ID, "principal": inr(500), "installments": 2,
 	}, bearerToken(t, head.ID))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// Head creates pre-approved active loan for member.
 	w = doRequest(env.router, http.MethodPost, loansPath, map[string]interface{}{
-		"user_id": member.ID, "principal": 600, "installments": 2,
+		"user_id": member.ID, "principal": inr(600), "installments": 2,
 	}, bearerToken(t, head.ID))
 	require.Equal(t, http.StatusCreated, w.Code)
 	var activeResp handlers.LoanResponse
@@ -653,7 +653,7 @@ func TestLoan_ApproveWithOverrides(t *testing.T) {
 	// Member requests 1000/3.
 	loansPath := fmt.Sprintf("/groups/%s/loans", group.ID)
 	w := doRequest(env.router, http.MethodPost, loansPath, map[string]interface{}{
-		"principal": 1000, "installments": 3,
+		"principal": inr(1000), "installments": 3,
 	}, bearerToken(t, member.ID))
 	require.Equal(t, http.StatusCreated, w.Code)
 	var loanResp handlers.LoanResponse
@@ -662,14 +662,14 @@ func TestLoan_ApproveWithOverrides(t *testing.T) {
 	// Head approves with different terms: 1200/4.
 	w = doRequest(env.router, http.MethodPost,
 		fmt.Sprintf("/loans/%s/approve", loanResp.ID),
-		map[string]interface{}{"principal": 1200, "installments": 4},
+		map[string]interface{}{"principal": inr(1200), "installments": 4},
 		bearerToken(t, head.ID))
 	require.Equal(t, http.StatusOK, w.Code)
 	var approved handlers.LoanResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &approved))
-	assert.Equal(t, int64(1200), approved.Principal)
+	assert.Equal(t, int64(1200), approved.Principal.Value)
 	assert.Equal(t, 4, approved.Installments)
-	assert.Equal(t, int64(300), approved.EMIAmount) // ceil(1200/4) = 300
+	assert.Equal(t, int64(300), approved.EMIAmount.Value) // ceil(1200/4) = 300
 	assert.Equal(t, models.LoanStatusActive, approved.Status)
 
 	_ = ctx

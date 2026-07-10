@@ -48,20 +48,31 @@ type SummaryUser struct {
 	Name  string `json:"name"`
 }
 
-// SummaryGroup is the group section of the JSON output.
+// SummaryGroup is one group section of the JSON output.
 type SummaryGroup struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Currency string `json:"currency"`
 }
 
 // SeedSummary is written to --out (default ../e2e/fixtures/seed.summary.json).
 type SeedSummary struct {
 	CurrentPeriod    string                 `json:"current_period"`
 	Users            map[string]SummaryUser `json:"users"`
-	Group            SummaryGroup           `json:"group"`
-	ExpectedBalances map[string]int64       `json:"expected_balances"`
+	Group            SummaryGroup           `json:"group"`             // INR "Sharma Family"
+	Group2           SummaryGroup           `json:"group2"`            // EUR "Sharma Europe Trip" (proves currency isolation)
+	Group2Amount     int64                  `json:"group2_amount"`     // the EUR chore amount, minor units
+	ExpectedBalances map[string]int64       `json:"expected_balances"` // Sharma Family (INR) balances only
 	LoanOutstanding  int64                  `json:"loan_outstanding"`
 }
+
+// Second demo group: a EUR-denominated group so the FE/e2e can assert a € render
+// and confirm balances are never summed across currencies (D7).
+const (
+	Group2Name       = "Sharma Europe Trip"
+	Group2ChoreName  = "Gelato treat"
+	Group2ChoreValue = int64(1250) // €12.50
+)
 
 func main() {
 	resetFlag := flag.Bool("reset", false, "Truncate the demo tables (DESTROYS ALL DATA). Required for unrecognized DB names.")
@@ -292,8 +303,8 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 		return nil, fmt.Errorf("create diya: %w", err)
 	}
 
-	// ── Create group ──────────────────────────────────────────────────────────
-	group, err := groupRepo.Create(ctx, GroupName, head.ID)
+	// ── Create group (INR) ────────────────────────────────────────────────────
+	group, err := groupRepo.Create(ctx, GroupName, head.ID, models.CurrencyINR)
 	if err != nil {
 		return nil, fmt.Errorf("create group: %w", err)
 	}
@@ -450,6 +461,30 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 		return nil, fmt.Errorf("insert rejected chore: %w", err)
 	}
 
+	// ── Second group in EUR (proves currency isolation, D7) ───────────────────
+	// A separate group with its own currency and a EUR-denominated chore. Balances
+	// are NEVER summed across groups/currencies, so the FE can assert a € render
+	// here alongside the ₹ renders in Sharma Family.
+	group2, err := groupRepo.Create(ctx, Group2Name, head.ID, models.CurrencyEUR)
+	if err != nil {
+		return nil, fmt.Errorf("create group2 (EUR): %w", err)
+	}
+	if _, err := groupRepo.AddMember(ctx, group2.ID, head.ID, models.RoleHead); err != nil {
+		return nil, fmt.Errorf("add head to group2: %w", err)
+	}
+	if _, err := groupRepo.AddMember(ctx, group2.ID, aarav.ID, models.RoleMember); err != nil {
+		return nil, fmt.Errorf("add aarav to group2: %w", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE group_members SET joined_at = $1 WHERE group_id = $2`,
+		joinedAt, group2.ID,
+	); err != nil {
+		return nil, fmt.Errorf("backdate group2 joined_at: %w", err)
+	}
+	if _, err := choreRepo.Create(ctx, group2.ID, Group2ChoreName, nil, Group2ChoreValue); err != nil {
+		return nil, fmt.Errorf("create group2 EUR chore: %w", err)
+	}
+
 	// ── Compute expected balances by querying the DB ─────────────────────────
 	balances, err := ledgerRepo.GetBalanceForGroup(ctx, group.ID)
 	if err != nil {
@@ -481,9 +516,16 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 			"diya":  {ID: diya.ID.String(), Email: DiyaEmail, Name: DiyaName},
 		},
 		Group: SummaryGroup{
-			ID:   group.ID.String(),
-			Name: GroupName,
+			ID:       group.ID.String(),
+			Name:     GroupName,
+			Currency: models.CurrencyINR,
 		},
+		Group2: SummaryGroup{
+			ID:       group2.ID.String(),
+			Name:     Group2Name,
+			Currency: models.CurrencyEUR,
+		},
+		Group2Amount:     Group2ChoreValue,
 		ExpectedBalances: expectedBalances,
 		LoanOutstanding:  loanOutstanding,
 	}, nil

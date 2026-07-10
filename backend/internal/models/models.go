@@ -6,6 +6,37 @@ import (
 	"github.com/google/uuid"
 )
 
+// Money is the API representation of a monetary amount (D7). Storage stays int64
+// minor units; this is purely the (de)serialization shape. Value is in minor
+// units (cents/paise; all supported currencies have exponent 2) and is NEVER a
+// float. Currency always equals the owning group's currency.
+type Money struct {
+	Currency string `json:"currency"`
+	Value    int64  `json:"value"`
+}
+
+// NewMoney builds a Money from a currency code and a minor-unit value.
+func NewMoney(currency string, value int64) Money {
+	return Money{Currency: currency, Value: value}
+}
+
+// Supported ISO-4217 currency codes (D7). Currency is immutable per group.
+const (
+	CurrencyEUR = "EUR"
+	CurrencyUSD = "USD"
+	CurrencyINR = "INR"
+)
+
+// IsValidCurrency reports whether c is a supported currency code (exact case).
+func IsValidCurrency(c string) bool {
+	switch c {
+	case CurrencyEUR, CurrencyUSD, CurrencyINR:
+		return true
+	default:
+		return false
+	}
+}
+
 // MemberRole represents the role of a user in a group
 type MemberRole string
 
@@ -58,6 +89,7 @@ type Group struct {
 	ID         uuid.UUID `json:"id"`
 	Name       string    `json:"name"`
 	HeadUserID uuid.UUID `json:"head_user_id"`
+	Currency   string    `json:"currency"` // immutable ISO-4217 code (D7)
 	CreatedAt  time.Time `json:"created_at"`
 }
 
