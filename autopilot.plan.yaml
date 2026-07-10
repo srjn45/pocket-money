@@ -1,0 +1,36 @@
+version: 1
+goal: >
+  Execute docs/master-plan-v3.md §8 in full — Phases 1 through 6, every work
+  package — until the §11 Definition of DONE is met: the family-payroll
+  product reframe (currency-per-group Money objects, shadow-user membership
+  with claim-on-register, month-first statement engine and UI, backend-enforced
+  member scoping, in-app notifications) delivered as a working, usable app on
+  web + Android + iOS, packaged as a single Docker image, with master fully
+  green including e2e.
+constraints:
+  - "docs/master-plan-v3.md is the contract. §8 acceptance criteria gate each WP; §9 conventions are binding on every worker and reviews must check them; decisions D1-D9 in §2 are settled — do not relitigate."
+  - "Spec first: commit docs/specs/V3-x.y.md (strong-model spec) before implementing a WP. One WP = one branch/PR."
+  - "Phases strictly in order. Parallel WPs only when their committed specs prove zero file overlap; WPs touching backend/openapi.yaml are serial within a phase."
+  - "This host has no Docker: integration tests (build tag `integration`) and e2e run ONLY in CI. A WP is done only when its PR's full CI, including the E2E job, is green. Never accept local checks as the gate."
+  - "Money: int64 minor units everywhere; amounts cross the API only as Money{currency,value}; currency derives solely from groups.currency (D7). Stop and surface to the operator any auth/money semantics question not covered by D1-D9."
+  - "Model policy per §10: strong model for spec and review, cheaper model for implement; risk overrides (strong implement or strict invariant review) for V3-1.1, V3-2.1, V3-2.2, V3-3.1. Never skip review."
+  - "Tear down each worker (worktree, local+remote branch, tmux session, daemon record) as soon as its WP lands."
+  - "Operator-only steps — surface, never fake: Expo credentials for `eas build` (V3-6.2); on-device QA sign-off (V3-6.3)."
+  - "Known CI flake: TestMigrations_Idempotent (test isolation) — re-run once before treating a failure as real."
+tasks:
+  - id: phase-1-currency
+    prompt: "Phase 1 of docs/master-plan-v3.md §8: V3-1.1 (BE group currency + Money{currency,value} across openapi/handlers/migrations/seed) then V3-1.2 (FE codegen, currency-aware AmountText, create-group currency picker, e2e amount assertions). Contract: §3.8 and the §8 Phase-1 acceptance criteria."
+  - id: phase-2-membership
+    prompt: "Phase 2 per §8: V3-2.1 (shadow users, add-by-email, claim-on-register, insert-only notifications table) then V3-2.2 (member API scoping per D6, head→admin rename) then V3-2.3 (FE add-by-email, shadow badges, invite UI hidden behind flag per D8, e2e rework). Contract: §3.1, §3.7, §4."
+  - id: phase-3-statement
+    prompt: "Phase 3 per §8: V3-3.1 (GET statement endpoint per §3.9 with closing==next-opening invariant) and V3-3.2 (edit-in-place for manual entries + entry_audit per D3, member-submission config flag per D2, chores.description)."
+  - id: phase-4-ui
+    prompt: "Phase 4 per §8: V3-4.1 (navigation shell: flatten nested tabs, single header, responsive column, platform-adaptive per §5 for web+Android+iOS) then V3-4.2 (statement + dashboard screens) then V3-4.3 (passbook, add-entry picker, corrections UI, loan schedule) then V3-4.4 (e2e suite v3 consolidation). Keep testIDs stable or update the suite in the same PR."
+  - id: phase-5-notifications
+    prompt: "Phase 5 per §8: V3-5.1 (notifications list/unread/mark-read API + N-3 on payment) then V3-5.2 (header bell + list screen, all platforms)."
+  - id: phase-6-packaging
+    prompt: "Phase 6 per §8: V3-6.1 (single Docker image: go:embed web export + iofs migrations, same-origin API, slim compose, CI smoke running e2e against the image) then V3-6.2 (eas.json + device QA checklist; the eas build itself is an operator step) then V3-6.3 (final acceptance golden path against the image, docs closeout, mark plan COMPLETE)."
+done_when:
+  - "Every §8 WP (V3-1.1 through V3-6.3) is landed and master CI is fully green, including the E2E job and the V3-6.1 single-image compose smoke."
+  - "The v3 golden path (register → INR and EUR groups → add member by email as shadow → chores/base/loan → month statement → record payment → member claims by registering → sees only their own statement → bell notification) passes in e2e against the V3-6.1 image."
+  - "docs/master-plan-v3.md is marked COMPLETE with the final SHA; README quick-start verified; eas.json + device QA checklist committed with operator steps clearly flagged."
