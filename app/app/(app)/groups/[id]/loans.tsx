@@ -23,6 +23,8 @@ import {
   EmptyState,
   LoadingSpinner,
   LoanApproveSheet,
+  ScreenContainer,
+  GroupSectionTabs,
   useToast,
 } from '../../../../src/components';
 import { parseMoneyToMinorUnits, formatMoney, currencySymbol } from '../../../../src/money';
@@ -294,7 +296,8 @@ export default function LoansScreen() {
     : 'Tap "Request Loan" to borrow money repaid via pocket money';
 
   return (
-    <View style={styles.container} testID="loans-root">
+    <ScreenContainer style={styles.container} testID="loans-root">
+      <GroupSectionTabs groupId={id ?? ''} active="loans" />
       {loadError ? (
         <Text style={styles.loadError}>{loadError}</Text>
       ) : null}
@@ -381,7 +384,7 @@ export default function LoansScreen() {
         currency={currency}
         loan={approveSheetLoan}
       />
-    </View>
+    </ScreenContainer>
   );
 }
 

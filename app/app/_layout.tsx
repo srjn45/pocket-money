@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../src/auth-context';
 import { ToastProvider } from '../src/components';
 import { getPendingInviteToken } from '../src/storage';
@@ -73,20 +74,25 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
+  // SafeAreaProvider is the OUTERMOST wrapper only. The provider tree
+  // (QueryClientProvider → AuthProvider → ToastProvider → AuthGate → Stack) and
+  // the AuthGate invite-race logic stay byte-for-byte unchanged (§9.2 / WP-4.6).
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ToastProvider>
-          <AuthGate />
-          <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(app)" options={{ headerShown: false }} />
-            <Stack.Screen name="invite" options={{ title: 'Join Group' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ToastProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ToastProvider>
+            <AuthGate />
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(app)" options={{ headerShown: false }} />
+              <Stack.Screen name="invite" options={{ title: 'Join Group' }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </ToastProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

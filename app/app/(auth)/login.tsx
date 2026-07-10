@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { Link } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
-import { Button, TextField } from '../../src/components';
+import { Button, TextField, ScreenContainer } from '../../src/components';
 import { theme } from '../../src/theme';
 
 const isValidEmail = (email: string) => {
@@ -46,7 +46,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <View style={styles.content}>
+      <ScreenContainer style={styles.content}>
         <Text style={styles.title}>Pocket Money</Text>
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
@@ -81,7 +81,7 @@ export default function LoginScreen() {
             </Pressable>
           </Link>
         </View>
-      </View>
+      </ScreenContainer>
     </KeyboardAvoidingView>
   );
 }

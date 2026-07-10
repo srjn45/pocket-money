@@ -24,6 +24,7 @@ import {
   StatusBadge,
   LoadingSpinner,
   ErrorMessage,
+  ScreenContainer,
   useToast,
 } from '../../../../../src/components';
 
@@ -194,7 +195,7 @@ export default function MemberDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ title: name ? `${name}'s ledger` : 'Ledger' }} />
-      <View style={styles.screen} testID="member-detail-root">
+      <ScreenContainer style={styles.screen} testID="member-detail-root">
         {/* Balance header */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>{name ? `${name}'s balance` : 'Balance'}</Text>
@@ -302,7 +303,7 @@ export default function MemberDetailScreen() {
             />
           </View>
         )}
-      </View>
+      </ScreenContainer>
     </>
   );
 }

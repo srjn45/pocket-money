@@ -37,6 +37,14 @@ export const theme = {
   },
 } as const;
 
+// In-body screen title style (Dashboard / Profile) — the one meaningful header on
+// screens whose navigator header is off. Additive; does not mutate scale tokens.
+export const screenTitleStyle = {
+  fontSize: theme.fontSize.xl,
+  fontWeight: theme.fontWeight.bold,
+  color: theme.color.text,
+} as const;
+
 // Money text style — tabular-nums + bold (§7.4: "money amounts in a tabular-nums bold style").
 // Spread into a Text style; `fontVariant` aligns digit columns so amounts line up in lists.
 export const moneyTextStyle = {

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { groupsApi } from '../../../src/api';
 import type { CurrencyCode } from '../../../src/api';
-import { Button, TextField } from '../../../src/components';
+import { Button, TextField, ScreenContainer } from '../../../src/components';
 import { currencySymbol } from '../../../src/money';
 import { theme } from '../../../src/theme';
 
@@ -35,8 +35,12 @@ export default function CreateGroupScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Group Name</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.flex}
+    >
+      <ScreenContainer style={styles.container}>
+        <Text style={styles.label}>Group Name</Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -65,22 +69,27 @@ export default function CreateGroupScreen() {
         A group&apos;s currency is permanent — it can&apos;t be changed later.
       </Text>
 
-      <View style={styles.submitRow}>
-        <Button title="Create Group" onPress={handleCreate} loading={isLoading} fullWidth testID="create-group-submit" />
-      </View>
-    </View>
+        <View style={styles.submitRow}>
+          <Button title="Create Group" onPress={handleCreate} loading={isLoading} fullWidth testID="create-group-submit" />
+        </View>
+      </ScreenContainer>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: theme.color.surface,
+  },
   container: {
     flex: 1,
     backgroundColor: theme.color.surface,
     padding: theme.spacing.lg,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.semibold,
     marginBottom: theme.spacing.sm,
     marginTop: theme.spacing.md,
     color: theme.color.text,
