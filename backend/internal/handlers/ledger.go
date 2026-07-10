@@ -36,7 +36,7 @@ func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreR
 // entry_type is required. Other fields are conditionally required per type (enforced server-side).
 type CreateLedgerRequest struct {
 	EntryType models.LedgerEntryType  `json:"entry_type" binding:"required"`
-	UserID    *uuid.UUID              `json:"user_id"`   // head may target a member
+	UserID    *uuid.UUID              `json:"user_id"`   // admin may target a member
 	ChoreID   *uuid.UUID              `json:"chore_id"`  // required iff entry_type=chore
 	Amount    *models.Money           `json:"amount"`    // required (value>=1) iff settlement/adjustment; currency must match group
 	Direction *models.LedgerDirection `json:"direction"` // required iff entry_type=adjustment
@@ -107,7 +107,7 @@ func isValidPeriod(s string) bool {
 
 // ListLedger returns ledger entries for a group
 // GET /api/v1/groups/:id/ledger
-// Query params: status (optional), user_id (optional - head only), type (optional), period (optional)
+// Query params: status (optional), user_id (optional - admin only), type (optional), period (optional)
 func (h *LedgerHandler) ListLedger(c *gin.Context) {
 	userIDStr, exists := auth.GetUserID(c)
 	if !exists {
@@ -180,7 +180,7 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 
 	// Members can only see their own entries regardless of user_id query param
 	var filterUserID *uuid.UUID
-	if member.Role == models.RoleHead {
+	if member.Role == models.RoleAdmin {
 		if uidStr := c.Query("user_id"); uidStr != "" {
 			parsed, err := uuid.Parse(uidStr)
 			if err != nil {
@@ -190,6 +190,18 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 			filterUserID = &parsed
 		}
 	} else {
+		// Member: may only scope to self. An explicit user_id for anyone else is 403.
+		if uidStr := c.Query("user_id"); uidStr != "" {
+			parsed, err := uuid.Parse(uidStr)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+				return
+			}
+			if parsed != userID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "members can only access their own data"})
+				return
+			}
+		}
 		filterUserID = &userID
 	}
 
@@ -268,7 +280,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		return
 	}
 
-	isHead := member.Role == models.RoleHead
+	isAdmin := member.Role == models.RoleAdmin
 	now := time.Now()
 
 	var (
@@ -307,7 +319,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		choreID = req.ChoreID
 		amount = chore.Amount // amount from chore config; custom amount is ignored
 		direction = models.DirectionCredit
-		if isHead {
+		if isAdmin {
 			targetUserID = resolveTargetUser(c, h, req.UserID, groupID, userID)
 			if c.IsAborted() {
 				return
@@ -321,8 +333,8 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		}
 
 	case models.EntryTypeSettlement:
-		if !isHead {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only group head can create settlement entries"})
+		if !isAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can create settlement entries"})
 			return
 		}
 		if req.UserID == nil {
@@ -344,8 +356,8 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		decidedAt = &now
 
 	case models.EntryTypeAdjustment:
-		if !isHead {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only group head can create adjustment entries"})
+		if !isAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can create adjustment entries"})
 			return
 		}
 		if req.UserID == nil {
@@ -457,8 +469,8 @@ func (h *LedgerHandler) ApproveLedger(c *gin.Context) {
 		return
 	}
 
-	if member.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can approve entries"})
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can approve entries"})
 		return
 	}
 
@@ -524,8 +536,8 @@ func (h *LedgerHandler) RejectLedger(c *gin.Context) {
 		return
 	}
 
-	if member.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can reject entries"})
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can reject entries"})
 		return
 	}
 
@@ -571,7 +583,7 @@ func (h *LedgerHandler) GetBalance(c *gin.Context) {
 		return
 	}
 
-	_, err = h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
+	member, err := h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
@@ -598,8 +610,15 @@ func (h *LedgerHandler) GetBalance(c *gin.Context) {
 		return
 	}
 
+	// D6: an admin sees every member's balance row; a plain member sees only their
+	// own row. GetBalanceForGroup already excludes the admin/payer, so a member
+	// gets exactly their own single row and an admin gets every member.
+	isAdmin := member.Role == models.RoleAdmin
 	response := make([]BalanceResponse, 0, len(balances))
 	for _, b := range balances {
+		if !isAdmin && b.UserID != userID {
+			continue // D6: a member sees only their own balance row
+		}
 		response = append(response, BalanceResponse{
 			UserID:  b.UserID,
 			Name:    b.Name,

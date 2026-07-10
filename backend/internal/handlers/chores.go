@@ -140,7 +140,7 @@ func (h *ChoreHandler) CreateChore(c *gin.Context) {
 		return
 	}
 
-	// Check if user is head of the group
+	// Check if user is admin of the group
 	member, err := h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -151,8 +151,8 @@ func (h *ChoreHandler) CreateChore(c *gin.Context) {
 		return
 	}
 
-	if member.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can create chores"})
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can create chores"})
 		return
 	}
 
@@ -218,7 +218,7 @@ func (h *ChoreHandler) UpdateChore(c *gin.Context) {
 		return
 	}
 
-	// Check if user is head of the group
+	// Check if user is admin of the group
 	member, err := h.groupRepo.GetMember(c.Request.Context(), chore.GroupID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -229,8 +229,8 @@ func (h *ChoreHandler) UpdateChore(c *gin.Context) {
 		return
 	}
 
-	if member.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can update chores"})
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can update chores"})
 		return
 	}
 
@@ -304,7 +304,7 @@ func (h *ChoreHandler) DeleteChore(c *gin.Context) {
 		return
 	}
 
-	// Check if user is head of the group
+	// Check if user is admin of the group
 	member, err := h.groupRepo.GetMember(c.Request.Context(), chore.GroupID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -315,8 +315,8 @@ func (h *ChoreHandler) DeleteChore(c *gin.Context) {
 		return
 	}
 
-	if member.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can delete chores"})
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can delete chores"})
 		return
 	}
 

@@ -49,9 +49,9 @@ func PostDue(ctx context.Context, store Store, groupID uuid.UUID, now time.Time)
 		return fmt.Errorf("posted emi periods: %w", err)
 	}
 
-	head, err := store.GroupHead(ctx, groupID)
+	admin, err := store.GroupAdmin(ctx, groupID)
 	if err != nil {
-		return fmt.Errorf("group head: %w", err)
+		return fmt.Errorf("group admin: %w", err)
 	}
 
 	// Group inputs by user; rows are already sorted asc by user then effective_from.
@@ -79,7 +79,7 @@ func PostDue(ctx context.Context, store Store, groupID uuid.UUID, now time.Time)
 				if amt == 0 {
 					continue // paused month — post nothing
 				}
-				if _, err := store.InsertAllowancePosting(ctx, q, groupID, userID, amt, p, head); err != nil {
+				if _, err := store.InsertAllowancePosting(ctx, q, groupID, userID, amt, p, admin); err != nil {
 					return fmt.Errorf("insert allowance posting (user=%s period=%s): %w", userID, p, err)
 				}
 			}
@@ -89,7 +89,7 @@ func PostDue(ctx context.Context, store Store, groupID uuid.UUID, now time.Time)
 		// SQL order — deterministic across concurrent calls, preserving the
 		// no-deadlock property (loans are locked in exactly this order via FOR UPDATE).
 		for _, L := range loans {
-			if err := postLoanEMIs(ctx, store, q, groupID, L, currentPeriod, postedEMI[L.LoanID], head); err != nil {
+			if err := postLoanEMIs(ctx, store, q, groupID, L, currentPeriod, postedEMI[L.LoanID], admin); err != nil {
 				return err
 			}
 		}
@@ -104,7 +104,7 @@ func PostDue(ctx context.Context, store Store, groupID uuid.UUID, now time.Time)
 // against the early-payoff close endpoint (§4.5).
 func postLoanEMIs(ctx context.Context, store Store, q db.Querier,
 	groupID uuid.UUID, L models.LoanPostingInput,
-	currentPeriod string, postedForLoan map[string]bool, head uuid.UUID) error {
+	currentPeriod string, postedForLoan map[string]bool, admin uuid.UUID) error {
 
 	sched := emiSchedule(L.Principal, L.EMIAmount, L.Installments)
 
@@ -130,7 +130,7 @@ func postLoanEMIs(ctx context.Context, store Store, q db.Querier,
 		if postedForLoan[p] {
 			continue // fast-path: already posted this period
 		}
-		if _, err := store.InsertEMIPosting(ctx, q, groupID, L.UserID, L.LoanID, amt, p, nil, head); err != nil {
+		if _, err := store.InsertEMIPosting(ctx, q, groupID, L.UserID, L.LoanID, amt, p, nil, admin); err != nil {
 			return fmt.Errorf("insert emi posting (loan=%s period=%s): %w", L.LoanID, p, err)
 		}
 	}

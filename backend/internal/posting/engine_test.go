@@ -71,7 +71,7 @@ func (f *fakeStore) PostedAllowancePeriods(_ context.Context, _ uuid.UUID) (map[
 	return result, nil
 }
 
-func (f *fakeStore) GroupHead(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
+func (f *fakeStore) GroupAdmin(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
 	return f.headID, nil
 }
 

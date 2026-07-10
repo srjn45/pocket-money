@@ -94,7 +94,7 @@ func toUserResponse(user *models.User) UserResponse {
 //
 // A matching shadow user (added by email but never registered) is CLAIMED in
 // place — same user id, so all memberships/ledger/loans stay attached — and the
-// group heads are notified (N-2). A matching registered user is a duplicate.
+// group admins are notified (N-2). A matching registered user is a duplicate.
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -139,7 +139,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// A shadow owns this email → claim it in place and notify group heads (N-2).
+	// A shadow owns this email → claim it in place and notify group admins (N-2).
 	claimed, err := h.claimShadow(ctx, existing, string(hashedPassword))
 	if err != nil {
 		if errors.Is(err, errAlreadyRegistered) {
@@ -154,7 +154,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 // claimShadow upgrades a shadow user to registered in one transaction (§5):
 // re-locks the row and re-checks it is still a shadow, sets the password/status/
-// claimed_at, then fans out N-2 (shadow_claimed) to every group head that is not
+// claimed_at, then fans out N-2 (shadow_claimed) to every group admin that is not
 // the claimant. Returns the claimed user on success; errAlreadyRegistered if the
 // row flipped to registered under a concurrent claim.
 func (h *AuthHandler) claimShadow(ctx context.Context, existing *models.User, passwordHash string) (*models.User, error) {
@@ -183,7 +183,7 @@ func (h *AuthHandler) claimShadow(ctx context.Context, existing *models.User, pa
 		return nil, err
 	}
 
-	// N-2 fan-out: notify each of the claimant's groups' heads (except self).
+	// N-2 fan-out: notify each of the claimant's groups' admins (except self).
 	groupIDs, err := h.groupRepo.ListGroupIDsForUser(ctx, tx, locked.ID)
 	if err != nil {
 		return nil, err
@@ -193,7 +193,7 @@ func (h *AuthHandler) claimShadow(ctx context.Context, existing *models.User, pa
 		if err != nil {
 			return nil, err
 		}
-		headIDs, err := h.groupRepo.ListHeadUserIDs(ctx, tx, gid)
+		adminIDs, err := h.groupRepo.ListAdminUserIDs(ctx, tx, gid)
 		if err != nil {
 			return nil, err
 		}
@@ -207,11 +207,11 @@ func (h *AuthHandler) claimShadow(ctx context.Context, existing *models.User, pa
 		if err != nil {
 			return nil, err
 		}
-		for _, headID := range headIDs {
-			if headID == locked.ID {
+		for _, adminID := range adminIDs {
+			if adminID == locked.ID {
 				continue // never notify the claimant about their own claim
 			}
-			if err := h.notificationRepo.Insert(ctx, tx, headID, models.NotificationShadowClaimed, payload); err != nil {
+			if err := h.notificationRepo.Insert(ctx, tx, adminID, models.NotificationShadowClaimed, payload); err != nil {
 				return nil, err
 			}
 		}

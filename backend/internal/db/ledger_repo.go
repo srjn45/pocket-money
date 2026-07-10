@@ -292,7 +292,7 @@ func (r *LedgerRepo) GetBalanceForGroup(ctx context.Context, groupID uuid.UUID) 
 		if err := rows.Scan(&balance.UserID, &balance.Name, &role, &balance.Balance); err != nil {
 			return nil, fmt.Errorf("failed to scan balance: %w", err)
 		}
-		if role != "head" {
+		if role != "admin" {
 			balances = append(balances, balance)
 		}
 	}

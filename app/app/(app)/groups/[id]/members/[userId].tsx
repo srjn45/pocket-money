@@ -50,7 +50,7 @@ export default function MemberDetailScreen() {
   const groupQuery = useGroup(id ?? '');
   const group = groupQuery.data;
   const members = group?.members ?? [];
-  const isHead = members.find(m => m.user_id === user?.id)?.role === 'head';
+  const isHead = members.find(m => m.user_id === user?.id)?.role === 'admin';
   const currency = group?.currency ?? 'INR';
 
   const ledgerQuery = useLedger(id ?? '', { user_id: userId });
@@ -71,7 +71,7 @@ export default function MemberDetailScreen() {
   const memberBalance = balanceQuery.data?.find(b => b.user_id === userId);
   const entries = ledgerQuery.data ?? [];
   const viewedMember = members.find(m => m.user_id === userId);
-  const canRemove = isHead && viewedMember?.role !== 'head';
+  const canRemove = isHead && viewedMember?.role !== 'admin';
 
   // Loans filtered to this member (read-only; management is on Loans tab)
   const memberLoans = (loansQuery.data ?? []).filter(l => l.user_id === userId);

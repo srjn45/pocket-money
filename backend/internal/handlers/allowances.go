@@ -58,7 +58,7 @@ func allowanceToResponse(a *models.Allowance, currency string) AllowanceResponse
 
 // ListAllowances returns allowance rows for the group.
 // GET /api/v1/groups/:id/allowances
-// Head → all members' rows. Member → own rows only.
+// Admin → all members' rows. Member → own rows only.
 func (h *AllowanceHandler) ListAllowances(c *gin.Context) {
 	userIDStr, exists := auth.GetUserID(c)
 	if !exists {
@@ -96,7 +96,7 @@ func (h *AllowanceHandler) ListAllowances(c *gin.Context) {
 	}
 
 	var allowances []*models.Allowance
-	if member.Role == models.RoleHead {
+	if member.Role == models.RoleAdmin {
 		allowances, err = h.allowanceRepo.ListForGroup(c.Request.Context(), groupID)
 	} else {
 		allowances, err = h.allowanceRepo.ListForUser(c.Request.Context(), groupID, userID)
@@ -115,7 +115,7 @@ func (h *AllowanceHandler) ListAllowances(c *gin.Context) {
 
 // SetAllowance sets or changes a member's monthly pocket money.
 // PUT /api/v1/groups/:id/allowances/:userId
-// Head only. Target must be a member (not the head).
+// Admin only. Target must be a member (not the admin).
 func (h *AllowanceHandler) SetAllowance(c *gin.Context) {
 	userIDStr, exists := auth.GetUserID(c)
 	if !exists {
@@ -146,8 +146,8 @@ func (h *AllowanceHandler) SetAllowance(c *gin.Context) {
 		return
 	}
 
-	if caller.Role != models.RoleHead {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can manage allowances"})
+	if caller.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can manage allowances"})
 		return
 	}
 
@@ -168,8 +168,8 @@ func (h *AllowanceHandler) SetAllowance(c *gin.Context) {
 		return
 	}
 
-	if target.Role == models.RoleHead {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot set an allowance for the group head"})
+	if target.Role == models.RoleAdmin {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot set an allowance for the group admin"})
 		return
 	}
 

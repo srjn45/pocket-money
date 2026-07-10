@@ -41,7 +41,7 @@ func IsValidCurrency(c string) bool {
 type MemberRole string
 
 const (
-	RoleHead   MemberRole = "head"
+	RoleAdmin  MemberRole = "admin"
 	RoleMember MemberRole = "member"
 )
 
@@ -101,11 +101,11 @@ type User struct {
 
 // Group represents a family or group
 type Group struct {
-	ID         uuid.UUID `json:"id"`
-	Name       string    `json:"name"`
-	HeadUserID uuid.UUID `json:"head_user_id"`
-	Currency   string    `json:"currency"` // immutable ISO-4217 code (D7)
-	CreatedAt  time.Time `json:"created_at"`
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	AdminUserID uuid.UUID `json:"admin_user_id"`
+	Currency    string    `json:"currency"` // immutable ISO-4217 code (D7)
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // GroupMember represents a user's membership in a group

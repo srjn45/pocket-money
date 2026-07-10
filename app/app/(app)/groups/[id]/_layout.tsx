@@ -18,7 +18,7 @@ export default function GroupDetailLayout() {
     );
   }
 
-  const isHead = group.members.find(m => m.user_id === user?.id)?.role === 'head';
+  const isHead = group.members.find(m => m.user_id === user?.id)?.role === 'admin';
   const overviewTitle = isHead ? group.name : (group.name + ' — Overview');
 
   return (

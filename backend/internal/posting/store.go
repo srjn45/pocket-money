@@ -20,8 +20,8 @@ type Store interface {
 	// as allowance entries in this group — the fast-path guard (§3.5).
 	PostedAllowancePeriods(ctx context.Context, groupID uuid.UUID) (map[uuid.UUID]map[string]bool, error)
 
-	// GroupHead returns the group's head user id (created_by for machine posts).
-	GroupHead(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error)
+	// GroupAdmin returns the group's admin user id (created_by for machine posts).
+	GroupAdmin(ctx context.Context, groupID uuid.UUID) (uuid.UUID, error)
 
 	// WithTx runs fn inside a single transaction (one tx per group, §5.4).
 	WithTx(ctx context.Context, fn func(q db.Querier) error) error

@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +71,8 @@ func setupGroupsTestEnv(t *testing.T) *groupsTestEnv {
 	authMw := auth.AuthMiddleware(testJWTSecret)
 	router.Use(authMw)
 	router.GET("/groups", gh.ListGroups)
+	router.GET("/groups/:id", gh.GetGroup)
+	router.GET("/groups/:id/members", gh.ListMembers)
 
 	return &groupsTestEnv{
 		router:        router,
@@ -95,7 +100,7 @@ func (e *groupsTestEnv) seedGroupHead(t *testing.T, suffix string) (head *models
 	require.NoError(t, err)
 	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	return
 }
@@ -170,7 +175,7 @@ func TestGroups_HeadTotalSumOfMemberBalances(t *testing.T) {
 	rows := listGroups(t, env, head.ID)
 	row := findGroup(t, rows, group.ID)
 
-	assert.Equal(t, models.RoleHead, row.Role)
+	assert.Equal(t, models.RoleAdmin, row.Role)
 	assert.Equal(t, 3, row.MemberCount)                    // head + 2 members
 	assert.Equal(t, int64(1000), row.SummaryBalance.Value) // 1500 + (-500) = 1000
 }
@@ -232,7 +237,7 @@ func TestGroups_EmptyGroup(t *testing.T) {
 	rows := listGroups(t, env, head.ID)
 	row := findGroup(t, rows, group.ID)
 
-	assert.Equal(t, models.RoleHead, row.Role)
+	assert.Equal(t, models.RoleAdmin, row.Role)
 	assert.Equal(t, 1, row.MemberCount, "only head in group")
 	assert.Equal(t, int64(0), row.SummaryBalance.Value, "no non-head members to owe")
 }
@@ -275,7 +280,7 @@ func TestGroups_MultiGroupMixedRoles(t *testing.T) {
 	// G1: user is head
 	g1, err := env.groupRepo.Create(ctx, "G1 t6", user.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = env.groupRepo.AddMember(ctx, g1.ID, user.ID, models.RoleHead)
+	_, err = env.groupRepo.AddMember(ctx, g1.ID, user.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	memberG1 := env.addMember(t, g1.ID, "t6g1m")
 	env.insertLedger(t, g1.ID, memberG1.ID, user.ID, 800, models.DirectionCredit, models.StatusApproved)
@@ -285,7 +290,7 @@ func TestGroups_MultiGroupMixedRoles(t *testing.T) {
 	require.NoError(t, err)
 	g2, err := env.groupRepo.Create(ctx, "G2 t6", head2.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = env.groupRepo.AddMember(ctx, g2.ID, head2.ID, models.RoleHead)
+	_, err = env.groupRepo.AddMember(ctx, g2.ID, head2.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = env.groupRepo.AddMember(ctx, g2.ID, user.ID, models.RoleMember)
 	require.NoError(t, err)
@@ -295,7 +300,7 @@ func TestGroups_MultiGroupMixedRoles(t *testing.T) {
 	require.Len(t, rows, 2)
 
 	rowG1 := findGroup(t, rows, g1.ID)
-	assert.Equal(t, models.RoleHead, rowG1.Role)
+	assert.Equal(t, models.RoleAdmin, rowG1.Role)
 	assert.Equal(t, int64(800), rowG1.SummaryBalance.Value, "G1: total owed to non-head members")
 
 	rowG2 := findGroup(t, rows, g2.ID)
@@ -386,7 +391,7 @@ func TestGroups_OrderByCreatedAtDesc(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		g, err := env.groupRepo.Create(ctx, fmt.Sprintf("Group %d", i), head.ID, models.CurrencyINR)
 		require.NoError(t, err)
-		_, err = env.groupRepo.AddMember(ctx, g.ID, head.ID, models.RoleHead)
+		_, err = env.groupRepo.AddMember(ctx, g.ID, head.ID, models.RoleAdmin)
 		require.NoError(t, err)
 		groupIDs = append(groupIDs, g.ID)
 	}
@@ -398,4 +403,61 @@ func TestGroups_OrderByCreatedAtDesc(t *testing.T) {
 	assert.Equal(t, groupIDs[2], rows[0].ID)
 	assert.Equal(t, groupIDs[1], rows[1].ID)
 	assert.Equal(t, groupIDs[0], rows[2].ID)
+}
+
+// --- Rename acceptance: role serializes as "admin", owner field is admin_user_id ---
+
+// TestRename_RoleSerializesAsAdmin asserts the head→admin rename is visible on the
+// wire: GET /groups/:id and /members return role=="admin" for the creator, the
+// owner field is admin_user_id, and no head_user_id token survives in the JSON.
+func TestRename_RoleSerializesAsAdmin(t *testing.T) {
+	env := setupGroupsTestEnv(t)
+	defer env.cleanup()
+
+	head, group := env.seedGroupHead(t, "rename")
+
+	// GET /groups/:id — GroupDetailResponse.
+	w := doRequest(env.router, http.MethodGet, fmt.Sprintf("/groups/%s", group.ID), nil, bearerToken(t, head.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.Contains(t, body, `"admin_user_id"`, "owner field must be admin_user_id")
+	assert.NotContains(t, body, "head_user_id", "no head_user_id may remain on the wire")
+
+	var detail handlers.GroupDetailResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &detail))
+	assert.Equal(t, head.ID, detail.AdminUserID)
+	var creatorRole models.MemberRole
+	for _, m := range detail.Members {
+		if m.UserID == head.ID {
+			creatorRole = m.Role
+		}
+	}
+	assert.Equal(t, models.RoleAdmin, creatorRole, "creator role must serialize as admin")
+	assert.Equal(t, models.MemberRole("admin"), creatorRole)
+
+	// GET /groups/:id/members — MemberResponse list.
+	w = doRequest(env.router, http.MethodGet, fmt.Sprintf("/groups/%s/members", group.ID), nil, bearerToken(t, head.ID))
+	require.Equal(t, http.StatusOK, w.Code)
+	var members []handlers.MemberResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &members))
+	require.Len(t, members, 1)
+	assert.Equal(t, models.RoleAdmin, members[0].Role)
+	assert.Contains(t, w.Body.String(), `"role":"admin"`)
+}
+
+// TestOpenAPI_NoHeadRemaining is the contract grep gate as a Go test: the openapi
+// spec must contain no `head` word-token and no head_user_id after the rename.
+func TestOpenAPI_NoHeadRemaining(t *testing.T) {
+	// Tests run with CWD = package dir (backend/internal/handlers).
+	data, err := os.ReadFile("../../openapi.yaml")
+	require.NoError(t, err)
+
+	re := regexp.MustCompile(`(?i)\bhead\b|head_user_id`)
+	var offenders []string
+	for i, line := range strings.Split(string(data), "\n") {
+		if re.MatchString(line) {
+			offenders = append(offenders, fmt.Sprintf("%d: %s", i+1, strings.TrimSpace(line)))
+		}
+	}
+	assert.Empty(t, offenders, "openapi.yaml must contain no 'head'/head_user_id tokens:\n%s", strings.Join(offenders, "\n"))
 }

@@ -310,7 +310,7 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 	}
 
 	// ── Add members (GroupRepo.Create does NOT add the head — project memory) ──
-	if _, err := groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead); err != nil {
+	if _, err := groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin); err != nil {
 		return nil, fmt.Errorf("add head: %w", err)
 	}
 	if _, err := groupRepo.AddMember(ctx, group.ID, aarav.ID, models.RoleMember); err != nil {
@@ -469,7 +469,7 @@ func buildDemoFamily(ctx context.Context, pool *pgxpool.Pool) (*SeedSummary, err
 	if err != nil {
 		return nil, fmt.Errorf("create group2 (EUR): %w", err)
 	}
-	if _, err := groupRepo.AddMember(ctx, group2.ID, head.ID, models.RoleHead); err != nil {
+	if _, err := groupRepo.AddMember(ctx, group2.ID, head.ID, models.RoleAdmin); err != nil {
 		return nil, fmt.Errorf("add head to group2: %w", err)
 	}
 	if _, err := groupRepo.AddMember(ctx, group2.ID, aarav.ID, models.RoleMember); err != nil {

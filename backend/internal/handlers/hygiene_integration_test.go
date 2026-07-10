@@ -115,7 +115,7 @@ func (e *hygieneTestEnv) seedHygieneGroup(t *testing.T, suffix string, headPassw
 
 	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
-	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
+	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleAdmin)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, member.ID, models.RoleMember)
 	require.NoError(t, err)
@@ -382,7 +382,7 @@ func TestRemoveMember_HeadCannotLeave(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w.Code)
 	var resp map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Contains(t, resp["error"], "head")
+	assert.Contains(t, resp["error"], "admin")
 	// Membership must still be intact.
 	assert.True(t, env.isMember(t, groupID, head.ID))
 }

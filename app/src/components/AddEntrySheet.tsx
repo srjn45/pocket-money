@@ -180,7 +180,7 @@ export function AddEntrySheet({
               selectedValue={selectedMemberId}
               onValueChange={setSelectedMemberId}
             >
-              {members.filter(m => m.role !== 'head').map(m => (
+              {members.filter(m => m.role !== 'admin').map(m => (
                 <Picker.Item key={m.user_id} label={m.name} value={m.user_id} />
               ))}
             </Picker>

@@ -84,7 +84,7 @@ export default function LoansScreen() {
 
   const loans = loansQuery.data ?? [];
   const group = groupQuery.data;
-  const isHead = group?.members.find(m => m.user_id === user?.id)?.role === 'head';
+  const isHead = group?.members.find(m => m.user_id === user?.id)?.role === 'admin';
   const currency = group?.currency ?? 'INR';
 
   const isLoading = loansQuery.isLoading || groupQuery.isLoading;

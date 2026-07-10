@@ -119,7 +119,7 @@ export interface paths {
         put?: never;
         /**
          * Create a new group
-         * @description Creates a new group with the authenticated user as head
+         * @description Creates a new group with the authenticated user as admin
          */
         post: operations["createGroup"];
         delete?: never;
@@ -161,7 +161,11 @@ export interface paths {
          */
         get: operations["listMembers"];
         put?: never;
-        post?: never;
+        /**
+         * Add a member by email (add-by-email lifecycle)
+         * @description Admin-only. Resolves the email to a user and attaches them to the group as a `member`: an unknown email creates a new SHADOW user (no password, cannot log in) with the given name; an existing registered user is attached and notified (N-1 `added_to_group`); an existing shadow is attached with no notification. Adding the same email to the same group again is a `409` (exactly one membership, at most one N-1 from the first successful add).
+         */
+        post: operations["addMemberByEmail"];
         delete?: never;
         options?: never;
         head?: never;
@@ -179,8 +183,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Remove a member (head) or leave a group (self)
-         * @description Removes a membership. The head may remove any non-head member; any member may remove themselves (leave). Allowed ONLY when the target member's balance is settled to exactly 0 AND they have no loan in `requested` or `active` status. Ledger history and closed/rejected loans are KEPT (they reference the user, not the membership); the member's allowance config rows are deleted and any pending ledger entries are auto-rejected. The group head can neither leave nor be removed. Triggers due allowance/EMI posting before evaluating the balance so a stale un-posted entry cannot let a non-zero member out.
+         * Remove a member (admin) or leave a group (self)
+         * @description Removes a membership. The admin may remove any non-admin member; any member may remove themselves (leave). Allowed ONLY when the target member's balance is settled to exactly 0 AND they have no loan in `requested` or `active` status. Ledger history and closed/rejected loans are KEPT (they reference the user, not the membership); the member's allowance config rows are deleted and any pending ledger entries are auto-rejected. The group admin can neither leave nor be removed. Triggers due allowance/EMI posting before evaluating the balance so a stale un-posted entry cannot let a non-zero member out.
          */
         delete: operations["removeMember"];
         options?: never;
@@ -199,7 +203,7 @@ export interface paths {
         put?: never;
         /**
          * Create group invite
-         * @description Creates an invite token for joining the group (head only)
+         * @description Creates an invite token for joining the group (admin only)
          */
         post: operations["createInvite"];
         delete?: never;
@@ -243,7 +247,7 @@ export interface paths {
         put?: never;
         /**
          * Create chore
-         * @description Creates a new chore for the group (head only)
+         * @description Creates a new chore for the group (admin only)
          */
         post: operations["createChore"];
         delete?: never;
@@ -264,14 +268,14 @@ export interface paths {
         post?: never;
         /**
          * Delete chore
-         * @description Soft deletes a chore (head only)
+         * @description Soft deletes a chore (admin only)
          */
         delete: operations["deleteChore"];
         options?: never;
         head?: never;
         /**
          * Update chore
-         * @description Updates a chore (head only)
+         * @description Updates a chore (admin only)
          */
         patch: operations["updateChore"];
         trace?: never;
@@ -285,13 +289,13 @@ export interface paths {
         };
         /**
          * List ledger entries
-         * @description Returns ledger entries for a group. Members see only their entries, head sees all.
+         * @description Returns ledger entries for a group. Members see only their own entries; admin sees all. A member supplying `user_id` for another member gets 403 (D6) — they may only scope to themselves.
          */
         get: operations["listLedger"];
         put?: never;
         /**
          * Create ledger entry
-         * @description Creates a new ledger entry. Members create pending entries for themselves, head can create approved entries for any member.
+         * @description Creates a new ledger entry. Members create pending entries for themselves, admin can create approved entries for any member.
          */
         post: operations["createLedger"];
         delete?: never;
@@ -311,7 +315,7 @@ export interface paths {
         put?: never;
         /**
          * Approve ledger entry
-         * @description Approves a pending ledger entry (head only)
+         * @description Approves a pending ledger entry (admin only)
          */
         post: operations["approveLedger"];
         delete?: never;
@@ -331,7 +335,7 @@ export interface paths {
         put?: never;
         /**
          * Reject ledger entry
-         * @description Rejects a pending ledger entry (head only)
+         * @description Rejects a pending ledger entry (admin only)
          */
         post: operations["rejectLedger"];
         delete?: never;
@@ -349,7 +353,7 @@ export interface paths {
         };
         /**
          * Get group balances
-         * @description Returns balance for each member in the group
+         * @description Admin sees every member's balance; a member sees only their own balance row (D6).
          */
         get: operations["getBalance"];
         put?: never;
@@ -369,7 +373,7 @@ export interface paths {
         };
         /**
          * List allowance rows for a group
-         * @description Head sees all members' allowance history; member sees only their own. Returns full history rows (all effective_from values per member).
+         * @description Admin sees all members' allowance history; member sees only their own. Returns full history rows (all effective_from values per member).
          */
         get: operations["listAllowances"];
         put?: never;
@@ -390,7 +394,7 @@ export interface paths {
         get?: never;
         /**
          * Set or change a member's monthly pocket money
-         * @description Head only. Sets or changes a member's monthly pocket money. A new effective_from creates a new history row (past months not rewritten). Amount 0 pauses the allowance. Setting the same effective_from twice updates the amount (correction) — idempotent, still 200.
+         * @description Admin only. Sets or changes a member's monthly pocket money. A new effective_from creates a new history row (past months not rewritten). Amount 0 pauses the allowance. Setting the same effective_from twice updates the amount (correction) — idempotent, still 200.
          */
         put: operations["setAllowance"];
         post?: never;
@@ -409,13 +413,13 @@ export interface paths {
         };
         /**
          * List loans for a group
-         * @description Head sees all loans; member sees only their own.
+         * @description Admin sees all loans; member sees only their own. A member supplying `user_id` for another member gets 403 (D6) — they may only scope to themselves.
          */
         get: operations["listLoans"];
         put?: never;
         /**
          * Create a loan or loan request
-         * @description Member creates a `requested` loan for themselves; head creates a pre-approved `active` loan for a member. Disbursement is not a ledger entry; repayment is via monthly EMI debits.
+         * @description Member creates a `requested` loan for themselves; admin creates a pre-approved `active` loan for a member. Disbursement is not a ledger entry; repayment is via monthly EMI debits.
          */
         post: operations["createLoan"];
         delete?: never;
@@ -435,7 +439,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a loan request
-         * @description Head only. Transitions `requested` → `active`; may override principal/installments; sets start_period to next calendar month.
+         * @description Admin only. Transitions `requested` → `active`; may override principal/installments; sets start_period to next calendar month.
          */
         post: operations["approveLoan"];
         delete?: never;
@@ -455,7 +459,7 @@ export interface paths {
         put?: never;
         /**
          * Reject a loan request
-         * @description Head only. Transitions `requested` → `rejected`.
+         * @description Admin only. Transitions `requested` → `rejected`.
          */
         post: operations["rejectLoan"];
         delete?: never;
@@ -475,7 +479,7 @@ export interface paths {
         put?: never;
         /**
          * Early payoff — close an active loan
-         * @description Head only. Posts one final EMI debit for the outstanding amount (principal − Σ posted EMIs) and sets status to `closed`.
+         * @description Admin only. Posts one final EMI debit for the outstanding amount (principal − Σ posted EMIs) and sets status to `closed`.
          */
         post: operations["closeLoan"];
         delete?: never;
@@ -544,6 +548,11 @@ export interface components {
             /** @description User's full name */
             name: string;
             /**
+             * @description Account status. A logged-in user is always `registered` (shadow users cannot authenticate); exposed for completeness/consistency.
+             * @enum {string}
+             */
+            status: "shadow" | "registered";
+            /**
              * Format: date-time
              * @description Date of birth
              */
@@ -588,9 +597,9 @@ export interface components {
             name: string;
             /**
              * Format: uuid
-             * @description ID of the group head (admin)
+             * @description ID of the group admin
              */
-            head_user_id: string;
+            admin_user_id: string;
             /**
              * @description The group's immutable ISO-4217 currency (D7).
              * @enum {string}
@@ -613,9 +622,9 @@ export interface components {
             name: string;
             /**
              * Format: uuid
-             * @description ID of the group head
+             * @description ID of the group admin
              */
-            head_user_id: string;
+            admin_user_id: string;
             /**
              * @description The group's immutable ISO-4217 currency (D7).
              * @enum {string}
@@ -630,10 +639,10 @@ export interface components {
              * @description The caller's role in this group.
              * @enum {string}
              */
-            role: "head" | "member";
-            /** @description Number of members in the group (includes the head). */
+            role: "admin" | "member";
+            /** @description Number of members in the group (includes the admin). */
             member_count: number;
-            /** @description Role-dependent summary in the group's currency. For role=head, the sum of all NON-head members' balances (= total the head owes members; typically >= 0). For role=member, the caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe the head). Computed as Σ approved credits − Σ approved debits. A member never receives another member's figure. */
+            /** @description Role-dependent summary in the group's currency. For role=admin, the sum of all NON-admin members' balances (= total the admin owes members; typically >= 0). For role=member, the caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe the admin). Computed as Σ approved credits − Σ approved debits. A member never receives another member's figure. */
             summary_balance: components["schemas"]["Money"];
         };
         GroupDetailResponse: {
@@ -646,9 +655,9 @@ export interface components {
             name: string;
             /**
              * Format: uuid
-             * @description ID of the group head (admin)
+             * @description ID of the group admin
              */
-            head_user_id: string;
+            admin_user_id: string;
             /**
              * @description The group's immutable ISO-4217 currency (D7).
              * @enum {string}
@@ -681,12 +690,26 @@ export interface components {
              * @description User's role in the group
              * @enum {string}
              */
-            role: "head" | "member";
+            role: "admin" | "member";
+            /**
+             * @description Whether this member has registered (can log in) or is a shadow the admin bookkeeps against.
+             * @enum {string}
+             */
+            status: "shadow" | "registered";
             /**
              * Format: date-time
              * @description Timestamp when user joined the group
              */
             joined_at: string;
+        };
+        AddMemberRequest: {
+            /**
+             * Format: email
+             * @description Email of the person to add. Case-insensitive matching is NOT required for this WP (the email column is plain TEXT UNIQUE); match is exact.
+             */
+            email: string;
+            /** @description Display name. Used only when creating a new shadow user; ignored when the email already resolves to a user. */
+            name: string;
         };
         InviteRequest: {
             /**
@@ -759,7 +782,7 @@ export interface components {
             entry_type: "chore" | "settlement" | "adjustment";
             /**
              * Format: uuid
-             * @description Target user ID (head may specify any member; member defaults to self)
+             * @description Target user ID (admin may specify any member; member defaults to self)
              */
             user_id?: string | null;
             /**
@@ -881,7 +904,7 @@ export interface components {
         CreateLoanRequest: {
             /**
              * Format: uuid
-             * @description Borrower. Required when the head creates a pre-approved loan; ignored/self for member requests.
+             * @description Borrower. Required when the admin creates a pre-approved loan; ignored/self for member requests.
              */
             user_id?: string | null;
             /** @description Loan principal in the group's currency. value >= 1; currency must equal the group's. */
@@ -1370,6 +1393,87 @@ export interface operations {
             };
         };
     };
+    addMemberByEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Group ID (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Member added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+            /** @description Invalid group ID or malformed body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not the group admin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Group not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The target email is already a member of this group */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     removeMember: {
         parameters: {
             query?: never;
@@ -1409,7 +1513,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description A non-head member may only remove themselves */
+            /** @description A non-admin member may only remove themselves */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1427,7 +1531,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Removal blocked — the target is the group head, or their balance is not zero, or they have an active/pending loan. The error message is human-readable and states which. */
+            /** @description Removal blocked — the target is the group admin, or their balance is not zero, or they have an active/pending loan. The error message is human-readable and states which. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1490,7 +1594,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Only group head can create invites */
+            /** @description Only group admin can create invites */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1663,7 +1767,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Only group head can create chores */
+            /** @description Only group admin can create chores */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1720,7 +1824,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Only group head can delete chores or cannot delete system chore */
+            /** @description Only group admin can delete chores or cannot delete system chore */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1792,7 +1896,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Only group head can update chores or cannot modify system chore */
+            /** @description Only group admin can update chores or cannot modify system chore */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1826,7 +1930,7 @@ export interface operations {
             query?: {
                 /** @description Filter by status */
                 status?: "approved" | "pending_approval" | "rejected";
-                /** @description Filter by user ID (head only) */
+                /** @description Filter by user ID (admin only) */
                 user_id?: string;
                 /** @description Filter by entry type */
                 type?: "chore" | "allowance" | "emi" | "settlement" | "adjustment";
@@ -1869,7 +1973,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not a member of this group */
+            /** @description Not a member of this group, or a member requesting another member's data (D6). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1932,7 +2036,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Permission denied (e.g., only head can create settlement entries) */
+            /** @description Permission denied (e.g., only admin can create settlement entries) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1991,7 +2095,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Only group head can approve entries */
+            /** @description Only group admin can approve entries */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2059,7 +2163,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Only group head can reject entries */
+            /** @description Only group admin can reject entries */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2204,7 +2308,7 @@ export interface operations {
             path: {
                 /** @description Group ID */
                 id: string;
-                /** @description Target member's user ID (must be a member, not the head) */
+                /** @description Target member's user ID (must be a member, not the admin) */
                 userId: string;
             };
             cookie?: never;
@@ -2224,7 +2328,7 @@ export interface operations {
                     "application/json": components["schemas"]["AllowanceResponse"];
                 };
             };
-            /** @description Validation error (negative amount, invalid period, targeting head) */
+            /** @description Validation error (negative amount, invalid period, targeting admin) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2242,7 +2346,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Caller is not the group head */
+            /** @description Caller is not the group admin */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2274,7 +2378,7 @@ export interface operations {
     listLoans: {
         parameters: {
             query?: {
-                /** @description Filter by borrower user ID (head only) */
+                /** @description Filter by borrower user ID (admin only) */
                 user_id?: string | null;
                 /** @description Filter by loan status */
                 status?: "requested" | "active" | "rejected" | "closed" | null;
@@ -2315,7 +2419,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Not a member of this group */
+            /** @description Not a member of this group, or a member requesting another member's data (D6). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2387,7 +2491,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Target user not a member (head-created loans) */
+            /** @description Target user not a member (admin-created loans) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2450,7 +2554,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Caller is not the group head */
+            /** @description Caller is not the group admin */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2518,7 +2622,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Caller is not the group head */
+            /** @description Caller is not the group admin */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2586,7 +2690,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Caller is not the group head */
+            /** @description Caller is not the group admin */
             403: {
                 headers: {
                     [name: string]: unknown;
