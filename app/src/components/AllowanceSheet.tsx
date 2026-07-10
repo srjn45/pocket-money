@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import type { Allowance } from '../api';
+import type { Allowance, CurrencyCode } from '../api';
 import { currentPeriod, nextPeriod } from '../allowance-format';
 import { humanMonth } from '../ledger-format';
-import { formatMinor, parseMoneyToMinorUnits } from '../money';
+import { formatMinor, parseMoneyToMinorUnits, currencySymbol } from '../money';
 import { useSetAllowance } from '../hooks/useAllowances';
 import { confirmAsync } from '../confirm';
 import { theme } from '../theme';
@@ -17,6 +17,8 @@ interface AllowanceSheetProps {
   visible: boolean;
   onClose: () => void;
   groupId: string;
+  /** Group currency — stamped onto the outgoing allowance amount. */
+  currency: CurrencyCode;
   userId: string;
   memberName?: string;
   current: Allowance | null;
@@ -26,6 +28,7 @@ export function AllowanceSheet({
   visible,
   onClose,
   groupId,
+  currency,
   userId,
   memberName,
   current,
@@ -37,7 +40,7 @@ export function AllowanceSheet({
   const nextP = nextPeriod(thisPeriod);
 
   const initialAmount = useCallback(
-    () => (current && current.amount > 0 ? formatMinor(current.amount) : ''),
+    () => (current && current.amount.value > 0 ? formatMinor(current.amount.value) : ''),
     [current],
   );
 
@@ -72,13 +75,13 @@ export function AllowanceSheet({
 
   async function handleSave() {
     setAmountError('');
-    const amount = parseMoneyToMinorUnits(amountStr);
-    if (amount === null) {
+    const value = parseMoneyToMinorUnits(amountStr);
+    if (value === null) {
       setAmountError('Enter a valid amount (e.g. 500).');
       return;
     }
     try {
-      await setAllowance.mutateAsync({ userId, amount, effective_from: effectiveMonth });
+      await setAllowance.mutateAsync({ userId, amount: { currency, value }, effective_from: effectiveMonth });
       showToast({ tone: 'success', message: 'Pocket money updated' });
       handleClose();
     } catch (e) {
@@ -95,7 +98,7 @@ export function AllowanceSheet({
     });
     if (!confirmed) return;
     try {
-      await setAllowance.mutateAsync({ userId, amount: 0, effective_from: effectiveMonth });
+      await setAllowance.mutateAsync({ userId, amount: { currency, value: 0 }, effective_from: effectiveMonth });
       showToast({ tone: 'success', message: 'Pocket money updated' });
       handleClose();
     } catch (e) {
@@ -104,7 +107,7 @@ export function AllowanceSheet({
   }
 
   const isPending = setAllowance.isPending;
-  const canPause = current !== null && current.amount > 0;
+  const canPause = current !== null && current.amount.value > 0;
 
   return (
     <Sheet
@@ -126,7 +129,7 @@ export function AllowanceSheet({
       }
     >
       <TextField
-        label="Monthly amount (₹)"
+        label={`Monthly amount (${currencySymbol(currency)})`}
         keyboardType="decimal-pad"
         value={amountStr}
         onChangeText={(v) => { setAmountStr(v); setAmountError(''); }}

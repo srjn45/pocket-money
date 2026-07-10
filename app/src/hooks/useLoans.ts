@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { loansApi } from '../api';
+import { loansApi, Money } from '../api';
 import { qk } from '../query-keys';
 
 export function useLoans(groupId: string) {
@@ -13,7 +13,7 @@ export function useLoans(groupId: string) {
 export function useRequestLoan(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { principal: number; installments: number; note?: string | null }) =>
+    mutationFn: (data: { principal: Money; installments: number; note?: string | null }) =>
       loansApi.request(groupId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.loans(groupId) });
@@ -24,7 +24,7 @@ export function useRequestLoan(groupId: string) {
 export function useApproveLoan(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ loanId, ...data }: { loanId: string; principal?: number | null; installments?: number | null }) =>
+    mutationFn: ({ loanId, ...data }: { loanId: string; principal?: Money | null; installments?: number | null }) =>
       loansApi.approve(loanId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.loans(groupId) });

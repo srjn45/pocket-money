@@ -23,6 +23,8 @@ export type LoginResponse        = Schemas['LoginResponse'];
 export type Allowance            = Schemas['AllowanceResponse'];
 export type Loan                 = Schemas['LoanResponse'];
 export type ChangePasswordRequest = Schemas['ChangePasswordRequest'];
+export type Money                = Schemas['Money'];
+export type CurrencyCode         = Money['currency'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -89,7 +91,7 @@ export const authApi = {
 export const groupsApi = {
   list: () => request<GroupSummary[]>('/groups'),
 
-  create: (data: { name: string }) =>
+  create: (data: { name: string; currency: CurrencyCode }) =>
     request<Group>('/groups', { method: 'POST', body: JSON.stringify(data) }),
 
   get: (id: string) => request<GroupDetail>(`/groups/${id}`),
@@ -114,10 +116,10 @@ export const groupsApi = {
 export const choresApi = {
   list: (groupId: string) => request<Chore[]>(`/groups/${groupId}/chores`),
 
-  create: (groupId: string, data: { name: string; description?: string; amount: number }) =>
+  create: (groupId: string, data: { name: string; description?: string; amount: Money }) =>
     request<Chore>(`/groups/${groupId}/chores`, { method: 'POST', body: JSON.stringify(data) }),
 
-  update: (id: string, data: { name?: string; description?: string; amount?: number }) =>
+  update: (id: string, data: { name?: string; description?: string; amount?: Money | null }) =>
     request<Chore>(`/chores/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   delete: (id: string) => request<void>(`/chores/${id}`, { method: 'DELETE' }),
@@ -131,7 +133,7 @@ export const allowancesApi = {
 
   // Head only. amount in minor units (0 = pause); effective_from optional 'YYYY-MM'
   // (server defaults to current month). A new effective_from is a new history row.
-  set: (groupId: string, userId: string, data: { amount: number; effective_from?: string }) =>
+  set: (groupId: string, userId: string, data: { amount: Money; effective_from?: string }) =>
     request<Allowance>(`/groups/${groupId}/allowances/${userId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -148,10 +150,10 @@ export const loansApi = {
     return request<Loan[]>(`/groups/${groupId}/loans${qs ? `?${qs}` : ''}`);
   },
 
-  request: (groupId: string, data: { principal: number; installments: number; note?: string | null }) =>
+  request: (groupId: string, data: { principal: Money; installments: number; note?: string | null }) =>
     request<Loan>(`/groups/${groupId}/loans`, { method: 'POST', body: JSON.stringify(data) }),
 
-  approve: (loanId: string, data: { principal?: number | null; installments?: number | null }) =>
+  approve: (loanId: string, data: { principal?: Money | null; installments?: number | null }) =>
     request<Loan>(`/loans/${loanId}/approve`, { method: 'POST', body: JSON.stringify(data) }),
 
   reject: (loanId: string) =>
@@ -177,7 +179,7 @@ export const ledgerApi = {
     entry_type: 'chore' | 'settlement' | 'adjustment';
     user_id?: string;
     chore_id?: string;
-    amount?: number;
+    amount?: Money | null;
     direction?: 'credit' | 'debit';
     note?: string;
   }) =>

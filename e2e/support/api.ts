@@ -19,6 +19,10 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 
 export type AuthResponse = { token: string; user: { id: string; email: string; name: string } };
 
+export type Currency = 'EUR' | 'USD' | 'INR';
+/** Money object mirrors backend Money{currency,value} — value is minor units, never a float. */
+export type Money = { currency: Currency; value: number };
+
 export async function apiRegister(name: string, email: string, password: string): Promise<AuthResponse> {
   return request('/auth/register', {
     method: 'POST',
@@ -33,11 +37,15 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
   });
 }
 
-export async function apiCreateGroup(token: string, name: string): Promise<{ id: string; name: string }> {
+export async function apiCreateGroup(
+  token: string,
+  name: string,
+  currency: Currency = 'INR',
+): Promise<{ id: string; name: string; currency: Currency }> {
   return request('/groups', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, currency }),
   });
 }
 
@@ -65,10 +73,12 @@ export async function apiCreateChore(
   groupId: string,
   name: string,
   amountMinor: number,
+  currency: Currency = 'INR',
 ): Promise<{ id: string; name: string }> {
   return request(`/groups/${groupId}/chores`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, amount: amountMinor }),
+    // amount is a Money object now (currency must match the group's, V3-1.1).
+    body: JSON.stringify({ name, amount: { currency, value: amountMinor } }),
   });
 }

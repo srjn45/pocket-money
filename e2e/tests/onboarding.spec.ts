@@ -20,6 +20,25 @@ test('T2: create group shows overview with invite button', async ({ page }) => {
   await expect(page.getByTestId('group-invite-button')).toBeVisible();
 });
 
+// T2-EUR: Create a group in EUR via the currency picker → its balance renders
+// with the € symbol on the dashboard (proves the picked currency flows through,
+// not the hardcoded ₹). §5 create-group currency path (§9.12: assert concrete text).
+test('T2-EUR: create EUR group renders euro balance on dashboard', async ({ page }) => {
+  const email = uniqueEmail();
+  const groupName = `Euro-${Date.now()}`;
+  await registerUser(page, 'Euro Head', email);
+  await createGroup(page, groupName, 'EUR');
+  await expect(page.getByTestId('group-overview-root')).toBeVisible();
+
+  // Back to the dashboard: the head group card shows summary_balance (€0.00 for a
+  // brand-new group) formatted in the group's EUR currency.
+  const webBase = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
+  await page.goto(`${webBase}/`);
+  await expect(page.getByTestId('dashboard-root')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(groupName)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/€0\.00/).first()).toBeVisible({ timeout: 10_000 });
+});
+
 // T3: Register via invite → lands inside the group (member view).
 test('T3: invite link → register → lands inside group', async ({ page, browser }) => {
   // ── Head registers and creates a group ────────────────────────────────────

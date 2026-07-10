@@ -49,7 +49,8 @@ export function LedgerRow({
   const rightSlot = (
     <View style={styles.rightCol}>
       <AmountText
-        minorUnits={entry.amount}
+        minorUnits={entry.amount.value}
+        currency={entry.amount.currency}
         variant={entry.direction === 'credit' ? 'credit' : 'debit'}
         size="sm"
       />

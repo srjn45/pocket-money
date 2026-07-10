@@ -10,8 +10,24 @@ import { login, openTab } from '../support/pages';
 import type { SeedSummary } from '../fixtures/seed';
 import { SEED } from '../fixtures/seed';
 
+const WEB_BASE = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
+
 const summaryPath = resolve(__dirname, '../fixtures/seed.summary.json');
 const hasSummary = existsSync(summaryPath);
+
+/** Format minor units as the deterministic en-grouped 2-dp string, e.g. 1250 -> "12.50". */
+function formatMinorGrouped(minor: number): string {
+  const abs = Math.abs(minor);
+  const whole = Math.floor(abs / 100);
+  const frac = String(abs % 100).padStart(2, '0');
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${grouped}.${frac}`;
+}
+
+/** Escape a string for use inside a RegExp. */
+function reEscape(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 const summaryTest = hasSummary ? test : test.skip;
 
@@ -68,6 +84,26 @@ summaryTest('T-RO-4: head sees active and rejected loans on loans tab', async ({
 
   // At least one loan card should be visible.
   await expect(page.getByTestId(/^loan-card-/).first()).toBeVisible({ timeout: 10_000 });
+});
+
+// T-RO-6: The seeded EUR group ("Sharma Europe Trip") renders its Gelato-treat
+// chore with the € symbol — proving per-group currency (D7) flows end-to-end and
+// is NOT the hardcoded ₹. Head (Priya) is a member of both groups.
+summaryTest('T-RO-6: EUR group chore renders with euro symbol', async ({ page }) => {
+  const summary = loadSummary();
+  expect(summary.group2.currency).toBe('EUR');
+
+  await login(page, SEED.HEAD.email, SEED.DEMO_PASSWORD);
+
+  // Full-URL navigation to the EUR group's chores tab (expo-router web-param
+  // gotcha, §9.12): tab-link clicks don't populate the [id] segment.
+  await page.goto(`${WEB_BASE}/groups/${summary.group2.id}/chores`);
+  await expect(page.getByTestId('chores-root')).toBeVisible({ timeout: 15_000 });
+
+  // The seeded EUR chore amount renders as "€12.50" (group2_amount minor units),
+  // never the INR ₹ — asserts concrete currency-formatted text (§9.12).
+  const euro = `€${formatMinorGrouped(summary.group2_amount)}`;
+  await expect(page.getByText(new RegExp(reEscape(euro))).first()).toBeVisible({ timeout: 10_000 });
 });
 
 // T-RO-5: Diya logs in and sees the Sharma Family group on her dashboard.

@@ -556,9 +556,27 @@ export interface components {
              */
             created_at: string;
         };
+        /** @description A monetary amount in a group's currency. `value` is in minor units (cents/paise; all three supported currencies have exponent 2) and is NEVER a float. `currency` always equals the owning group's currency (D7); the server rejects any request whose currency differs from the group's. */
+        Money: {
+            /**
+             * @description ISO-4217 code; always the owning group's currency.
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "INR";
+            /**
+             * Format: int64
+             * @description Amount in minor units (e.g. €12.50 = 1250). Always an integer.
+             */
+            value: number;
+        };
         CreateGroupRequest: {
             /** @description Group name */
             name: string;
+            /**
+             * @description The group's immutable ISO-4217 currency (D7). Required.
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "INR";
         };
         GroupResponse: {
             /**
@@ -573,6 +591,11 @@ export interface components {
              * @description ID of the group head (admin)
              */
             head_user_id: string;
+            /**
+             * @description The group's immutable ISO-4217 currency (D7).
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "INR";
             /**
              * Format: date-time
              * @description Group creation timestamp
@@ -594,6 +617,11 @@ export interface components {
              */
             head_user_id: string;
             /**
+             * @description The group's immutable ISO-4217 currency (D7).
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "INR";
+            /**
              * Format: date-time
              * @description Group creation timestamp
              */
@@ -605,11 +633,8 @@ export interface components {
             role: "head" | "member";
             /** @description Number of members in the group (includes the head). */
             member_count: number;
-            /**
-             * Format: int64
-             * @description Role-dependent summary in minor units (paise). For role=head, the sum of all NON-head members' balances (= total the head owes members; typically >= 0). For role=member, the caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe the head). Computed as Σ approved credits − Σ approved debits. A member never receives another member's figure.
-             */
-            summary_balance: number;
+            /** @description Role-dependent summary in the group's currency. For role=head, the sum of all NON-head members' balances (= total the head owes members; typically >= 0). For role=member, the caller's OWN balance in this group (positive = earned/owed-to-them, negative = they owe the head). Computed as Σ approved credits − Σ approved debits. A member never receives another member's figure. */
+            summary_balance: components["schemas"]["Money"];
         };
         GroupDetailResponse: {
             /**
@@ -624,6 +649,11 @@ export interface components {
              * @description ID of the group head (admin)
              */
             head_user_id: string;
+            /**
+             * @description The group's immutable ISO-4217 currency (D7).
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "INR";
             /**
              * Format: date-time
              * @description Group creation timestamp
@@ -685,22 +715,16 @@ export interface components {
             name: string;
             /** @description Chore description */
             description?: string | null;
-            /**
-             * Format: int64
-             * @description Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
-             */
-            amount: number;
+            /** @description Amount earned for completing the chore. value >= 1; currency must equal the group's. */
+            amount: components["schemas"]["Money"];
         };
         UpdateChoreRequest: {
             /** @description Chore name */
             name?: string | null;
             /** @description Chore description */
             description?: string | null;
-            /**
-             * Format: int64
-             * @description Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
-             */
-            amount?: number | null;
+            /** @description Amount earned for completing the chore. value >= 1 when present; currency must equal the group's. */
+            amount?: components["schemas"]["Money"] | null;
         };
         ChoreResponse: {
             /**
@@ -717,11 +741,8 @@ export interface components {
             name: string;
             /** @description Chore description */
             description?: string | null;
-            /**
-             * Format: int64
-             * @description Amount earned for completing the chore, in minor units (paise); e.g. ₹12.50 = 1250
-             */
-            amount: number;
+            /** @description Amount earned for completing the chore, in the group's currency. */
+            amount: components["schemas"]["Money"];
             /** @description Whether this is a system-generated chore (e.g., Settlement) */
             is_system: boolean;
             /**
@@ -746,11 +767,8 @@ export interface components {
              * @description Chore ID (required when entry_type=chore; must be a non-system chore in this group)
              */
             chore_id?: string | null;
-            /**
-             * Format: int64
-             * @description Amount in minor units (required for settlement/adjustment; ignored for chore — chore config amount is used instead)
-             */
-            amount?: number | null;
+            /** @description Amount in the group's currency (value >= 1), required for settlement/adjustment; ignored for chore — chore config amount is used instead. When supplied, currency must equal the group's. */
+            amount?: components["schemas"]["Money"] | null;
             /**
              * @description Direction (required for adjustment; server sets direction for chore and settlement)
              * @enum {string|null}
@@ -780,11 +798,8 @@ export interface components {
              * @description Chore ID (null for settlement/adjustment/allowance/emi)
              */
             chore_id?: string | null;
-            /**
-             * Format: int64
-             * @description Amount in minor units (paise); e.g. ₹12.50 = 1250. Always positive — direction field indicates credit/debit.
-             */
-            amount: number;
+            /** @description Amount in the group's currency. value is always positive — the direction field indicates credit/debit. */
+            amount: components["schemas"]["Money"];
             /**
              * @description Entry status
              * @enum {string}
@@ -838,18 +853,12 @@ export interface components {
             user_id: string;
             /** @description User's full name */
             name: string;
-            /**
-             * Format: int64
-             * @description Sum of approved credits minus approved debits, in minor units (paise); e.g. ₹12.50 = 1250
-             */
-            balance: number;
+            /** @description Sum of approved credits minus approved debits, in the group's currency. */
+            balance: components["schemas"]["Money"];
         };
         SetAllowanceRequest: {
-            /**
-             * Format: int64
-             * @description Monthly pocket money in minor units (paise). 0 pauses the allowance.
-             */
-            amount: number;
+            /** @description Monthly pocket money in the group's currency. value >= 0 (0 pauses the allowance); currency must equal the group's. */
+            amount: components["schemas"]["Money"];
             /** @description Month this amount takes effect (YYYY-MM). Defaults to the current month. */
             effective_from?: string | null;
         };
@@ -860,11 +869,8 @@ export interface components {
             group_id: string;
             /** Format: uuid */
             user_id: string;
-            /**
-             * Format: int64
-             * @description Minor units; 0 = paused
-             */
-            amount: number;
+            /** @description Monthly pocket money in the group's currency; value 0 = paused. */
+            amount: components["schemas"]["Money"];
             /** @description YYYY-MM */
             effective_from: string;
             /** Format: uuid */
@@ -878,19 +884,16 @@ export interface components {
              * @description Borrower. Required when the head creates a pre-approved loan; ignored/self for member requests.
              */
             user_id?: string | null;
-            /**
-             * Format: int64
-             * @description Loan principal in minor units (paise). > 0.
-             */
-            principal: number;
+            /** @description Loan principal in the group's currency. value >= 1; currency must equal the group's. */
+            principal: components["schemas"]["Money"];
             /** @description Number of monthly installments. > 0. */
             installments: number;
             note?: string | null;
         };
         /** @description Optional overrides applied before approval; emi_amount is recomputed. */
         ApproveLoanRequest: {
-            /** Format: int64 */
-            principal?: number | null;
+            /** @description Optional principal override in the group's currency. value >= 1 when present; currency must equal the group's. */
+            principal?: components["schemas"]["Money"] | null;
             installments?: number | null;
         };
         LoanResponse: {
@@ -900,17 +903,11 @@ export interface components {
             group_id: string;
             /** Format: uuid */
             user_id: string;
-            /**
-             * Format: int64
-             * @description Minor units
-             */
-            principal: number;
+            /** @description Loan principal in the group's currency. */
+            principal: components["schemas"]["Money"];
             installments: number;
-            /**
-             * Format: int64
-             * @description ceil(principal/installments), minor units
-             */
-            emi_amount: number;
+            /** @description ceil(principal/installments), in the group's currency. */
+            emi_amount: components["schemas"]["Money"];
             /** @description YYYY-MM; null until active */
             start_period?: string | null;
             /** @enum {string} */
@@ -924,11 +921,8 @@ export interface components {
             decided_at?: string | null;
             /** @description Count of posted EMI entries */
             installments_posted: number;
-            /**
-             * Format: int64
-             * @description principal − Σ posted EMIs, minor units
-             */
-            outstanding: number;
+            /** @description principal − Σ posted EMIs, in the group's currency. */
+            outstanding: components["schemas"]["Money"];
         };
     };
     responses: never;

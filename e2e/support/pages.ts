@@ -73,10 +73,22 @@ export async function registerUser(
 
 // ─── Group helpers ───────────────────────────────────────────────────────────
 
-export async function createGroup(page: Page, groupName: string): Promise<void> {
+export type Currency = 'EUR' | 'USD' | 'INR';
+
+/**
+ * Create a group. `currency` picks a code via the create-group currency picker
+ * (defaults to INR, which is also the screen's default selection). currency is
+ * REQUIRED on POST /groups now, so a group is always created in a known currency.
+ */
+export async function createGroup(
+  page: Page,
+  groupName: string,
+  currency: Currency = 'INR',
+): Promise<void> {
   await page.getByTestId('dashboard-create-group').click();
   await expect(page.getByTestId('create-group-name')).toBeVisible();
   await page.getByTestId('create-group-name').fill(groupName);
+  await page.getByTestId(`create-group-currency-${currency}`).click();
   await page.getByTestId('create-group-submit').click();
   await expect(page.getByTestId('group-overview-root')).toBeVisible({ timeout: 15_000 });
 }

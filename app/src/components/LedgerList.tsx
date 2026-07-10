@@ -1,6 +1,6 @@
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { theme } from '../theme';
-import type { LedgerEntry, Chore, Member, Loan } from '../api';
+import type { LedgerEntry, Chore, Member, Loan, CurrencyCode } from '../api';
 import { groupEntriesByMonth, type MonthGroup } from '../ledger-format';
 import { LedgerRow } from './LedgerRow';
 import { MonthHeader } from './MonthHeader';
@@ -12,6 +12,8 @@ export interface LedgerListProps {
   members: Member[];
   isHead: boolean;
   groupId: string;
+  /** Group currency, for month-total formatting. */
+  currency: CurrencyCode;
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
   processingId?: string | null;
@@ -28,6 +30,7 @@ export function LedgerList({
   chores,
   members,
   isHead,
+  currency,
   onApprove,
   onReject,
   processingId,
@@ -69,6 +72,7 @@ export function LedgerList({
         <MonthHeader
           period={section.period}
           totalMinorUnits={section.monthTotal}
+          currency={currency}
           totalVariant={section.monthTotal < 0 ? 'debit' : 'credit'}
         />
       )}

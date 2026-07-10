@@ -1,7 +1,8 @@
 import { StyleSheet, Text } from 'react-native';
 import type { TextStyle } from 'react-native';
 import { theme } from '../theme';
-import { formatMinor } from '../money';
+import { formatMinorGrouped, currencySymbol } from '../money';
+import type { CurrencyCode } from '../money';
 
 // Local copy with mutable fontVariant so it satisfies TextStyle (readonly arrays rejected).
 const moneyStyle = StyleSheet.create({
@@ -12,8 +13,14 @@ const moneyStyle = StyleSheet.create({
 }).base;
 
 interface AmountTextProps {
-  /** Amount in integer minor units (paise). e.g. 1250 renders "₹12.50". */
+  /** Amount in integer minor units (paise/cents). e.g. 1250 renders "₹12.50" (INR). */
   minorUnits: number;
+  /**
+   * ISO-4217 code of the amount. Required — no default, so tsc surfaces every
+   * render site and none silently keeps ₹. Pass the Money's currency, or the
+   * group's currency for locally-derived figures.
+   */
+  currency: CurrencyCode;
   /**
    * credit -> green, prefixed "+"; debit -> red, prefixed "−" (U+2212 minus).
    * neutral -> default text color, no sign (used for a chore's configured rate).
@@ -50,6 +57,7 @@ const sizeMap = {
 
 export function AmountText({
   minorUnits,
+  currency,
   variant = 'neutral',
   showSign,
   size = 'md',
@@ -58,7 +66,7 @@ export function AmountText({
 }: AmountTextProps) {
   const useSign = showSign !== undefined ? showSign : variant !== 'neutral';
   const sign = useSign ? variantSign[variant] : '';
-  const label = `${sign}₹${formatMinor(minorUnits)}`;
+  const label = `${sign}${currencySymbol(currency)}${formatMinorGrouped(minorUnits)}`;
 
   return (
     <Text

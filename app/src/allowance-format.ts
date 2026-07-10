@@ -1,5 +1,5 @@
-import type { Allowance } from './api';
-import { formatMinorUnits } from './money';
+import type { Allowance, CurrencyCode } from './api';
+import { formatMoney } from './money';
 
 /** Current server-local month as 'YYYY-MM'. The server re-defaults/validates on PUT. */
 export function currentPeriod(now: Date = new Date()): string {
@@ -39,9 +39,9 @@ export function upcomingAllowanceFor(rows: Allowance[], period: string): Allowan
   return best;
 }
 
-/** Human label: null → 'Not set'; amount 0 → 'Paused'; else '₹X.XX / month'. */
-export function describeAllowance(a: Allowance | null): string {
+/** Human label: null → 'Not set'; amount 0 → 'Paused'; else 'X.XX / month' in the group currency. */
+export function describeAllowance(a: Allowance | null, currency: CurrencyCode): string {
   if (a === null) return 'Not set';
-  if (a.amount === 0) return 'Paused';
-  return `${formatMinorUnits(a.amount)} / month`;
+  if (a.amount.value === 0) return 'Paused';
+  return `${formatMoney(a.amount.value, currency)} / month`;
 }
