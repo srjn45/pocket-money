@@ -29,27 +29,40 @@ func NewChoreHandler(choreRepo *db.ChoreRepo, groupRepo *db.GroupRepo) *ChoreHan
 
 // CreateChoreRequest represents the request body for creating a chore
 type CreateChoreRequest struct {
-	Name        string  `json:"name" binding:"required"`
-	Description *string `json:"description"`
-	Amount      int64   `json:"amount" binding:"required,gt=0"`
+	Name        string       `json:"name" binding:"required"`
+	Description *string      `json:"description"`
+	Amount      models.Money `json:"amount"` // value >= 1; currency must match group (enforced in handler)
 }
 
 // UpdateChoreRequest represents the request body for updating a chore
 type UpdateChoreRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Amount      *int64  `json:"amount"`
+	Name        *string       `json:"name"`
+	Description *string       `json:"description"`
+	Amount      *models.Money `json:"amount"` // value >= 1 when present; currency must match group
 }
 
 // ChoreResponse represents a chore in API responses
 type ChoreResponse struct {
-	ID          uuid.UUID `json:"id"`
-	GroupID     uuid.UUID `json:"group_id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	Amount      int64     `json:"amount"`
-	IsSystem    bool      `json:"is_system"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          uuid.UUID    `json:"id"`
+	GroupID     uuid.UUID    `json:"group_id"`
+	Name        string       `json:"name"`
+	Description *string      `json:"description,omitempty"`
+	Amount      models.Money `json:"amount"`
+	IsSystem    bool         `json:"is_system"`
+	CreatedAt   time.Time    `json:"created_at"`
+}
+
+// choreToResponse wraps a chore's int64 amount into Money using the group currency.
+func choreToResponse(ch *models.Chore, currency string) ChoreResponse {
+	return ChoreResponse{
+		ID:          ch.ID,
+		GroupID:     ch.GroupID,
+		Name:        ch.Name,
+		Description: ch.Description,
+		Amount:      models.NewMoney(currency, ch.Amount),
+		IsSystem:    ch.IsSystem,
+		CreatedAt:   ch.CreatedAt,
+	}
 }
 
 // ListChores returns all chores for a group
@@ -85,6 +98,12 @@ func (h *ChoreHandler) ListChores(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	chores, err := h.choreRepo.ListForGroup(c.Request.Context(), groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list chores"})
@@ -93,15 +112,7 @@ func (h *ChoreHandler) ListChores(c *gin.Context) {
 
 	response := make([]ChoreResponse, 0, len(chores))
 	for _, ch := range chores {
-		response = append(response, ChoreResponse{
-			ID:          ch.ID,
-			GroupID:     ch.GroupID,
-			Name:        ch.Name,
-			Description: ch.Description,
-			Amount:      ch.Amount,
-			IsSystem:    ch.IsSystem,
-			CreatedAt:   ch.CreatedAt,
-		})
+		response = append(response, choreToResponse(ch, currency))
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -145,27 +156,33 @@ func (h *ChoreHandler) CreateChore(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var req CreateChoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	chore, err := h.choreRepo.Create(c.Request.Context(), groupID, req.Name, req.Description, req.Amount)
+	if !checkMoneyCurrency(c, req.Amount, currency) {
+		return
+	}
+	if req.Amount.Value < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "amount must be >= 1"})
+		return
+	}
+
+	chore, err := h.choreRepo.Create(c.Request.Context(), groupID, req.Name, req.Description, req.Amount.Value)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create chore"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, ChoreResponse{
-		ID:          chore.ID,
-		GroupID:     chore.GroupID,
-		Name:        chore.Name,
-		Description: chore.Description,
-		Amount:      chore.Amount,
-		IsSystem:    chore.IsSystem,
-		CreatedAt:   chore.CreatedAt,
-	})
+	c.JSON(http.StatusCreated, choreToResponse(chore, currency))
 }
 
 // UpdateChore updates a chore
@@ -217,13 +234,31 @@ func (h *ChoreHandler) UpdateChore(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), chore.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var req UpdateChoreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	updatedChore, err := h.choreRepo.Update(c.Request.Context(), choreID, req.Name, req.Description, req.Amount)
+	var amount *int64
+	if req.Amount != nil {
+		if !checkMoneyCurrency(c, *req.Amount, currency) {
+			return
+		}
+		if req.Amount.Value < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "amount must be >= 1"})
+			return
+		}
+		amount = &req.Amount.Value
+	}
+
+	updatedChore, err := h.choreRepo.Update(c.Request.Context(), choreID, req.Name, req.Description, amount)
 	if err != nil {
 		if errors.Is(err, db.ErrSystemChore) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "cannot modify system chore"})
@@ -233,15 +268,7 @@ func (h *ChoreHandler) UpdateChore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ChoreResponse{
-		ID:          updatedChore.ID,
-		GroupID:     updatedChore.GroupID,
-		Name:        updatedChore.Name,
-		Description: updatedChore.Description,
-		Amount:      updatedChore.Amount,
-		IsSystem:    updatedChore.IsSystem,
-		CreatedAt:   updatedChore.CreatedAt,
-	})
+	c.JSON(http.StatusOK, choreToResponse(updatedChore, currency))
 }
 
 // DeleteChore deletes a chore

@@ -90,7 +90,7 @@ func (e *allowanceTestEnv) seedGroup(t *testing.T, suffix string) (head, member 
 	require.NoError(t, err)
 	member, err = e.userRepo.Create(ctx, fmt.Sprintf("member-%s@example.com", suffix), "hash", "Member", nil, nil)
 	require.NoError(t, err)
-	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID)
+	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	_, err = e.groupRepo.AddMember(ctx, group.ID, head.ID, models.RoleHead)
 	require.NoError(t, err)
@@ -128,13 +128,13 @@ func TestAllowance_AuthZ(t *testing.T) {
 
 	// Member PUT → 403
 	w := doRequest(env.router, http.MethodPut, setPath, map[string]interface{}{
-		"amount": 1000,
+		"amount": inr(1000),
 	}, bearerToken(t, member.ID))
 	assert.Equal(t, http.StatusForbidden, w.Code)
 
 	// Head sets allowance for member → 200
 	w = doRequest(env.router, http.MethodPut, setPath, map[string]interface{}{
-		"amount": 1000,
+		"amount": inr(1000),
 	}, bearerToken(t, head.ID))
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -157,7 +157,7 @@ func TestAllowance_AuthZ(t *testing.T) {
 	// PUT targeting the head → 400
 	headTargetPath := fmt.Sprintf("/groups/%s/allowances/%s", group.ID, head.ID)
 	w = doRequest(env.router, http.MethodPut, headTargetPath, map[string]interface{}{
-		"amount": 500,
+		"amount": inr(500),
 	}, bearerToken(t, head.ID))
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -165,7 +165,7 @@ func TestAllowance_AuthZ(t *testing.T) {
 	outsiderID := uuid.New()
 	outsiderPath := fmt.Sprintf("/groups/%s/allowances/%s", group.ID, outsiderID)
 	w = doRequest(env.router, http.MethodPut, outsiderPath, map[string]interface{}{
-		"amount": 500,
+		"amount": inr(500),
 	}, bearerToken(t, head.ID))
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
@@ -208,7 +208,7 @@ func TestAllowance_IdempotencyDoubleTrigger(t *testing.T) {
 		}
 	}
 	require.NotNil(t, memberBalance)
-	assert.Equal(t, int64(3*1000), memberBalance.Balance)
+	assert.Equal(t, int64(3*1000), memberBalance.Balance.Value)
 }
 
 // TestAllowance_ConcurrentRace verifies that concurrent PostDue calls produce no duplicates.
@@ -329,7 +329,7 @@ func TestAllowance_BalanceAfterPosting(t *testing.T) {
 		}
 	}
 	require.NotNil(t, memberBalance, "member must appear in balance")
-	assert.Equal(t, int64(4*1000), memberBalance.Balance, "4 months × 1000 = 4000")
+	assert.Equal(t, int64(4*1000), memberBalance.Balance.Value, "4 months × 1000 = 4000")
 }
 
 // TestAllowance_AmountChangeEffectiveNextMonth verifies that amount changes

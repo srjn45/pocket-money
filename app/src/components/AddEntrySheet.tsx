@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useState } from 'react';
 import { theme } from '../theme';
-import type { Chore, Member } from '../api';
+import type { Chore, Member, CurrencyCode } from '../api';
 import { parseMoneyToMinorUnits } from '../money';
 import { useCreateLedgerEntry } from '../hooks/useLedger';
 import { Sheet } from './Sheet';
@@ -15,6 +15,8 @@ export interface AddEntrySheetProps {
   visible: boolean;
   onClose: () => void;
   groupId: string;
+  /** The group's currency — stamped onto outgoing settlement/adjustment amounts. */
+  currency: CurrencyCode;
   chores: Chore[];
   mode: 'head' | 'member';
   members?: Member[];
@@ -29,6 +31,7 @@ export function AddEntrySheet({
   visible,
   onClose,
   groupId,
+  currency,
   chores,
   mode,
   members = [],
@@ -98,19 +101,19 @@ export function AddEntrySheet({
           chore_id: selectedChoreId,
         });
       } else if (kind === 'settlement') {
-        const amount = parseMoneyToMinorUnits(amountStr)!;
+        const value = parseMoneyToMinorUnits(amountStr)!;
         await createEntry.mutateAsync({
           entry_type: 'settlement',
           user_id: userId,
-          amount,
+          amount: { currency, value },
           note: note || undefined,
         });
       } else {
-        const amount = parseMoneyToMinorUnits(amountStr)!;
+        const value = parseMoneyToMinorUnits(amountStr)!;
         await createEntry.mutateAsync({
           entry_type: 'adjustment',
           user_id: userId,
-          amount,
+          amount: { currency, value },
           direction,
           note: note || undefined,
         });
@@ -210,7 +213,7 @@ export function AddEntrySheet({
           {selectedChore && (
             <View style={styles.choreAmountRow}>
               <Text style={styles.choreAmountLabel}>Amount:</Text>
-              <AmountText minorUnits={selectedChore.amount} variant="neutral" />
+              <AmountText minorUnits={selectedChore.amount.value} currency={selectedChore.amount.currency} variant="neutral" />
             </View>
           )}
           {mode === 'member' && (

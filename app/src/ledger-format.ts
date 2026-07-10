@@ -125,7 +125,7 @@ export function groupEntriesByMonth(entries: LedgerEntry[]): MonthGroup[] {
   return Array.from(map.entries()).map(([period, data]) => {
     const monthTotal = data.reduce((sum, e) => {
       if (e.status !== 'approved') return sum;
-      return sum + (e.direction === 'credit' ? e.amount : -e.amount);
+      return sum + (e.direction === 'credit' ? e.amount.value : -e.amount.value);
     }, 0);
     return { period, data, monthTotal };
   });

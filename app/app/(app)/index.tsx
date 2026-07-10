@@ -90,7 +90,7 @@ export default function DashboardScreen() {
           subtitle={`${item.member_count} ${item.member_count === 1 ? 'member' : 'members'}`}
           right={
             <View style={styles.groupRight}>
-              <AmountText minorUnits={item.summary_balance} variant="neutral" size="md" />
+              <AmountText minorUnits={item.summary_balance.value} currency={item.summary_balance.currency} variant="neutral" size="md" />
               <Text style={styles.balanceCaption}>owed to members</Text>
             </View>
           }
@@ -107,8 +107,9 @@ export default function DashboardScreen() {
           title={item.name}
           right={
             <AmountText
-              minorUnits={item.summary_balance}
-              variant={item.summary_balance < 0 ? 'debit' : item.summary_balance === 0 ? 'neutral' : 'credit'}
+              minorUnits={item.summary_balance.value}
+              currency={item.summary_balance.currency}
+              variant={item.summary_balance.value < 0 ? 'debit' : item.summary_balance.value === 0 ? 'neutral' : 'credit'}
               size="md"
             />
           }

@@ -100,10 +100,11 @@ test('T5: head sets member allowance and it renders on the summary', async ({ pa
     await page.getByPlaceholder('e.g. 500').fill('300');
     await page.getByRole('button', { name: /^save$/i }).click();
 
-    // Success toast, then the amount renders on the member summary (balance is ₹0,
-    // so 300.00 can only be the allowance).
+    // Success toast, then the amount renders on the member summary in the group's
+    // currency (INR default) — the ₹ prefix proves currency-aware formatting, and
+    // 300.00 can only be the allowance (balance is ₹0).
     await expect(page.getByTestId('toast-root')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/300\.00/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/₹300\.00/).first()).toBeVisible({ timeout: 10_000 });
   } finally {
     await memberCtx.close();
   }

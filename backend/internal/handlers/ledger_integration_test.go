@@ -90,6 +90,16 @@ func bearerToken(t *testing.T, userID uuid.UUID) string {
 	return "Bearer " + tok
 }
 
+// money builds a Money request field for JSON request bodies in tests.
+func money(currency string, value int64) map[string]interface{} {
+	return map[string]interface{}{"currency": currency, "value": value}
+}
+
+// inr is money in INR — the default currency for handler integration test groups.
+func inr(value int64) map[string]interface{} {
+	return money(models.CurrencyINR, value)
+}
+
 func doRequest(router *gin.Engine, method, path string, body interface{}, token string) *httptest.ResponseRecorder {
 	var bodyBytes []byte
 	if body != nil {
@@ -114,7 +124,7 @@ func (e *ledgerTestEnv) seedGroupWithMembers(t *testing.T, suffix string) (head,
 	require.NoError(t, err)
 	member, err = e.userRepo.Create(ctx, fmt.Sprintf("member-%s@example.com", suffix), "hash", "Member", nil, nil)
 	require.NoError(t, err)
-	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID)
+	group, err = e.groupRepo.Create(ctx, "Family "+suffix, head.ID, models.CurrencyINR)
 	require.NoError(t, err)
 	// GroupRepo.Create only inserts the group row; the head must be added to
 	// group_members explicitly (the production CreateGroup handler does this).
@@ -183,7 +193,7 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	w := doRequest(env.router, http.MethodPost, path, map[string]interface{}{
 		"entry_type": "settlement",
 		"user_id":    member.ID,
-		"amount":     500,
+		"amount":     inr(500),
 	}, bearerToken(t, member.ID))
 	assert.Equal(t, http.StatusForbidden, w.Code)
 
@@ -191,7 +201,7 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{
 		"entry_type": "adjustment",
 		"user_id":    member.ID,
-		"amount":     500,
+		"amount":     inr(500),
 		"direction":  "credit",
 	}, bearerToken(t, member.ID))
 	assert.Equal(t, http.StatusForbidden, w.Code)
@@ -200,7 +210,7 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{
 		"entry_type": "settlement",
 		"user_id":    member.ID,
-		"amount":     300,
+		"amount":     inr(300),
 	}, bearerToken(t, head.ID))
 	require.Equal(t, http.StatusCreated, w.Code)
 	var created handlers.LedgerResponse
@@ -216,7 +226,7 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{
 		"entry_type": "adjustment",
 		"user_id":    member.ID,
-		"amount":     200,
+		"amount":     inr(200),
 		"direction":  "credit",
 		"note":       "bonus",
 	}, bearerToken(t, head.ID))
@@ -235,17 +245,17 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 	assert.Equal(t, models.StatusPendingApproval, created.Status)
 	assert.Equal(t, member.ID, created.UserID)
-	assert.Equal(t, chore.Amount, created.Amount, "chore config amount must be used")
+	assert.Equal(t, chore.Amount, created.Amount.Value, "chore config amount must be used")
 
 	// Member tries to pass custom amount → amount must equal chore config (ignored)
 	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{
 		"entry_type": "chore",
 		"chore_id":   chore.ID,
-		"amount":     99999,
+		"amount":     inr(99999),
 	}, bearerToken(t, member.ID))
 	require.Equal(t, http.StatusCreated, w.Code)
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
-	assert.Equal(t, chore.Amount, created.Amount, "custom amount must be ignored for chore entries")
+	assert.Equal(t, chore.Amount, created.Amount.Value, "custom amount must be ignored for chore entries")
 }
 
 // --- Test #4: decided_by recorded on approve/reject ---
@@ -311,7 +321,7 @@ func TestLedger_DecidedByOnApproveReject(t *testing.T) {
 		}
 	}
 	require.NotNil(t, memberBalance)
-	assert.Equal(t, chore.Amount, memberBalance.Balance, "only approved entry should count toward balance")
+	assert.Equal(t, chore.Amount, memberBalance.Balance.Value, "only approved entry should count toward balance")
 
 	// Head-created chore entry is immediately approved with decided_by set
 	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{

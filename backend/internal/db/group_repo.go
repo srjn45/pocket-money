@@ -19,6 +19,7 @@ type GroupSummary struct {
 	ID             uuid.UUID
 	Name           string
 	HeadUserID     uuid.UUID
+	Currency       string
 	CreatedAt      time.Time
 	Role           models.MemberRole
 	MemberCount    int
@@ -35,21 +36,23 @@ func NewGroupRepo(pool *pgxpool.Pool) *GroupRepo {
 	return &GroupRepo{pool: pool}
 }
 
-// Create inserts a new group into the database
-func (r *GroupRepo) Create(ctx context.Context, name string, headUserID uuid.UUID) (*models.Group, error) {
+// Create inserts a new group into the database. currency is the group's
+// immutable ISO-4217 code (D7) and must be validated by the caller.
+func (r *GroupRepo) Create(ctx context.Context, name string, headUserID uuid.UUID, currency string) (*models.Group, error) {
 	group := &models.Group{
 		ID:         uuid.New(),
 		Name:       name,
 		HeadUserID: headUserID,
+		Currency:   currency,
 	}
 
 	query := `
-		INSERT INTO groups (id, name, head_user_id)
-		VALUES ($1, $2, $3)
+		INSERT INTO groups (id, name, head_user_id, currency)
+		VALUES ($1, $2, $3, $4)
 		RETURNING created_at
 	`
 
-	err := r.pool.QueryRow(ctx, query, group.ID, name, headUserID).Scan(&group.CreatedAt)
+	err := r.pool.QueryRow(ctx, query, group.ID, name, headUserID, currency).Scan(&group.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create group: %w", err)
 	}
@@ -57,12 +60,26 @@ func (r *GroupRepo) Create(ctx context.Context, name string, headUserID uuid.UUI
 	return group, nil
 }
 
+// GetCurrency returns just the group's currency code (D7). Cheaper than GetByID
+// when a response builder only needs the code to wrap amounts into Money.
+func (r *GroupRepo) GetCurrency(ctx context.Context, groupID uuid.UUID) (string, error) {
+	var currency string
+	err := r.pool.QueryRow(ctx, `SELECT currency FROM groups WHERE id = $1`, groupID).Scan(&currency)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("failed to get group currency: %w", err)
+	}
+	return currency, nil
+}
+
 // GetByID retrieves a group by ID
 func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, error) {
 	group := &models.Group{}
 
 	query := `
-		SELECT id, name, head_user_id, created_at
+		SELECT id, name, head_user_id, currency, created_at
 		FROM groups
 		WHERE id = $1
 	`
@@ -71,6 +88,7 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 		&group.ID,
 		&group.Name,
 		&group.HeadUserID,
+		&group.Currency,
 		&group.CreatedAt,
 	)
 	if err != nil {
@@ -90,7 +108,7 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID) ([]*GroupSummary, error) {
 	query := `
 		WITH my_groups AS (
-			SELECT g.id, g.name, g.head_user_id, g.created_at, gm.role
+			SELECT g.id, g.name, g.head_user_id, g.currency, g.created_at, gm.role
 			FROM groups g
 			JOIN group_members gm ON gm.group_id = g.id
 			WHERE gm.user_id = $1
@@ -117,7 +135,7 @@ func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID
 			WHERE gm.role <> 'head'
 			GROUP BY mb.group_id
 		)
-		SELECT mg.id, mg.name, mg.head_user_id, mg.created_at, mg.role,
+		SELECT mg.id, mg.name, mg.head_user_id, mg.currency, mg.created_at, mg.role,
 			COALESCE(mc.member_count, 0) AS member_count,
 			CASE WHEN mg.role = 'head'
 				 THEN COALESCE(ht.total_owed, 0)
@@ -138,7 +156,7 @@ func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID
 	summaries := make([]*GroupSummary, 0)
 	for rows.Next() {
 		s := &GroupSummary{}
-		if err := rows.Scan(&s.ID, &s.Name, &s.HeadUserID, &s.CreatedAt,
+		if err := rows.Scan(&s.ID, &s.Name, &s.HeadUserID, &s.Currency, &s.CreatedAt,
 			&s.Role, &s.MemberCount, &s.SummaryBalance); err != nil {
 			return nil, fmt.Errorf("failed to scan group summary: %w", err)
 		}

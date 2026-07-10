@@ -59,7 +59,8 @@ func NewGroupHandler(
 
 // CreateGroupRequest represents the request body for creating a group
 type CreateGroupRequest struct {
-	Name string `json:"name" binding:"required"`
+	Name     string `json:"name" binding:"required"`
+	Currency string `json:"currency" binding:"required"` // immutable ISO-4217 code (D7)
 }
 
 // GroupResponse represents a group in API responses
@@ -67,6 +68,7 @@ type GroupResponse struct {
 	ID         uuid.UUID `json:"id"`
 	Name       string    `json:"name"`
 	HeadUserID uuid.UUID `json:"head_user_id"`
+	Currency   string    `json:"currency"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -75,10 +77,11 @@ type GroupSummaryResponse struct {
 	ID             uuid.UUID         `json:"id"`
 	Name           string            `json:"name"`
 	HeadUserID     uuid.UUID         `json:"head_user_id"`
+	Currency       string            `json:"currency"`
 	CreatedAt      time.Time         `json:"created_at"`
 	Role           models.MemberRole `json:"role"`
 	MemberCount    int               `json:"member_count"`
-	SummaryBalance int64             `json:"summary_balance"`
+	SummaryBalance models.Money      `json:"summary_balance"`
 }
 
 // MemberResponse represents a member in API responses
@@ -95,6 +98,7 @@ type GroupDetailResponse struct {
 	ID          uuid.UUID        `json:"id"`
 	Name        string           `json:"name"`
 	HeadUserID  uuid.UUID        `json:"head_user_id"`
+	Currency    string           `json:"currency"`
 	CreatedAt   time.Time        `json:"created_at"`
 	Members     []MemberResponse `json:"members"`
 	ChoresCount int              `json:"chores_count"`
@@ -121,8 +125,13 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
+	if !models.IsValidCurrency(req.Currency) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "currency must be one of EUR, USD, INR"})
+		return
+	}
+
 	// Create group
-	group, err := h.groupRepo.Create(c.Request.Context(), req.Name, userID)
+	group, err := h.groupRepo.Create(c.Request.Context(), req.Name, userID, req.Currency)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create group"})
 		return
@@ -148,6 +157,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		ID:         group.ID,
 		Name:       group.Name,
 		HeadUserID: group.HeadUserID,
+		Currency:   group.Currency,
 		CreatedAt:  group.CreatedAt,
 	})
 }
@@ -180,10 +190,11 @@ func (h *GroupHandler) ListGroups(c *gin.Context) {
 			ID:             s.ID,
 			Name:           s.Name,
 			HeadUserID:     s.HeadUserID,
+			Currency:       s.Currency,
 			CreatedAt:      s.CreatedAt,
 			Role:           s.Role,
 			MemberCount:    s.MemberCount,
-			SummaryBalance: s.SummaryBalance,
+			SummaryBalance: models.NewMoney(s.Currency, s.SummaryBalance),
 		})
 	}
 	c.JSON(http.StatusOK, response)
@@ -267,6 +278,7 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 		ID:          group.ID,
 		Name:        group.Name,
 		HeadUserID:  group.HeadUserID,
+		Currency:    group.Currency,
 		CreatedAt:   group.CreatedAt,
 		Members:     memberResponses,
 		ChoresCount: choresCount,
@@ -498,6 +510,7 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 		ID:         group.ID,
 		Name:       group.Name,
 		HeadUserID: group.HeadUserID,
+		Currency:   group.Currency,
 		CreatedAt:  group.CreatedAt,
 	})
 }

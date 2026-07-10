@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { Allowance } from '../api';
+import type { Allowance, CurrencyCode } from '../api';
 import { describeAllowance } from '../allowance-format';
 import { humanMonth } from '../ledger-format';
 import { theme } from '../theme';
@@ -9,10 +9,12 @@ import { Button } from './Button';
 interface AllowanceSummaryProps {
   current: Allowance | null;
   upcoming?: Allowance | null;
+  /** Group currency, for formatting derived/upcoming figures. */
+  currency: CurrencyCode;
   onEdit?: () => void;
 }
 
-export function AllowanceSummary({ current, upcoming, onEdit }: AllowanceSummaryProps) {
+export function AllowanceSummary({ current, upcoming, currency, onEdit }: AllowanceSummaryProps) {
   return (
     <View style={styles.container}>
       <View style={styles.row}>
@@ -20,11 +22,11 @@ export function AllowanceSummary({ current, upcoming, onEdit }: AllowanceSummary
         <View style={styles.valueRow}>
           {current === null ? (
             <Text style={styles.muted}>Not set</Text>
-          ) : current.amount === 0 ? (
+          ) : current.amount.value === 0 ? (
             <Text style={styles.muted}>Paused</Text>
           ) : (
             <View style={styles.amountRow}>
-              <AmountText minorUnits={current.amount} variant="neutral" />
+              <AmountText minorUnits={current.amount.value} currency={current.amount.currency} variant="neutral" />
               <Text style={styles.perMonth}> / month</Text>
             </View>
           )}
@@ -42,7 +44,7 @@ export function AllowanceSummary({ current, upcoming, onEdit }: AllowanceSummary
       </View>
       {upcoming && (
         <Text style={styles.upcomingCaption}>
-          {`Changing to ${describeAllowance(upcoming)} from ${humanMonth(upcoming.effective_from)}`}
+          {`Changing to ${describeAllowance(upcoming, currency)} from ${humanMonth(upcoming.effective_from)}`}
         </Text>
       )}
     </View>

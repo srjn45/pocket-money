@@ -11,6 +11,7 @@ import { useLoans } from '../../../../src/hooks/useLoans';
 import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../src/allowance-format';
 import { groupsApi } from '../../../../src/api';
 import type { Balance } from '../../../../src/api';
+import { currencySymbol } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { useLeaveGroup } from '../../../../src/hooks/useHygiene';
 import { theme } from '../../../../src/theme';
@@ -71,7 +72,7 @@ export default function GroupOverviewScreen() {
   async function handleLeaveGroup() {
     const confirmed = await confirmAsync({
       title: 'Leave group',
-      message: `Leave ${group?.name ?? 'this group'}? You can rejoin with a new invite. This only works if your balance is ₹0 and you have no active or pending loans.`,
+      message: `Leave ${group?.name ?? 'this group'}? You can rejoin with a new invite. This only works if your balance is ${currencySymbol(group?.currency ?? 'INR')}0 and you have no active or pending loans.`,
       confirmLabel: 'Leave',
       destructive: true,
     });
@@ -129,6 +130,12 @@ export default function GroupOverviewScreen() {
     return <ErrorMessage message={error instanceof Error ? error.message : 'Failed to load group'} />;
   }
 
+  if (!group) {
+    return <ErrorMessage message="Failed to load group" />;
+  }
+
+  const currency = group.currency;
+
   // ─── HEAD VIEW ─────────────────────────────────────────────────────────────
   if (isHead) {
     const balances = balanceQuery.data ?? [];
@@ -170,7 +177,7 @@ export default function GroupOverviewScreen() {
             const bal = memberBalanceMap.get(member.user_id) ?? {
               user_id: member.user_id,
               name: member.name,
-              balance: 0,
+              balance: { currency, value: 0 },
             };
             return (
               <View testID={`member-card-${member.user_id}`}>
@@ -210,6 +217,7 @@ export default function GroupOverviewScreen() {
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
           groupId={id ?? ''}
+          currency={currency}
           chores={choresQuery.data ?? []}
           mode="head"
           members={nonHeadMembers}
@@ -240,19 +248,21 @@ export default function GroupOverviewScreen() {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Your balance</Text>
           <AmountText
-            minorUnits={myBalance?.balance ?? 0}
+            minorUnits={myBalance?.balance.value ?? 0}
+            currency={myBalance?.balance.currency ?? currency}
             variant={
-              (myBalance?.balance ?? 0) < 0 ? 'debit' : 'credit'
+              (myBalance?.balance.value ?? 0) < 0 ? 'debit' : 'credit'
             }
             size="xl"
           />
           <Text style={styles.summaryHint}>
-            {(myBalance?.balance ?? 0) < 0 ? 'you owe' : 'owed to you'}
+            {(myBalance?.balance.value ?? 0) < 0 ? 'you owe' : 'owed to you'}
           </Text>
           {!allowancesQuery.isError && (
             <AllowanceSummary
               current={memberCurrentAllow}
               upcoming={memberUpcomingAllow}
+              currency={currency}
             />
           )}
         </View>
@@ -286,6 +296,7 @@ export default function GroupOverviewScreen() {
         members={members}
         isHead={false}
         groupId={id ?? ''}
+        currency={currency}
         loans={loansQuery.data ?? []}
         refreshing={myLedgerQuery.isFetching}
         onRefresh={() => myLedgerQuery.refetch()}
@@ -297,6 +308,7 @@ export default function GroupOverviewScreen() {
         visible={sheetVisible}
         onClose={() => setSheetVisible(false)}
         groupId={id ?? ''}
+        currency={currency}
         chores={choresQuery.data ?? []}
         mode="member"
         selfUserId={user?.id}

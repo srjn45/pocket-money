@@ -25,7 +25,7 @@ import {
   LoanApproveSheet,
   useToast,
 } from '../../../../src/components';
-import { parseMoneyToMinorUnits, formatMinor } from '../../../../src/money';
+import { parseMoneyToMinorUnits, formatMoney, currencySymbol } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { theme } from '../../../../src/theme';
 
@@ -85,6 +85,7 @@ export default function LoansScreen() {
   const loans = loansQuery.data ?? [];
   const group = groupQuery.data;
   const isHead = group?.members.find(m => m.user_id === user?.id)?.role === 'head';
+  const currency = group?.currency ?? 'INR';
 
   const isLoading = loansQuery.isLoading || groupQuery.isLoading;
   const isRefetching = loansQuery.isRefetching || groupQuery.isRefetching;
@@ -111,8 +112,8 @@ export default function LoansScreen() {
     setPrincipalError('');
     setInstallmentsError('');
 
-    const principal = parseMoneyToMinorUnits(principalStr);
-    if (principal === null) {
+    const principalValue = parseMoneyToMinorUnits(principalStr);
+    if (principalValue === null) {
       setPrincipalError('Enter a valid amount (e.g. 5000).');
       return;
     }
@@ -124,7 +125,7 @@ export default function LoansScreen() {
 
     try {
       await requestLoan.mutateAsync({
-        principal,
+        principal: { currency, value: principalValue },
         installments,
         note: noteStr.trim() || null,
       });
@@ -138,7 +139,7 @@ export default function LoansScreen() {
   async function handleReject(loan: Loan) {
     const ok = await confirmAsync({
       title: 'Reject Loan',
-      message: `Reject this loan request for ₹${formatMinor(loan.principal)}?`,
+      message: `Reject this loan request for ${formatMoney(loan.principal.value, loan.principal.currency)}?`,
       confirmLabel: 'Reject',
       destructive: true,
     });
@@ -154,7 +155,7 @@ export default function LoansScreen() {
   async function handleClose(loan: Loan) {
     const ok = await confirmAsync({
       title: 'Close Loan Early',
-      message: `Pay off the outstanding ₹${formatMinor(loan.outstanding)} now and close this loan?`,
+      message: `Pay off the outstanding ${formatMoney(loan.outstanding.value, loan.outstanding.currency)} now and close this loan?`,
       confirmLabel: 'Close Early',
       destructive: false,
     });
@@ -180,7 +181,7 @@ export default function LoansScreen() {
               <Text style={styles.memberName}>{memberName}</Text>
             )}
           </View>
-          <AmountText minorUnits={loan.principal} variant="neutral" size="lg" />
+          <AmountText minorUnits={loan.principal.value} currency={loan.principal.currency} variant="neutral" size="lg" />
         </View>
 
         {loan.note ? (
@@ -192,12 +193,12 @@ export default function LoansScreen() {
             <>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Outstanding</Text>
-                <AmountText minorUnits={loan.outstanding} variant="debit" size="sm" />
+                <AmountText minorUnits={loan.outstanding.value} currency={loan.outstanding.currency} variant="debit" size="sm" />
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>EMI</Text>
                 <Text style={styles.detailValue}>
-                  ≈ ₹{formatMinor(loan.emi_amount)} / month
+                  ≈ {formatMoney(loan.emi_amount.value, loan.emi_amount.currency)} / month
                 </Text>
               </View>
               <View style={styles.detailRow}>
@@ -213,13 +214,13 @@ export default function LoansScreen() {
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Requested</Text>
                 <Text style={styles.detailValue}>
-                  ₹{formatMinor(loan.principal)} over {loan.installments} months
+                  {formatMoney(loan.principal.value, loan.principal.currency)} over {loan.installments} months
                 </Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Est. EMI</Text>
                 <Text style={styles.detailValue}>
-                  ≈ ₹{formatMinor(loan.emi_amount)} / month
+                  ≈ {formatMoney(loan.emi_amount.value, loan.emi_amount.currency)} / month
                 </Text>
               </View>
             </>
@@ -247,7 +248,7 @@ export default function LoansScreen() {
           </View>
         )}
 
-        {isHead && loan.status === 'active' && loan.outstanding > 0 && (
+        {isHead && loan.status === 'active' && loan.outstanding.value > 0 && (
           <View style={styles.actions}>
             <Button
               title="Close Early"
@@ -342,7 +343,7 @@ export default function LoansScreen() {
         footer={requestSheetFooter}
       >
         <TextField
-          label="Amount (₹)"
+          label={`Amount (${currencySymbol(currency)})`}
           keyboardType="decimal-pad"
           value={principalStr}
           onChangeText={(v) => { setPrincipalStr(v); setPrincipalError(''); }}
@@ -361,7 +362,7 @@ export default function LoansScreen() {
         />
         {estimateEmi !== null && (
           <Text style={styles.emiHint}>
-            ≈ ₹{formatMinor(estimateEmi)} / month deducted from your pocket money
+            ≈ {formatMoney(estimateEmi, currency)} / month deducted from your pocket money
           </Text>
         )}
         <TextField
@@ -377,6 +378,7 @@ export default function LoansScreen() {
         visible={approveSheetLoan !== null}
         onClose={() => setApproveSheetLoan(null)}
         groupId={id ?? ''}
+        currency={currency}
         loan={approveSheetLoan}
       />
     </View>

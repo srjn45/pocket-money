@@ -10,7 +10,7 @@ import { useAllowances } from '../../../../../src/hooks/useAllowances';
 import { useLoans } from '../../../../../src/hooks/useLoans';
 import { confirmAsync } from '../../../../../src/confirm';
 import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../../src/allowance-format';
-import { formatMinor } from '../../../../../src/money';
+import { formatMoney, currencySymbol } from '../../../../../src/money';
 import { useRemoveMember } from '../../../../../src/hooks/useHygiene';
 import { theme } from '../../../../../src/theme';
 import {
@@ -51,6 +51,7 @@ export default function MemberDetailScreen() {
   const group = groupQuery.data;
   const members = group?.members ?? [];
   const isHead = members.find(m => m.user_id === user?.id)?.role === 'head';
+  const currency = group?.currency ?? 'INR';
 
   const ledgerQuery = useLedger(id ?? '', { user_id: userId });
   const balanceQuery = useBalance(id ?? '');
@@ -114,7 +115,7 @@ export default function MemberDetailScreen() {
     const memberName = name || 'this member';
     const confirmed = await confirmAsync({
       title: 'Remove member',
-      message: `Remove ${memberName} from the group? Their ledger history is kept. This only works if their balance is ₹0 and they have no active or pending loans.`,
+      message: `Remove ${memberName} from the group? Their ledger history is kept. This only works if their balance is ${currencySymbol(currency)}0 and they have no active or pending loans.`,
       confirmLabel: 'Remove',
       destructive: true,
     });
@@ -141,7 +142,8 @@ export default function MemberDetailScreen() {
     return <ErrorMessage message={groupQuery.error instanceof Error ? groupQuery.error.message : 'Failed to load'} />;
   }
 
-  const bal = memberBalance?.balance ?? 0;
+  const balValue = memberBalance?.balance.value ?? 0;
+  const balCurrency = memberBalance?.balance.currency ?? currency;
 
   function renderLoanRow(loan: Loan) {
     const isActive = loan.status === 'active';
@@ -152,7 +154,7 @@ export default function MemberDetailScreen() {
             label={isActive ? 'Active' : 'Pending'}
             tone={loanStatusTone(loan.status)}
           />
-          <AmountText minorUnits={loan.principal} variant="neutral" size="sm" />
+          <AmountText minorUnits={loan.principal.value} currency={loan.principal.currency} variant="neutral" size="sm" />
         </View>
         {loan.note ? <Text style={styles.loanNote}>{loan.note}</Text> : null}
         <View style={styles.loanDetails}>
@@ -160,11 +162,11 @@ export default function MemberDetailScreen() {
             <>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Outstanding</Text>
-                <AmountText minorUnits={loan.outstanding} variant="debit" size="sm" />
+                <AmountText minorUnits={loan.outstanding.value} currency={loan.outstanding.currency} variant="debit" size="sm" />
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>EMI</Text>
-                <Text style={styles.detailValue}>≈ ₹{formatMinor(loan.emi_amount)} / month</Text>
+                <Text style={styles.detailValue}>≈ {formatMoney(loan.emi_amount.value, loan.emi_amount.currency)} / month</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Progress</Text>
@@ -176,11 +178,11 @@ export default function MemberDetailScreen() {
             <>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Amount</Text>
-                <Text style={styles.detailValue}>₹{formatMinor(loan.principal)} over {loan.installments} months</Text>
+                <Text style={styles.detailValue}>{formatMoney(loan.principal.value, loan.principal.currency)} over {loan.installments} months</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Est. EMI</Text>
-                <Text style={styles.detailValue}>≈ ₹{formatMinor(loan.emi_amount)} / month</Text>
+                <Text style={styles.detailValue}>≈ {formatMoney(loan.emi_amount.value, loan.emi_amount.currency)} / month</Text>
               </View>
             </>
           )}
@@ -197,17 +199,19 @@ export default function MemberDetailScreen() {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>{name ? `${name}'s balance` : 'Balance'}</Text>
           <AmountText
-            minorUnits={bal}
-            variant={bal < 0 ? 'debit' : 'credit'}
+            minorUnits={balValue}
+            currency={balCurrency}
+            variant={balValue < 0 ? 'debit' : 'credit'}
             size="xl"
           />
           <Text style={styles.summaryHint}>
-            {bal < 0 ? 'owes you' : 'owed'}
+            {balValue < 0 ? 'owes you' : 'owed'}
           </Text>
           {!allowancesQuery.isError && (
             <AllowanceSummary
               current={currentAllow}
               upcoming={upcomingAllow}
+              currency={currency}
               onEdit={() => setAllowanceSheetVisible(true)}
             />
           )}
@@ -246,6 +250,7 @@ export default function MemberDetailScreen() {
           members={members}
           isHead={true}
           groupId={id ?? ''}
+          currency={currency}
           onApprove={handleApprove}
           onReject={handleReject}
           processingId={processingId}
@@ -264,6 +269,7 @@ export default function MemberDetailScreen() {
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
           groupId={id ?? ''}
+          currency={currency}
           chores={choresQuery.data ?? []}
           mode="head"
           fixedUserId={userId}
@@ -273,6 +279,7 @@ export default function MemberDetailScreen() {
           visible={allowanceSheetVisible}
           onClose={() => setAllowanceSheetVisible(false)}
           groupId={id ?? ''}
+          currency={currency}
           userId={userId ?? ''}
           memberName={name}
           current={currentAllow}

@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../theme';
+import type { CurrencyCode } from '../api';
 import { AmountText } from './AmountText';
 
 const MONTH_NAMES = [
@@ -12,6 +13,8 @@ interface MonthHeaderProps {
   period: string;
   /** Optional right-aligned month total, in minor units. */
   totalMinorUnits?: number;
+  /** Currency for the total. Required when totalMinorUnits is shown (group currency). */
+  currency?: CurrencyCode;
   /** Direction for the total's color/sign. Default 'neutral'. */
   totalVariant?: 'credit' | 'debit' | 'neutral';
 }
@@ -23,12 +26,12 @@ function formatPeriod(period: string): string {
   return `${name} ${yearStr}`;
 }
 
-export function MonthHeader({ period, totalMinorUnits, totalVariant = 'neutral' }: MonthHeaderProps) {
+export function MonthHeader({ period, totalMinorUnits, currency, totalVariant = 'neutral' }: MonthHeaderProps) {
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{formatPeriod(period)}</Text>
-      {totalMinorUnits !== undefined ? (
-        <AmountText minorUnits={totalMinorUnits} variant={totalVariant} size="sm" />
+      {totalMinorUnits !== undefined && currency !== undefined ? (
+        <AmountText minorUnits={totalMinorUnits} currency={currency} variant={totalVariant} size="sm" />
       ) : null}
     </View>
   );

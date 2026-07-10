@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { choresApi } from '../api';
+import { choresApi, Money } from '../api';
 import { qk } from '../query-keys';
 
 export function useChores(groupId: string) {
@@ -13,7 +13,7 @@ export function useChores(groupId: string) {
 export function useCreateChore(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; description?: string; amount: number }) =>
+    mutationFn: (data: { name: string; description?: string; amount: Money }) =>
       choresApi.create(groupId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.chores(groupId) });
@@ -25,7 +25,7 @@ export function useCreateChore(groupId: string) {
 export function useUpdateChore(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string; amount?: number }) =>
+    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string; amount?: Money | null }) =>
       choresApi.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.chores(groupId) }),
   });

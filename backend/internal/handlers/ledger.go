@@ -38,7 +38,7 @@ type CreateLedgerRequest struct {
 	EntryType models.LedgerEntryType  `json:"entry_type" binding:"required"`
 	UserID    *uuid.UUID              `json:"user_id"`   // head may target a member
 	ChoreID   *uuid.UUID              `json:"chore_id"`  // required iff entry_type=chore
-	Amount    *int64                  `json:"amount"`    // required (>0) iff settlement/adjustment
+	Amount    *models.Money           `json:"amount"`    // required (value>=1) iff settlement/adjustment; currency must match group
 	Direction *models.LedgerDirection `json:"direction"` // required iff entry_type=adjustment
 	Note      *string                 `json:"note"`
 }
@@ -49,7 +49,7 @@ type LedgerResponse struct {
 	GroupID         uuid.UUID              `json:"group_id"`
 	UserID          uuid.UUID              `json:"user_id"`
 	ChoreID         *uuid.UUID             `json:"chore_id,omitempty"`
-	Amount          int64                  `json:"amount"`
+	Amount          models.Money           `json:"amount"`
 	Status          models.LedgerStatus    `json:"status"`
 	EntryType       models.LedgerEntryType `json:"entry_type"`
 	Direction       models.LedgerDirection `json:"direction"`
@@ -64,18 +64,18 @@ type LedgerResponse struct {
 
 // BalanceResponse represents a user's balance
 type BalanceResponse struct {
-	UserID  uuid.UUID `json:"user_id"`
-	Name    string    `json:"name"`
-	Balance int64     `json:"balance"`
+	UserID  uuid.UUID    `json:"user_id"`
+	Name    string       `json:"name"`
+	Balance models.Money `json:"balance"`
 }
 
-func entryToResponse(e *models.LedgerEntry) LedgerResponse {
+func entryToResponse(e *models.LedgerEntry, currency string) LedgerResponse {
 	return LedgerResponse{
 		ID:              e.ID,
 		GroupID:         e.GroupID,
 		UserID:          e.UserID,
 		ChoreID:         e.ChoreID,
-		Amount:          e.Amount,
+		Amount:          models.NewMoney(currency, e.Amount),
 		Status:          e.Status,
 		EntryType:       e.EntryType,
 		Direction:       e.Direction,
@@ -193,6 +193,12 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 		filterUserID = &userID
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	entries, err := h.ledgerRepo.ListForGroupWithUser(c.Request.Context(), groupID, status, filterUserID, entryType, period)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list ledger entries"})
@@ -201,7 +207,7 @@ func (h *LedgerHandler) ListLedger(c *gin.Context) {
 
 	response := make([]LedgerResponse, 0, len(entries))
 	for _, e := range entries {
-		response = append(response, entryToResponse(e))
+		response = append(response, entryToResponse(e, currency))
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -238,6 +244,12 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var req CreateLedgerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -247,6 +259,12 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 	// Reject machine-posted entry types
 	if req.EntryType == models.EntryTypeAllowance || req.EntryType == models.EntryTypeEMI {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "allowance/emi entries are machine-posted only"})
+		return
+	}
+
+	// If any amount is supplied, its currency must match the group's — even for
+	// chore entries where the value itself is ignored (§4c).
+	if req.Amount != nil && !checkMoneyCurrency(c, *req.Amount, currency) {
 		return
 	}
 
@@ -311,7 +329,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required for settlement entries"})
 			return
 		}
-		if req.Amount == nil || *req.Amount <= 0 {
+		if req.Amount == nil || req.Amount.Value <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "amount is required and must be > 0 for settlement entries"})
 			return
 		}
@@ -319,7 +337,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		if c.IsAborted() {
 			return
 		}
-		amount = *req.Amount
+		amount = req.Amount.Value
 		direction = models.DirectionDebit
 		status = models.StatusApproved
 		decidedBy = &userID
@@ -334,7 +352,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required for adjustment entries"})
 			return
 		}
-		if req.Amount == nil || *req.Amount <= 0 {
+		if req.Amount == nil || req.Amount.Value <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "amount is required and must be > 0 for adjustment entries"})
 			return
 		}
@@ -351,7 +369,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		if c.IsAborted() {
 			return
 		}
-		amount = *req.Amount
+		amount = req.Amount.Value
 		direction = d
 		status = models.StatusApproved
 		decidedBy = &userID
@@ -372,7 +390,7 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, entryToResponse(entry))
+	c.JSON(http.StatusCreated, entryToResponse(entry, currency))
 }
 
 // resolveTargetUser returns the target user ID, verifying they are a member of groupID.
@@ -449,13 +467,19 @@ func (h *LedgerHandler) ApproveLedger(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), entry.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	updated, err := h.ledgerRepo.SetDecision(c.Request.Context(), entryID, models.StatusApproved, userID, time.Now())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to approve entry"})
 		return
 	}
 
-	c.JSON(http.StatusOK, entryToResponse(updated))
+	c.JSON(http.StatusOK, entryToResponse(updated, currency))
 }
 
 // RejectLedger rejects a pending ledger entry
@@ -510,13 +534,19 @@ func (h *LedgerHandler) RejectLedger(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), entry.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	updated, err := h.ledgerRepo.SetDecision(c.Request.Context(), entryID, models.StatusRejected, userID, time.Now())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reject entry"})
 		return
 	}
 
-	c.JSON(http.StatusOK, entryToResponse(updated))
+	c.JSON(http.StatusOK, entryToResponse(updated, currency))
 }
 
 // GetBalance returns per-member balances for a group
@@ -556,6 +586,12 @@ func (h *LedgerHandler) GetBalance(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	balances, err := h.ledgerRepo.GetBalanceForGroup(c.Request.Context(), groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get balances"})
@@ -567,7 +603,7 @@ func (h *LedgerHandler) GetBalance(c *gin.Context) {
 		response = append(response, BalanceResponse{
 			UserID:  b.UserID,
 			Name:    b.Name,
-			Balance: b.Balance,
+			Balance: models.NewMoney(currency, b.Balance),
 		})
 	}
 	c.JSON(http.StatusOK, response)

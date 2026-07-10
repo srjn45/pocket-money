@@ -39,9 +39,9 @@ type LoanResponse struct {
 	ID                 uuid.UUID         `json:"id"`
 	GroupID            uuid.UUID         `json:"group_id"`
 	UserID             uuid.UUID         `json:"user_id"`
-	Principal          int64             `json:"principal"`
+	Principal          models.Money      `json:"principal"`
 	Installments       int               `json:"installments"`
-	EMIAmount          int64             `json:"emi_amount"`
+	EMIAmount          models.Money      `json:"emi_amount"`
 	StartPeriod        *string           `json:"start_period,omitempty"`
 	Status             models.LoanStatus `json:"status"`
 	Note               *string           `json:"note,omitempty"`
@@ -49,17 +49,17 @@ type LoanResponse struct {
 	DecidedBy          *uuid.UUID        `json:"decided_by,omitempty"`
 	DecidedAt          *time.Time        `json:"decided_at,omitempty"`
 	InstallmentsPosted int               `json:"installments_posted"`
-	Outstanding        int64             `json:"outstanding"`
+	Outstanding        models.Money      `json:"outstanding"`
 }
 
-func loanWithProgressToResponse(lwp db.LoanWithProgress) LoanResponse {
+func loanWithProgressToResponse(lwp db.LoanWithProgress, currency string) LoanResponse {
 	return LoanResponse{
 		ID:                 lwp.ID,
 		GroupID:            lwp.GroupID,
 		UserID:             lwp.UserID,
-		Principal:          lwp.Principal,
+		Principal:          models.NewMoney(currency, lwp.Principal),
 		Installments:       lwp.Installments,
-		EMIAmount:          lwp.EMIAmount,
+		EMIAmount:          models.NewMoney(currency, lwp.EMIAmount),
 		StartPeriod:        lwp.StartPeriod,
 		Status:             lwp.Status,
 		Note:               lwp.Note,
@@ -67,18 +67,18 @@ func loanWithProgressToResponse(lwp db.LoanWithProgress) LoanResponse {
 		DecidedBy:          lwp.DecidedBy,
 		DecidedAt:          lwp.DecidedAt,
 		InstallmentsPosted: lwp.InstallmentsPosted,
-		Outstanding:        lwp.Outstanding,
+		Outstanding:        models.NewMoney(currency, lwp.Outstanding),
 	}
 }
 
-func loanToResponse(loan *models.Loan, installmentsPosted int, outstanding int64) LoanResponse {
+func loanToResponse(loan *models.Loan, installmentsPosted int, outstanding int64, currency string) LoanResponse {
 	return LoanResponse{
 		ID:                 loan.ID,
 		GroupID:            loan.GroupID,
 		UserID:             loan.UserID,
-		Principal:          loan.Principal,
+		Principal:          models.NewMoney(currency, loan.Principal),
 		Installments:       loan.Installments,
-		EMIAmount:          loan.EMIAmount,
+		EMIAmount:          models.NewMoney(currency, loan.EMIAmount),
 		StartPeriod:        loan.StartPeriod,
 		Status:             loan.Status,
 		Note:               loan.Note,
@@ -86,22 +86,22 @@ func loanToResponse(loan *models.Loan, installmentsPosted int, outstanding int64
 		DecidedBy:          loan.DecidedBy,
 		DecidedAt:          loan.DecidedAt,
 		InstallmentsPosted: installmentsPosted,
-		Outstanding:        outstanding,
+		Outstanding:        models.NewMoney(currency, outstanding),
 	}
 }
 
 // CreateLoanRequest is the body for POST /groups/:id/loans.
 type CreateLoanRequest struct {
-	UserID       *uuid.UUID `json:"user_id"`
-	Principal    int64      `json:"principal"`
-	Installments int        `json:"installments"`
-	Note         *string    `json:"note"`
+	UserID       *uuid.UUID   `json:"user_id"`
+	Principal    models.Money `json:"principal"` // value >= 1; currency must match group
+	Installments int          `json:"installments"`
+	Note         *string      `json:"note"`
 }
 
 // ApproveLoanRequest is the body for POST /loans/:id/approve.
 type ApproveLoanRequest struct {
-	Principal    *int64 `json:"principal"`
-	Installments *int   `json:"installments"`
+	Principal    *models.Money `json:"principal"` // value >= 1 when present; currency must match group
+	Installments *int          `json:"installments"`
 }
 
 // loanCeilDiv returns ceil(a / b) for positive a, b.
@@ -173,6 +173,12 @@ func (h *LoanHandler) ListLoans(c *gin.Context) {
 		filterStatus = &s
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	loans, err := h.loanRepo.ListForGroup(c.Request.Context(), groupID, filterUserID, filterStatus)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list loans"})
@@ -181,7 +187,7 @@ func (h *LoanHandler) ListLoans(c *gin.Context) {
 
 	resp := make([]LoanResponse, 0, len(loans))
 	for _, lwp := range loans {
-		resp = append(resp, loanWithProgressToResponse(lwp))
+		resp = append(resp, loanWithProgressToResponse(lwp, currency))
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -215,13 +221,22 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var req CreateLoanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if req.Principal <= 0 {
+	if !checkMoneyCurrency(c, req.Principal, currency) {
+		return
+	}
+	if req.Principal.Value <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "principal must be > 0"})
 		return
 	}
@@ -230,7 +245,8 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 		return
 	}
 
-	emiAmount := loanCeilDiv(req.Principal, req.Installments)
+	principal := req.Principal.Value
+	emiAmount := loanCeilDiv(principal, req.Installments)
 	now := time.Now()
 
 	var loan *models.Loan
@@ -259,7 +275,7 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 		decidedAt := now
 		loan, err = h.loanRepo.Create(c.Request.Context(),
 			groupID, *req.UserID,
-			req.Principal, req.Installments, emiAmount,
+			principal, req.Installments, emiAmount,
 			models.LoanStatusActive, &start, req.Note,
 			&callerID, &decidedAt)
 		if err != nil {
@@ -275,7 +291,7 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 
 		loan, err = h.loanRepo.Create(c.Request.Context(),
 			groupID, callerID,
-			req.Principal, req.Installments, emiAmount,
+			principal, req.Installments, emiAmount,
 			models.LoanStatusRequested, nil, req.Note,
 			nil, nil)
 		if err != nil {
@@ -284,7 +300,7 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusCreated, loanToResponse(loan, 0, loan.Principal))
+	c.JSON(http.StatusCreated, loanToResponse(loan, 0, loan.Principal, currency))
 }
 
 // ApproveLoan handles POST /api/v1/loans/:id/approve
@@ -330,6 +346,12 @@ func (h *LoanHandler) ApproveLoan(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), loan.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	var req ApproveLoanRequest
 	// Body is optional — both override fields are optional, so an empty body
 	// (io.EOF) is a valid "approve with no overrides" request, not a 400.
@@ -343,11 +365,14 @@ func (h *LoanHandler) ApproveLoan(c *gin.Context) {
 	effectiveInstallments := loan.Installments
 
 	if req.Principal != nil {
-		if *req.Principal <= 0 {
+		if !checkMoneyCurrency(c, *req.Principal, currency) {
+			return
+		}
+		if req.Principal.Value <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "principal must be > 0"})
 			return
 		}
-		effectivePrincipal = *req.Principal
+		effectivePrincipal = req.Principal.Value
 	}
 	if req.Installments != nil {
 		if *req.Installments <= 0 {
@@ -385,7 +410,7 @@ func (h *LoanHandler) ApproveLoan(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, loanToResponse(updated, 0, updated.Principal))
+	c.JSON(http.StatusOK, loanToResponse(updated, 0, updated.Principal, currency))
 }
 
 // RejectLoan handles POST /api/v1/loans/:id/reject
@@ -431,6 +456,12 @@ func (h *LoanHandler) RejectLoan(c *gin.Context) {
 		return
 	}
 
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), loan.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
+		return
+	}
+
 	tx, err := h.pool.Begin(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to begin transaction"})
@@ -453,7 +484,7 @@ func (h *LoanHandler) RejectLoan(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, loanToResponse(updated, 0, updated.Principal))
+	c.JSON(http.StatusOK, loanToResponse(updated, 0, updated.Principal, currency))
 }
 
 // CloseLoan handles POST /api/v1/loans/:id/close (early payoff, head only).
@@ -496,6 +527,12 @@ func (h *LoanHandler) CloseLoan(c *gin.Context) {
 	}
 	if caller.Role != models.RoleHead {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only group head can close loans"})
+		return
+	}
+
+	currency, err := h.groupRepo.GetCurrency(c.Request.Context(), loan.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group currency"})
 		return
 	}
 
@@ -569,5 +606,5 @@ func (h *LoanHandler) CloseLoan(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, loanToResponse(updated, finalPostedCount, 0))
+	c.JSON(http.StatusOK, loanToResponse(updated, finalPostedCount, 0, currency))
 }

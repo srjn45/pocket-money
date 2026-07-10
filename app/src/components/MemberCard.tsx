@@ -26,11 +26,12 @@ export function MemberCard({ balance, member, pendingCount, onPress }: MemberCar
         </View>
         <View style={styles.amountCol}>
           <AmountText
-            minorUnits={balance.balance}
-            variant={balance.balance < 0 ? 'debit' : 'credit'}
+            minorUnits={balance.balance.value}
+            currency={balance.balance.currency}
+            variant={balance.balance.value < 0 ? 'debit' : 'credit'}
           />
           <Text style={styles.hint}>
-            {balance.balance < 0 ? 'owes you' : 'owed'}
+            {balance.balance.value < 0 ? 'owes you' : 'owed'}
           </Text>
         </View>
       </View>

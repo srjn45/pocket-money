@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { groupsApi, GroupSummary } from '../api';
+import { groupsApi, GroupSummary, CurrencyCode } from '../api';
 import { qk } from '../query-keys';
 
 export function useGroups() {
@@ -12,7 +12,7 @@ export function useGroups() {
 export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string }) => groupsApi.create(data),
+    mutationFn: (data: { name: string; currency: CurrencyCode }) => groupsApi.create(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.groups() }),
   });
 }

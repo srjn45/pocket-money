@@ -1,4 +1,4 @@
-import { parseMoneyToMinorUnits, formatMinorUnits } from './money';
+import { parseMoneyToMinorUnits, formatMoney, formatMinorGrouped } from './money';
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -28,11 +28,19 @@ assert(eq(parseMoneyToMinorUnits('12.999'), null), '12.999 -> null (>2 decimals)
 assert(eq(parseMoneyToMinorUnits('-5'), null), '-5 -> null (negative)');
 assert(eq(parseMoneyToMinorUnits('12.3.4'), null), '12.3.4 -> null');
 
-// formatMinorUnits
-assert(eq(formatMinorUnits(1250), '₹12.50'), '1250 -> ₹12.50');
-assert(eq(formatMinorUnits(100), '₹1.00'), '100 -> ₹1.00');
-assert(eq(formatMinorUnits(5), '₹0.05'), '5 -> ₹0.05');
-assert(eq(formatMinorUnits(-500), '-₹5.00'), '-500 -> -₹5.00');
-assert(eq(formatMinorUnits(0), '₹0.00'), '0 -> ₹0.00');
+// formatMinorGrouped — en grouping, deterministic across locales
+assert(eq(formatMinorGrouped(152000), '1,520.00'), '152000 -> 1,520.00');
+assert(eq(formatMinorGrouped(1250), '12.50'), '1250 -> 12.50');
+assert(eq(formatMinorGrouped(5), '0.05'), '5 -> 0.05');
+assert(eq(formatMinorGrouped(100000000), '1,000,000.00'), '100000000 -> 1,000,000.00');
+assert(eq(formatMinorGrouped(0), '0.00'), '0 -> 0.00');
 
-console.log('All parseMoneyToMinorUnits tests passed.');
+// formatMoney — symbol by currency, signed by numeric sign
+assert(eq(formatMoney(152000, 'INR'), '₹1,520.00'), '152000 INR -> ₹1,520.00');
+assert(eq(formatMoney(152000, 'EUR'), '€1,520.00'), '152000 EUR -> €1,520.00');
+assert(eq(formatMoney(152000, 'USD'), '$1,520.00'), '152000 USD -> $1,520.00');
+assert(eq(formatMoney(1250, 'INR'), '₹12.50'), '1250 INR -> ₹12.50');
+assert(eq(formatMoney(-500, 'USD'), '-$5.00'), '-500 USD -> -$5.00');
+assert(eq(formatMoney(0, 'INR'), '₹0.00'), '0 INR -> ₹0.00');
+
+console.log('All money tests passed.');

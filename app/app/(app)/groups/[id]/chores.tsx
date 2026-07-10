@@ -17,7 +17,7 @@ import {
   LoadingSpinner,
   useToast,
 } from '../../../../src/components';
-import { parseMoneyToMinorUnits } from '../../../../src/money';
+import { parseMoneyToMinorUnits, formatMinor, currencySymbol } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { theme } from '../../../../src/theme';
 
@@ -39,6 +39,7 @@ export default function ChoresScreen() {
 
   const chores = choresQuery.data ?? [];
   const isHead = groupQuery.data?.members.find(m => m.user_id === user?.id)?.role === 'head';
+  const currency = groupQuery.data?.currency ?? 'INR';
 
   const isLoading = choresQuery.isLoading || groupQuery.isLoading;
   const isRefetching = choresQuery.isRefetching || groupQuery.isRefetching;
@@ -59,7 +60,7 @@ export default function ChoresScreen() {
       setEditingChore(chore);
       setChoreName(chore.name);
       setChoreDescription(chore.description || '');
-      setChoreAmount((chore.amount / 100).toFixed(2));
+      setChoreAmount(formatMinor(chore.amount.value));
     } else {
       setEditingChore(null);
       setChoreName('');
@@ -102,13 +103,13 @@ export default function ChoresScreen() {
           id: editingChore.id,
           name: trimmedName,
           description: choreDescription.trim() || undefined,
-          amount: parsedAmount,
+          amount: { currency, value: parsedAmount },
         });
       } else {
         await createChoreMutation.mutateAsync({
           name: trimmedName,
           description: choreDescription.trim() || undefined,
-          amount: parsedAmount,
+          amount: { currency, value: parsedAmount },
         });
       }
       closeModal();
@@ -145,7 +146,7 @@ export default function ChoresScreen() {
       ? <Text style={styles.variableText}>Variable</Text>
       : (
         <View style={styles.rightSlot}>
-          <AmountText minorUnits={item.amount} variant="neutral" />
+          <AmountText minorUnits={item.amount.value} currency={item.amount.currency} variant="neutral" />
           {canEdit && (
             <Button
               variant="ghost"
@@ -260,7 +261,7 @@ export default function ChoresScreen() {
           onChangeText={setChoreDescription}
         />
         <TextField
-          label="Amount (₹)"
+          label={`Amount (${currencySymbol(currency)})`}
           placeholder="e.g. 25"
           value={choreAmount}
           onChangeText={(v) => { setChoreAmount(v); setAmountError(''); }}

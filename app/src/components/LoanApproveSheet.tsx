@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { Loan } from '../api';
-import { formatMinor, parseMoneyToMinorUnits } from '../money';
+import type { Loan, CurrencyCode } from '../api';
+import { formatMinor, parseMoneyToMinorUnits, formatMoney, currencySymbol } from '../money';
 import { useApproveLoan } from '../hooks/useLoans';
 import { theme } from '../theme';
 import { Sheet } from './Sheet';
@@ -13,15 +13,17 @@ interface LoanApproveSheetProps {
   visible: boolean;
   onClose: () => void;
   groupId: string;
+  /** Group currency — stamped onto the outgoing principal. */
+  currency: CurrencyCode;
   loan: Loan | null;
 }
 
-export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApproveSheetProps) {
+export function LoanApproveSheet({ visible, onClose, groupId, currency, loan }: LoanApproveSheetProps) {
   const { show: showToast } = useToast();
   const approveLoan = useApproveLoan(groupId);
 
   const initialPrincipal = useCallback(
-    () => (loan ? formatMinor(loan.principal) : ''),
+    () => (loan ? formatMinor(loan.principal.value) : ''),
     [loan],
   );
   const initialInstallments = useCallback(
@@ -65,8 +67,8 @@ export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApprov
     setPrincipalError('');
     setInstallmentsError('');
 
-    const principal = parseMoneyToMinorUnits(principalStr);
-    if (principal === null) {
+    const principalValue = parseMoneyToMinorUnits(principalStr);
+    if (principalValue === null) {
       setPrincipalError('Enter a valid amount (e.g. 5000).');
       return;
     }
@@ -78,7 +80,7 @@ export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApprov
 
     if (!loan) return;
     try {
-      await approveLoan.mutateAsync({ loanId: loan.id, principal, installments });
+      await approveLoan.mutateAsync({ loanId: loan.id, principal: { currency, value: principalValue }, installments });
       showToast({ tone: 'success', message: 'Loan approved' });
       handleClose();
     } catch (e) {
@@ -109,7 +111,7 @@ export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApprov
       }
     >
       <TextField
-        label="Principal (₹)"
+        label={`Principal (${currencySymbol(currency)})`}
         keyboardType="decimal-pad"
         value={principalStr}
         onChangeText={(v) => { setPrincipalStr(v); setPrincipalError(''); }}
@@ -126,7 +128,7 @@ export function LoanApproveSheet({ visible, onClose, groupId, loan }: LoanApprov
       />
       {estimateEmi !== null && (
         <Text style={styles.emiHint}>
-          ≈ ₹{formatMinor(estimateEmi)} / month
+          ≈ {formatMoney(estimateEmi, currency)} / month
         </Text>
       )}
       {loan?.note ? (
