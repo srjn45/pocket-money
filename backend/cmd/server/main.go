@@ -99,6 +99,7 @@ func main() {
 			protected.POST("/ledger/:id/approve", ledgerHandler.ApproveLedger)
 			protected.POST("/ledger/:id/reject", ledgerHandler.RejectLedger)
 			protected.GET("/groups/:id/balance", ledgerHandler.GetBalance)
+			protected.GET("/groups/:id/statement", ledgerHandler.GetStatement)
 
 			// Allowance routes
 			protected.GET("/groups/:id/allowances", allowanceHandler.ListAllowances)

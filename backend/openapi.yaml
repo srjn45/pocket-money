@@ -1138,6 +1138,79 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/groups/{id}/statement:
+    get:
+      tags:
+        - Ledger
+      summary: Monthly statement for a group
+      description: >-
+        Derived monthly statement (§3.9). Triggers due allowance/EMI posting,
+        then returns per-member figures for the requested month: opening, base,
+        chores, adjustments, emi, total_due, cleared (payments), closing — every
+        amount in the group's currency (D7). Admin sees one row per non-admin
+        member plus a group total; a member sees only their own row and no group
+        total (D6). Members whose join month is after the requested month are
+        omitted. Invariant: a month's closing_balance equals the next month's
+        opening_balance.
+      operationId: getStatement
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          required: false
+          description: Month (YYYY-MM). Defaults to the current server-local month.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+        - name: user_id
+          in: query
+          required: false
+          description: >-
+            Admin only — narrow to one member (group_total then omitted). A member
+            may pass only their own id; any other id is 403 (D6).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The monthly statement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementResponse'
+        '400':
+          description: Invalid group ID / period / user_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not a member, or member requesting another member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/groups/{id}/allowances:
     get:
       tags:
@@ -2144,6 +2217,149 @@ components:
         - user_id
         - name
         - balance
+
+    StatementTotals:
+      type: object
+      description: >-
+        Element-wise sum of the eight statement figures over the returned members
+        (the pocket-money recipients). Present only on the unfiltered admin view.
+      properties:
+        opening_balance:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. Carried-forward balance at the start of the month (Σ signed over prior months).
+        base:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of allowance credits in the month.
+        chores:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of chore credits in the month.
+        adjustments:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. Sum of signed adjustment entries in the month (may be negative).
+        emi:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of EMI debit magnitudes in the month.
+        total_due:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. opening_balance + base + chores + adjustments − emi.
+        cleared:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of settlement (payment) debit magnitudes in the month.
+        closing_balance:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. total_due − cleared. Equals next month's opening_balance.
+      required:
+        - opening_balance
+        - base
+        - chores
+        - adjustments
+        - emi
+        - total_due
+        - cleared
+        - closing_balance
+
+    MemberStatementResponse:
+      type: object
+      description: One member's derived figures for the requested month, plus that month's passbook.
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: Member's user ID.
+        name:
+          type: string
+          description: Member's full name.
+        opening_balance:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. Carried-forward balance at the start of the month (Σ signed over prior months). Positive = owed to the member.
+        base:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of allowance credits in the month.
+        chores:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of chore credits in the month.
+        adjustments:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. Sum of signed adjustment entries in the month (may be negative).
+        emi:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of EMI debit magnitudes in the month.
+        total_due:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. opening_balance + base + chores + adjustments − emi.
+        cleared:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Non-negative. Sum of settlement (payment) debit magnitudes in the month.
+        closing_balance:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: Signed. total_due − cleared. Equals next month's opening_balance (the core invariant).
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerResponse'
+          description: The member's approved ledger rows for this month (effMonth == period), ordered created_at ASC.
+      required:
+        - user_id
+        - name
+        - opening_balance
+        - base
+        - chores
+        - adjustments
+        - emi
+        - total_due
+        - cleared
+        - closing_balance
+
+    StatementResponse:
+      type: object
+      description: >-
+        Monthly statement for a group (§3.9). Admin callers see one row per
+        non-admin member plus group_total; member callers see only their own row
+        and no group_total (D6).
+      properties:
+        group_id:
+          type: string
+          format: uuid
+          description: Group ID.
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          description: The month (YYYY-MM) this statement covers.
+        currency:
+          type: string
+          enum: [EUR, USD, INR]
+          description: The group's currency (D7); stamped on every Money in this response.
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberStatementResponse'
+          description: One row per included member. Empty when the caller's join month is after the period.
+        group_total:
+          allOf:
+            - $ref: '#/components/schemas/StatementTotals'
+          nullable: true
+          description: Element-wise sum over members. Present only on the unfiltered admin view; omitted/null for member callers and narrowed admin views.
+      required:
+        - group_id
+        - period
+        - currency
+        - members
 
     SetAllowanceRequest:
       type: object

@@ -89,7 +89,9 @@ func entryToResponse(e *models.LedgerEntry, currency string) LedgerResponse {
 	}
 }
 
-// isValidPeriod returns true if s matches YYYY-MM format.
+// isValidPeriod returns true if s matches YYYY-MM format with a real month
+// (01–12). The month-range check rejects values like "2026-13" that are
+// digit-shaped but not a calendar month (V3-3.1 §3.2 statement acceptance).
 func isValidPeriod(s string) bool {
 	if len(s) != 7 || s[4] != '-' {
 		return false
@@ -102,7 +104,8 @@ func isValidPeriod(s string) bool {
 			return false
 		}
 	}
-	return true
+	month := (int(s[5]-'0') * 10) + int(s[6]-'0')
+	return month >= 1 && month <= 12
 }
 
 // ListLedger returns ledger entries for a group

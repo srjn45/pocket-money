@@ -364,6 +364,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/groups/{id}/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Monthly statement for a group
+         * @description Derived monthly statement (§3.9). Triggers due allowance/EMI posting, then returns per-member figures for the requested month: opening, base, chores, adjustments, emi, total_due, cleared (payments), closing — every amount in the group's currency (D7). Admin sees one row per non-admin member plus a group total; a member sees only their own row and no group total (D6). Members whose join month is after the requested month are omitted. Invariant: a month's closing_balance equals the next month's opening_balance.
+         */
+        get: operations["getStatement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/groups/{id}/allowances": {
         parameters: {
             query?: never;
@@ -878,6 +898,72 @@ export interface components {
             name: string;
             /** @description Sum of approved credits minus approved debits, in the group's currency. */
             balance: components["schemas"]["Money"];
+        };
+        /** @description Element-wise sum of the eight statement figures over the returned members (the pocket-money recipients). Present only on the unfiltered admin view. */
+        StatementTotals: {
+            /** @description Signed. Carried-forward balance at the start of the month (Σ signed over prior months). */
+            opening_balance: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of allowance credits in the month. */
+            base: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of chore credits in the month. */
+            chores: components["schemas"]["Money"];
+            /** @description Signed. Sum of signed adjustment entries in the month (may be negative). */
+            adjustments: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of EMI debit magnitudes in the month. */
+            emi: components["schemas"]["Money"];
+            /** @description Signed. opening_balance + base + chores + adjustments − emi. */
+            total_due: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of settlement (payment) debit magnitudes in the month. */
+            cleared: components["schemas"]["Money"];
+            /** @description Signed. total_due − cleared. Equals next month's opening_balance. */
+            closing_balance: components["schemas"]["Money"];
+        };
+        /** @description One member's derived figures for the requested month, plus that month's passbook. */
+        MemberStatementResponse: {
+            /**
+             * Format: uuid
+             * @description Member's user ID.
+             */
+            user_id: string;
+            /** @description Member's full name. */
+            name: string;
+            /** @description Signed. Carried-forward balance at the start of the month (Σ signed over prior months). Positive = owed to the member. */
+            opening_balance: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of allowance credits in the month. */
+            base: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of chore credits in the month. */
+            chores: components["schemas"]["Money"];
+            /** @description Signed. Sum of signed adjustment entries in the month (may be negative). */
+            adjustments: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of EMI debit magnitudes in the month. */
+            emi: components["schemas"]["Money"];
+            /** @description Signed. opening_balance + base + chores + adjustments − emi. */
+            total_due: components["schemas"]["Money"];
+            /** @description Non-negative. Sum of settlement (payment) debit magnitudes in the month. */
+            cleared: components["schemas"]["Money"];
+            /** @description Signed. total_due − cleared. Equals next month's opening_balance (the core invariant). */
+            closing_balance: components["schemas"]["Money"];
+            /** @description The member's approved ledger rows for this month (effMonth == period), ordered created_at ASC. */
+            entries?: components["schemas"]["LedgerResponse"][];
+        };
+        /** @description Monthly statement for a group (§3.9). Admin callers see one row per non-admin member plus group_total; member callers see only their own row and no group_total (D6). */
+        StatementResponse: {
+            /**
+             * Format: uuid
+             * @description Group ID.
+             */
+            group_id: string;
+            /** @description The month (YYYY-MM) this statement covers. */
+            period: string;
+            /**
+             * @description The group's currency (D7); stamped on every Money in this response.
+             * @enum {string}
+             */
+            currency: "EUR" | "USD" | "INR";
+            /** @description One row per included member. Empty when the caller's join month is after the period. */
+            members: components["schemas"]["MemberStatementResponse"][];
+            /** @description Element-wise sum over members. Present only on the unfiltered admin view; omitted/null for member callers and narrowed admin views. */
+            group_total?: components["schemas"]["StatementTotals"] | null;
         };
         SetAllowanceRequest: {
             /** @description Monthly pocket money in the group's currency. value >= 0 (0 pauses the allowance); currency must equal the group's. */
@@ -2232,6 +2318,70 @@ export interface operations {
                 };
             };
             /** @description Not a member of this group */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getStatement: {
+        parameters: {
+            query?: {
+                /** @description Month (YYYY-MM). Defaults to the current server-local month. */
+                period?: string;
+                /** @description Admin only — narrow to one member (group_total then omitted). A member may pass only their own id; any other id is 403 (D6). */
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Group ID (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The monthly statement. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementResponse"];
+                };
+            };
+            /** @description Invalid group ID / period / user_id */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not a member, or member requesting another member */
             403: {
                 headers: {
                     [name: string]: unknown;
