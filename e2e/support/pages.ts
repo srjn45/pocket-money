@@ -1,6 +1,6 @@
 // Page-object helpers keyed on testIDs (§4.2).
 // All selectors use data-testid (from RN testID prop). No CSS/nth/XPath.
-import { type Page, type BrowserContext, expect } from '@playwright/test';
+import { type Page, type Browser, type BrowserContext, expect } from '@playwright/test';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -93,19 +93,40 @@ export async function createGroup(
   await expect(page.getByTestId('group-overview-root')).toBeVisible({ timeout: 15_000 });
 }
 
-/** Tap Invite, capture the token from the POST /groups/:id/invite response. */
-export async function inviteAndCaptureToken(page: Page): Promise<string> {
-  const respPromise = page.waitForResponse(
-    (r) =>
-      r.url().includes('/groups/') &&
-      r.url().endsWith('/invite') &&
-      r.request().method() === 'POST',
-    { timeout: 15_000 },
-  );
-  await page.getByTestId('group-invite-button').click();
-  const resp = await respPromise;
-  const body = await resp.json();
-  return body.token as string;
+/** Admin (on the group overview) adds a member by email via the add-member sheet.
+ *  Asserts the state change: sheet closes AND the member row appears (§9.12). */
+export async function addMemberByEmail(adminPage: Page, email: string, name: string): Promise<void> {
+  await adminPage.getByTestId('group-add-member-button').click();
+  await expect(adminPage.getByTestId('add-member-email')).toBeVisible({ timeout: 10_000 });
+  await adminPage.getByTestId('add-member-email').fill(email);
+  await adminPage.getByTestId('add-member-name').fill(name);
+  await adminPage.getByTestId('add-member-submit').click();
+  await expect(adminPage.getByTestId('add-member-email')).toHaveCount(0, { timeout: 10_000 }); // sheet closed
+  await expect(adminPage.getByText(name).first()).toBeVisible({ timeout: 10_000 });            // row appeared
+}
+
+/** Full add-by-email → claim onboarding (replaces invite-link joinGroupAsMember).
+ *  Admin (adminPage, already inside the group) adds `name`'s email → a fresh
+ *  context registers with that email (claims the shadow) → opens the group. */
+export async function addMemberAndClaim(
+  adminPage: Page,
+  browser: Browser,
+  groupId: string,
+  name: string,
+  password = 'member123!',
+): Promise<{ ctx: BrowserContext; page: Page; email: string }> {
+  const email = uniqueEmail();
+  await addMemberByEmail(adminPage, email, name);
+
+  const ctx = await browser.newContext();
+  const pg = await ctx.newPage();
+  await goToRegister(pg);                              // existing helper
+  await fillRegisterForm(pg, name, email, password);   // existing helper
+  await submitRegister(pg);                            // existing helper
+  await expect(pg.getByTestId('dashboard-root')).toBeVisible({ timeout: 20_000 }); // claim → auto-login → dashboard
+  await pg.goto(`/groups/${groupId}`);                 // full-URL nav (§9.12); baseURL from config
+  await expect(pg.getByTestId('group-overview-root')).toBeVisible({ timeout: 20_000 });
+  return { ctx, page: pg, email };
 }
 
 // ─── Toast helper ────────────────────────────────────────────────────────────

@@ -217,7 +217,7 @@ export function AddEntrySheet({
             </View>
           )}
           {mode === 'member' && (
-            <Text style={styles.hint}>This will be sent to the head for approval.</Text>
+            <Text style={styles.hint}>This will be sent to the admin for approval.</Text>
           )}
         </>
       )}

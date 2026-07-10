@@ -14,6 +14,7 @@ import type { Balance } from '../../../../src/api';
 import { currencySymbol } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { useLeaveGroup } from '../../../../src/hooks/useHygiene';
+import { INVITES_ENABLED } from '../../../../src/flags';
 import { theme } from '../../../../src/theme';
 import {
   Button,
@@ -23,6 +24,7 @@ import {
   MemberCard,
   LedgerList,
   AddEntrySheet,
+  AddMemberSheet,
   AllowanceSummary,
   EmptyState,
   ErrorMessage,
@@ -37,6 +39,7 @@ export default function GroupOverviewScreen() {
   const { show: showToast } = useToast();
 
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [addMemberVisible, setAddMemberVisible] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
 
@@ -72,7 +75,7 @@ export default function GroupOverviewScreen() {
   async function handleLeaveGroup() {
     const confirmed = await confirmAsync({
       title: 'Leave group',
-      message: `Leave ${group?.name ?? 'this group'}? You can rejoin with a new invite. This only works if your balance is ${currencySymbol(group?.currency ?? 'INR')}0 and you have no active or pending loans.`,
+      message: `Leave ${group?.name ?? 'this group'}? You can be re-added by the group admin. This only works if your balance is ${currencySymbol(group?.currency ?? 'INR')}0 and you have no active or pending loans.`,
       confirmLabel: 'Leave',
       destructive: true,
     });
@@ -147,15 +150,27 @@ export default function GroupOverviewScreen() {
           <Text style={styles.memberCount}>
             {nonHeadMembers.length} {nonHeadMembers.length === 1 ? 'member' : 'members'}
           </Text>
-          <Button
-            title="Invite"
-            variant="ghost"
-            icon="person-add"
-            loading={inviteLoading}
-            onPress={handleInvite}
-            size="sm"
-            testID="group-invite-button"
-          />
+          <View style={styles.headerActions}>
+            <Button
+              title="Add member"
+              variant="ghost"
+              icon="person-add"
+              onPress={() => setAddMemberVisible(true)}
+              size="sm"
+              testID="group-add-member-button"
+            />
+            {INVITES_ENABLED && (
+              <Button
+                title="Invite"
+                variant="ghost"
+                icon="person-add"
+                loading={inviteLoading}
+                onPress={handleInvite}
+                size="sm"
+                testID="group-invite-button"
+              />
+            )}
+          </View>
         </View>
 
         <View style={styles.addButtonRow}>
@@ -200,7 +215,7 @@ export default function GroupOverviewScreen() {
               <EmptyState
                 icon="people-outline"
                 title="No members yet"
-                subtitle="Tap Invite to add your family"
+                subtitle="Tap Add member to add your family"
               />
             </View>
           }
@@ -223,17 +238,25 @@ export default function GroupOverviewScreen() {
           members={nonHeadMembers}
         />
 
-        <Sheet
-          visible={!!fallbackUrl}
-          onClose={() => setFallbackUrl(null)}
-          title="Invite link"
-        >
-          <TextField
-            value={fallbackUrl ?? ''}
-            editable={false}
-            selectTextOnFocus
-          />
-        </Sheet>
+        <AddMemberSheet
+          visible={addMemberVisible}
+          onClose={() => setAddMemberVisible(false)}
+          groupId={id ?? ''}
+        />
+
+        {INVITES_ENABLED && (
+          <Sheet
+            visible={!!fallbackUrl}
+            onClose={() => setFallbackUrl(null)}
+            title="Invite link"
+          >
+            <TextField
+              value={fallbackUrl ?? ''}
+              editable={false}
+              selectTextOnFocus
+            />
+          </Sheet>
+        )}
       </View>
     );
   }
@@ -339,6 +362,11 @@ const styles = StyleSheet.create({
   memberCount: {
     fontSize: 15,
     color: theme.color.textSecondary,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   addButtonRow: {
     padding: 16,

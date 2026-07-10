@@ -17,4 +17,5 @@ export { AddEntrySheet } from './AddEntrySheet';
 export { MemberCard } from './MemberCard';
 export { AllowanceSummary } from './AllowanceSummary';
 export { AllowanceSheet } from './AllowanceSheet';
+export { AddMemberSheet } from './AddMemberSheet';
 export { LoanApproveSheet } from './LoanApproveSheet';

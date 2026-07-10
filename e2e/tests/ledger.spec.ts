@@ -1,9 +1,9 @@
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
   uniqueEmail,
   registerUser,
   createGroup,
-  inviteAndCaptureToken,
+  addMemberAndClaim,
   groupIdFromUrl,
   reloadInto,
   autoAcceptDialogs,
@@ -12,30 +12,6 @@ import {
   rejectFirstPending,
 } from '../support/pages';
 import { apiLogin, apiCreateChore } from '../support/api';
-
-const WEB_BASE = process.env.E2E_WEB_BASE ?? 'http://localhost:8081';
-
-async function joinGroupAsMember(
-  browser: Browser,
-  token: string,
-  name: string,
-  password = 'member123!',
-): Promise<{ ctx: BrowserContext; page: Page; email: string }> {
-  const ctx = await browser.newContext();
-  const pg = await ctx.newPage();
-  await pg.goto(`${WEB_BASE}/invite?token=${token}`);
-  await expect(pg.getByTestId('login-submit')).toBeVisible({ timeout: 15_000 });
-  await pg.getByTestId('login-link-register').click();
-  await expect(pg.getByTestId('register-submit')).toBeVisible({ timeout: 10_000 });
-  const email = uniqueEmail();
-  await pg.getByTestId('register-name').fill(name);
-  await pg.getByTestId('register-email').fill(email);
-  await pg.getByTestId('register-password').fill(password);
-  await pg.getByTestId('register-confirm').fill(password);
-  await pg.getByTestId('register-submit').click();
-  await expect(pg.getByTestId('group-overview-root')).toBeVisible({ timeout: 20_000 });
-  return { ctx, page: pg, email };
-}
 
 // T4: member logs chores (pending) → head approves one and rejects the other.
 // Head-created entries auto-approve, so a *pending* entry (with approve/reject
@@ -51,8 +27,7 @@ test('T4: member logs chores; head approves one and rejects another', async ({ p
   const { token: headToken } = await apiLogin(headEmail, headPass);
   await apiCreateChore(headToken, groupId, 'Wash dishes', 2000);
 
-  const inviteToken = await inviteAndCaptureToken(page);
-  const { ctx: memberCtx, page: memberPage } = await joinGroupAsMember(browser, inviteToken, 'Member T4');
+  const { ctx: memberCtx, page: memberPage } = await addMemberAndClaim(page, browser, groupId, 'Member T4');
   autoAcceptDialogs(page); // reject shows a window.confirm() on web
 
   try {
@@ -83,8 +58,7 @@ test('T5: head sets member allowance and it renders on the summary', async ({ pa
   await registerUser(page, 'Head T5', headEmail);
   await createGroup(page, `AllowanceFam-${Date.now()}`);
 
-  const inviteToken = await inviteAndCaptureToken(page);
-  const { ctx: memberCtx } = await joinGroupAsMember(browser, inviteToken, 'Member T5');
+  const { ctx: memberCtx } = await addMemberAndClaim(page, browser, groupIdFromUrl(page), 'Member T5');
 
   try {
     await reloadInto(page, 'group-overview-root');

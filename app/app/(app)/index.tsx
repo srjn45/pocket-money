@@ -19,6 +19,7 @@ import {
   useToast,
 } from '../../src/components';
 import { theme } from '../../src/theme';
+import { INVITES_ENABLED } from '../../src/flags';
 import type { GroupSummary } from '../../src/api';
 
 export default function DashboardScreen() {
@@ -138,14 +139,16 @@ export default function DashboardScreen() {
           style={{ flex: 1 }}
           testID="dashboard-create-group"
         />
-        <Button
-          variant="secondary"
-          icon="enter"
-          title="Join Group"
-          onPress={() => setJoinVisible(true)}
-          style={{ flex: 1 }}
-          testID="dashboard-join-group"
-        />
+        {INVITES_ENABLED && (
+          <Button
+            variant="secondary"
+            icon="enter"
+            title="Join Group"
+            onPress={() => setJoinVisible(true)}
+            style={{ flex: 1 }}
+            testID="dashboard-join-group"
+          />
+        )}
       </View>
 
       {groups.length === 0 ? (
@@ -153,7 +156,7 @@ export default function DashboardScreen() {
           <EmptyState
             icon="people-outline"
             title="No groups yet"
-            subtitle="Create a group or join one with an invite link"
+            subtitle="Create a group, or ask a group admin to add you by email."
           />
         </View>
       ) : (
@@ -174,36 +177,38 @@ export default function DashboardScreen() {
         />
       )}
 
-      <Sheet
-        visible={joinVisible}
-        onClose={closeJoin}
-        title="Join Group"
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              title="Cancel"
-              onPress={closeJoin}
-              style={{ flex: 1 }}
-            />
-            <Button
-              title="Join"
-              onPress={handleJoin}
-              loading={joinMutation.isPending}
-              style={{ flex: 1 }}
-            />
-          </>
-        }
-      >
-        <Text style={styles.sheetSubtitle}>Paste the invite link or token</Text>
-        <TextField
-          placeholder="Invite link or token"
-          value={inviteToken}
-          onChangeText={setInviteToken}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </Sheet>
+      {INVITES_ENABLED && (
+        <Sheet
+          visible={joinVisible}
+          onClose={closeJoin}
+          title="Join Group"
+          footer={
+            <>
+              <Button
+                variant="ghost"
+                title="Cancel"
+                onPress={closeJoin}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Join"
+                onPress={handleJoin}
+                loading={joinMutation.isPending}
+                style={{ flex: 1 }}
+              />
+            </>
+          }
+        >
+          <Text style={styles.sheetSubtitle}>Paste the invite link or token</Text>
+          <TextField
+            placeholder="Invite link or token"
+            value={inviteToken}
+            onChangeText={setInviteToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </Sheet>
+      )}
     </View>
   );
 }

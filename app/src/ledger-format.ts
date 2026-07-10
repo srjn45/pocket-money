@@ -91,7 +91,7 @@ function shortDate(iso: string): string {
 /** Returns the decided-by caption string (or null if the entry has no decided_by). */
 export function decidedByCaption(entry: LedgerEntry, members: Member[]): string | null {
   if (!entry.decided_by) return null;
-  const name = members.find(m => m.user_id === entry.decided_by)?.name ?? 'head';
+  const name = members.find(m => m.user_id === entry.decided_by)?.name ?? 'admin';
   const action = entry.status === 'rejected' ? 'rejected' : 'approved';
   const datePart = entry.decided_at ? `, ${shortDate(entry.decided_at)}` : '';
   return `${action} by ${name}${datePart}`;
