@@ -59,7 +59,7 @@ func setupStatementTestEnv(t *testing.T) *statementTestEnv {
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, db.NewAuditRepo(pool))
 
 	router := gin.New()
 	router.Use(auth.AuthMiddleware(testJWTSecret))

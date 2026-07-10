@@ -41,6 +41,7 @@ func main() {
 	allowanceRepo := db.NewAllowanceRepo(pool)
 	loanRepo := db.NewLoanRepo(pool)
 	notificationRepo := db.NewNotificationRepo(pool)
+	auditRepo := db.NewAuditRepo(pool)
 
 	// Build posting service (lazy allowance + EMI posting engine)
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
@@ -49,7 +50,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(userRepo, groupRepo, notificationRepo, pool, cfg.JWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, cfg.AppBaseURL)
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
-	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
+	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, auditRepo)
 	allowanceHandler := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
 	loanHandler := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 
@@ -81,6 +82,7 @@ func main() {
 			protected.POST("/groups", groupHandler.CreateGroup)
 			protected.GET("/groups", groupHandler.ListGroups)
 			protected.GET("/groups/:id", groupHandler.GetGroup)
+			protected.PATCH("/groups/:id", groupHandler.UpdateGroup)
 			protected.GET("/groups/:id/members", groupHandler.ListMembers)
 			protected.POST("/groups/:id/members", groupHandler.AddMemberByEmail)
 			protected.DELETE("/groups/:id/members/:userId", groupHandler.RemoveMember)
@@ -98,6 +100,8 @@ func main() {
 			protected.POST("/groups/:id/ledger", ledgerHandler.CreateLedger)
 			protected.POST("/ledger/:id/approve", ledgerHandler.ApproveLedger)
 			protected.POST("/ledger/:id/reject", ledgerHandler.RejectLedger)
+			protected.PUT("/ledger/:id", ledgerHandler.EditLedger)
+			protected.DELETE("/ledger/:id", ledgerHandler.DeleteLedger)
 			protected.GET("/groups/:id/balance", ledgerHandler.GetBalance)
 			protected.GET("/groups/:id/statement", ledgerHandler.GetStatement)
 

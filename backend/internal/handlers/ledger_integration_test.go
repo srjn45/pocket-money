@@ -58,7 +58,7 @@ func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc)
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, db.NewAuditRepo(pool))
 
 	router := gin.New()
 	authMw := auth.AuthMiddleware(testJWTSecret)
@@ -67,6 +67,8 @@ func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
 	router.POST("/groups/:id/ledger", lh.CreateLedger)
 	router.POST("/ledger/:id/approve", lh.ApproveLedger)
 	router.POST("/ledger/:id/reject", lh.RejectLedger)
+	router.PUT("/ledger/:id", lh.EditLedger)
+	router.DELETE("/ledger/:id", lh.DeleteLedger)
 	router.GET("/groups/:id/balance", lh.GetBalance)
 
 	return &ledgerTestEnv{
@@ -246,6 +248,9 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	defer env.cleanup()
 
 	head, member, group, chore := env.seedGroupWithMembers(t, "authz")
+	// D2 (V3-3.2): member chore submission defaults OFF; enable it so the member
+	// self-submit branch below is functional (behavior change, not a regression).
+	require.NoError(t, env.groupRepo.SetChoreSubmissionEnabled(t.Context(), group.ID, true))
 	path := fmt.Sprintf("/groups/%s/ledger", group.ID)
 
 	// Member tries settlement → 403
@@ -325,6 +330,9 @@ func TestLedger_DecidedByOnApproveReject(t *testing.T) {
 
 	ctx := t.Context()
 	head, member, group, chore := env.seedGroupWithMembers(t, "dec")
+	// D2 (V3-3.2): enable member chore submission (default OFF) so the member can
+	// submit a pending chore for the admin to approve/reject below.
+	require.NoError(t, env.groupRepo.SetChoreSubmissionEnabled(ctx, group.ID, true))
 
 	path := fmt.Sprintf("/groups/%s/ledger", group.ID)
 

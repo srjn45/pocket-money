@@ -145,7 +145,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update group config
+         * @description Updates the member_chore_submission_enabled flag (D2). Admin only.
+         */
+        patch: operations["updateGroup"];
         trace?: never;
     };
     "/api/v1/groups/{id}/members": {
@@ -295,10 +299,34 @@ export interface paths {
         put?: never;
         /**
          * Create ledger entry
-         * @description Creates a new ledger entry. Members create pending entries for themselves, admin can create approved entries for any member.
+         * @description Creates a new ledger entry. Members create pending entries for themselves, admin can create approved entries for any member. The member self-submit branch (non-admin, entry_type=chore) requires the group's member_chore_submission_enabled flag (D2) to be ON; it returns 403 when the flag is OFF.
          */
         post: operations["createLedger"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ledger/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a manual ledger entry
+         * @description Edits a manual entry (chore, adjustment, settlement). Admin only (D6). System entries (allowance, emi) are rejected with 403. Writes an entry_audit row capturing prior values.
+         */
+        put: operations["editLedger"];
+        post?: never;
+        /**
+         * Delete a manual ledger entry
+         * @description Hard-deletes a manual entry (chore, adjustment, settlement). Admin only (D6). System entries (allowance, emi) are rejected with 403. Writes an entry_audit row.
+         */
+        delete: operations["deleteLedger"];
         options?: never;
         head?: never;
         patch?: never;
@@ -315,7 +343,7 @@ export interface paths {
         put?: never;
         /**
          * Approve ledger entry
-         * @description Approves a pending ledger entry (admin only)
+         * @description Approves a pending ledger entry (admin only). Requires the group's member_chore_submission_enabled flag (D2) to be ON; returns 403 when the flag is OFF.
          */
         post: operations["approveLedger"];
         delete?: never;
@@ -335,7 +363,7 @@ export interface paths {
         put?: never;
         /**
          * Reject ledger entry
-         * @description Rejects a pending ledger entry (admin only)
+         * @description Rejects a pending ledger entry (admin only). Requires the group's member_chore_submission_enabled flag (D2) to be ON; returns 403 when the flag is OFF.
          */
         post: operations["rejectLedger"];
         delete?: never;
@@ -625,6 +653,8 @@ export interface components {
              * @enum {string}
              */
             currency: "EUR" | "USD" | "INR";
+            /** @description D2 flag; when true members may submit chore entries. Default false. */
+            member_chore_submission_enabled: boolean;
             /**
              * Format: date-time
              * @description Group creation timestamp
@@ -683,6 +713,8 @@ export interface components {
              * @enum {string}
              */
             currency: "EUR" | "USD" | "INR";
+            /** @description D2 flag; when true members may submit chore entries. Default false. */
+            member_chore_submission_enabled: boolean;
             /**
              * Format: date-time
              * @description Group creation timestamp
@@ -819,6 +851,21 @@ export interface components {
             direction?: "credit" | "debit" | null;
             /** @description Optional note (recommended for adjustment to explain the reason) */
             note?: string | null;
+        };
+        EditLedgerRequest: {
+            /** @description New amount in the group's currency (value >= 1). Currency must equal the group's. */
+            amount: components["schemas"]["Money"];
+            /**
+             * @description Required for adjustment entries; must be omitted for chore/settlement (server keeps their fixed direction).
+             * @enum {string|null}
+             */
+            direction?: "credit" | "debit" | null;
+            /** @description Replaces the entry note; null or omitted clears it. */
+            note?: string | null;
+        };
+        UpdateGroupRequest: {
+            /** @description D2 flag — when true, members may submit chore entries for admin approval. */
+            member_chore_submission_enabled: boolean;
         };
         LedgerResponse: {
             /**
@@ -1392,6 +1439,78 @@ export interface operations {
                 };
             };
             /** @description Not a member of this group */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Group not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Group ID (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated group */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupResponse"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Only group admin can update the group */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2124,6 +2243,135 @@ export interface operations {
             };
             /** @description Permission denied (e.g., only admin can create settlement entries) */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    editLedger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ledger entry ID (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditLedgerRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated entry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerResponse"];
+                };
+            };
+            /** @description Validation error (bad amount/currency/direction) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not admin, or entry is system-generated (not editable) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Entry not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteLedger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ledger entry ID (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not admin, or entry is system-generated */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Entry not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
