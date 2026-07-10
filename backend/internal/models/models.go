@@ -73,12 +73,27 @@ const (
 	DirectionDebit  LedgerDirection = "debit"
 )
 
+// User account status (§3.1). Shadow users have a NULL password and cannot log in.
+const (
+	UserStatusShadow     = "shadow"
+	UserStatusRegistered = "registered"
+)
+
+// Notification types (§3.7). Only N-1 and N-2 are in scope for V3-2.1;
+// N-3 (payment_recorded) is Phase 5.
+const (
+	NotificationAddedToGroup  = "added_to_group" // N-1
+	NotificationShadowClaimed = "shadow_claimed" // N-2
+)
+
 // User represents a user in the system
 type User struct {
 	ID           uuid.UUID  `json:"id"`
 	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"` // Never expose password hash
+	PasswordHash *string    `json:"-"` // was string; NULL ⇔ shadow (cannot authenticate)
 	Name         string     `json:"name"`
+	Status       string     `json:"status"` // 'shadow' | 'registered'
+	ClaimedAt    *time.Time `json:"claimed_at,omitempty"`
 	DOB          *time.Time `json:"dob,omitempty"`
 	Sex          *string    `json:"sex,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -201,8 +216,9 @@ type InviteToken struct {
 // MemberWithUser combines member info with user details
 type MemberWithUser struct {
 	GroupMember
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Status string `json:"status"` // users.status: 'shadow' | 'registered'
 }
 
 // Balance represents a user's balance in a group

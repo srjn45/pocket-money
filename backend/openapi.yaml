@@ -381,6 +381,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Groups
+      summary: Add a member by email (add-by-email lifecycle)
+      description: >
+        Head-only. Resolves the email to a user and attaches them to the group as
+        a `member`: an unknown email creates a new SHADOW user (no password, cannot
+        log in) with the given name; an existing registered user is attached and
+        notified (N-1 `added_to_group`); an existing shadow is attached with no
+        notification. Adding the same email to the same group again is a `409`
+        (exactly one membership, at most one N-1 from the first successful add).
+      operationId: addMemberByEmail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '201':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+        '400':
+          description: Invalid group ID or malformed body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Caller is not the group head
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The target email is already a member of this group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/groups/{id}/members/{userId}:
     delete:
@@ -1591,6 +1662,12 @@ components:
         name:
           type: string
           description: User's full name
+        status:
+          type: string
+          enum: [shadow, registered]
+          description: >
+            Account status. A logged-in user is always `registered` (shadow users
+            cannot authenticate); exposed for completeness/consistency.
         dob:
           type: string
           format: date-time
@@ -1608,6 +1685,7 @@ components:
         - id
         - email
         - name
+        - status
         - created_at
 
     Money:
@@ -1782,6 +1860,12 @@ components:
           type: string
           enum: [head, member]
           description: User's role in the group
+        status:
+          type: string
+          enum: [shadow, registered]
+          description: >
+            Whether this member has registered (can log in) or is a shadow the
+            admin bookkeeps against.
         joined_at:
           type: string
           format: date-time
@@ -1791,7 +1875,26 @@ components:
         - name
         - email
         - role
+        - status
         - joined_at
+
+    AddMemberRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: >
+            Email of the person to add. Case-insensitive matching is NOT required
+            for this WP (the email column is plain TEXT UNIQUE); match is exact.
+        name:
+          type: string
+          description: >
+            Display name. Used only when creating a new shadow user; ignored when
+            the email already resolves to a user.
+      required:
+        - email
+        - name
 
     InviteRequest:
       type: object

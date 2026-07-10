@@ -57,12 +57,13 @@ func setupHygieneTestEnv(t *testing.T) *hygieneTestEnv {
 	allowanceRepo := db.NewAllowanceRepo(pool)
 	loanRepo := db.NewLoanRepo(pool)
 	inviteRepo := db.NewInviteRepo(pool)
+	notificationRepo := db.NewNotificationRepo(pool)
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	authH := handlers.NewAuthHandler(userRepo, testJWTSecret)
+	authH := handlers.NewAuthHandler(userRepo, groupRepo, notificationRepo, pool, testJWTSecret)
 	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc)
-	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, postingSvc, pool, "")
+	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, "")
 	loansH := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 
 	router := gin.New()
@@ -144,7 +145,7 @@ func TestChangePassword_WrongCurrentPassword(t *testing.T) {
 	// Stored hash is unchanged — old password still works for auth.
 	updated, err := env.userRepo.GetByID(t.Context(), head.ID)
 	require.NoError(t, err)
-	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("correctpass")))
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(*updated.PasswordHash), []byte("correctpass")))
 }
 
 // TestChangePassword_Success asserts 204, then new password works and old does not.
@@ -163,8 +164,8 @@ func TestChangePassword_Success(t *testing.T) {
 	// New password verifiable in DB.
 	updated, err := env.userRepo.GetByID(t.Context(), head.ID)
 	require.NoError(t, err)
-	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("newpassword")))
-	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("oldpassword")))
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(*updated.PasswordHash), []byte("newpassword")))
+	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(*updated.PasswordHash), []byte("oldpassword")))
 }
 
 // TestChangePassword_TooShort asserts 400 when new_password < 6 chars.
@@ -183,7 +184,7 @@ func TestChangePassword_TooShort(t *testing.T) {
 	// Hash must be unchanged.
 	updated, err := env.userRepo.GetByID(t.Context(), head.ID)
 	require.NoError(t, err)
-	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(updated.PasswordHash), []byte("correctpass")))
+	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(*updated.PasswordHash), []byte("correctpass")))
 }
 
 // TestChangePassword_Unauthenticated asserts 401 for missing token.

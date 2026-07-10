@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -21,15 +22,17 @@ import (
 
 // GroupHandler handles group-related requests
 type GroupHandler struct {
-	groupRepo     *db.GroupRepo
-	inviteRepo    *db.InviteRepo
-	choreRepo     *db.ChoreRepo
-	ledgerRepo    *db.LedgerRepo
-	loanRepo      *db.LoanRepo
-	allowanceRepo *db.AllowanceRepo
-	postingSvc    *posting.Service
-	pool          *pgxpool.Pool
-	appBaseURL    string
+	groupRepo        *db.GroupRepo
+	inviteRepo       *db.InviteRepo
+	choreRepo        *db.ChoreRepo
+	ledgerRepo       *db.LedgerRepo
+	loanRepo         *db.LoanRepo
+	allowanceRepo    *db.AllowanceRepo
+	userRepo         *db.UserRepo
+	notificationRepo *db.NotificationRepo
+	postingSvc       *posting.Service
+	pool             *pgxpool.Pool
+	appBaseURL       string
 }
 
 // NewGroupHandler creates a new GroupHandler
@@ -40,20 +43,24 @@ func NewGroupHandler(
 	ledgerRepo *db.LedgerRepo,
 	loanRepo *db.LoanRepo,
 	allowanceRepo *db.AllowanceRepo,
+	userRepo *db.UserRepo,
+	notificationRepo *db.NotificationRepo,
 	postingSvc *posting.Service,
 	pool *pgxpool.Pool,
 	appBaseURL string,
 ) *GroupHandler {
 	return &GroupHandler{
-		groupRepo:     groupRepo,
-		inviteRepo:    inviteRepo,
-		choreRepo:     choreRepo,
-		ledgerRepo:    ledgerRepo,
-		loanRepo:      loanRepo,
-		allowanceRepo: allowanceRepo,
-		postingSvc:    postingSvc,
-		pool:          pool,
-		appBaseURL:    appBaseURL,
+		groupRepo:        groupRepo,
+		inviteRepo:       inviteRepo,
+		choreRepo:        choreRepo,
+		ledgerRepo:       ledgerRepo,
+		loanRepo:         loanRepo,
+		allowanceRepo:    allowanceRepo,
+		userRepo:         userRepo,
+		notificationRepo: notificationRepo,
+		postingSvc:       postingSvc,
+		pool:             pool,
+		appBaseURL:       appBaseURL,
 	}
 }
 
@@ -90,7 +97,14 @@ type MemberResponse struct {
 	Name     string            `json:"name"`
 	Email    string            `json:"email"`
 	Role     models.MemberRole `json:"role"`
+	Status   string            `json:"status"` // 'shadow' | 'registered' (§2.3)
 	JoinedAt time.Time         `json:"joined_at"`
+}
+
+// AddMemberRequest is the body for POST /groups/:id/members (add by email, §4).
+type AddMemberRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Name  string `json:"name"  binding:"required"`
 }
 
 // GroupDetailResponse represents detailed group information
@@ -270,6 +284,7 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 			Name:     m.Name,
 			Email:    m.Email,
 			Role:     m.Role,
+			Status:   m.Status,
 			JoinedAt: m.JoinedAt,
 		})
 	}
@@ -332,11 +347,138 @@ func (h *GroupHandler) ListMembers(c *gin.Context) {
 			Name:     m.Name,
 			Email:    m.Email,
 			Role:     m.Role,
+			Status:   m.Status,
 			JoinedAt: m.JoinedAt,
 		})
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// AddMemberByEmail adds a member to a group by email (add-by-email lifecycle, §4).
+// Head-only. Resolves the email to a user: unknown → create a shadow (no
+// notification); existing registered → attach + N-1; existing shadow → attach
+// (no notification). A duplicate membership returns 409 (§4.4).
+// POST /api/v1/groups/:id/members
+func (h *GroupHandler) AddMemberByEmail(c *gin.Context) {
+	callerIDStr, exists := auth.GetUserID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	callerID, err := uuid.Parse(callerIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID"})
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group ID"})
+		return
+	}
+
+	var req AddMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Authorization: the caller must be the group head (matches CreateInvite).
+	caller, err := h.groupRepo.GetMember(ctx, groupID, callerID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+	if caller.Role != models.RoleHead {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only the group head can add members"})
+		return
+	}
+
+	// Group name for the N-1 payload (group is not deletable in this codebase).
+	group, err := h.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group"})
+		return
+	}
+
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to begin transaction"})
+		return
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Resolve the target user by email, locking any existing row so a concurrent
+	// register-claim cannot race the add.
+	notify := false
+	user, err := h.userRepo.GetByEmailForUpdate(ctx, tx, req.Email)
+	switch {
+	case errors.Is(err, db.ErrNotFound):
+		// No user → create a shadow (no notification; a shadow can't read one).
+		user, err = h.userRepo.CreateShadow(ctx, tx, req.Email, req.Name)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+			return
+		}
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve user"})
+		return
+	default:
+		// Existing user: notify only a registered one (N-1); shadows can't read.
+		notify = user.Status == models.UserStatusRegistered
+	}
+
+	// Attach as a member. A duplicate membership is a 409 (idempotency, §4.4).
+	member, err := h.groupRepo.AddMemberTx(ctx, tx, groupID, user.ID, models.RoleMember)
+	if err != nil {
+		if errors.Is(err, db.ErrDuplicateMember) {
+			c.JSON(http.StatusConflict, gin.H{"error": "user is already a member of this group"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member"})
+		return
+	}
+
+	// N-1: tell a registered user they were added to the group.
+	if notify {
+		payload, err := json.Marshal(map[string]string{
+			"group_id":         groupID.String(),
+			"group_name":       group.Name,
+			"added_by_user_id": callerID.String(),
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build notification"})
+			return
+		}
+		if err := h.notificationRepo.Insert(ctx, tx, user.ID, models.NotificationAddedToGroup, payload); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create notification"})
+			return
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, MemberResponse{
+		UserID:   user.ID,
+		Name:     user.Name,
+		Email:    user.Email,
+		Role:     models.RoleMember,
+		Status:   user.Status,
+		JoinedAt: member.JoinedAt,
+	})
 }
 
 // InviteRequest represents the request body for creating an invite

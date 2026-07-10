@@ -13,6 +13,10 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/models"
 )
 
+// ErrDuplicateMember is returned by AddMemberTx when the (group_id, user_id) PK
+// already exists — the add-by-email flow maps it to 409 (§4.4).
+var ErrDuplicateMember = errors.New("already a member")
+
 // GroupSummary is a dashboard-listing row: a group plus the caller's role, member count,
 // and a role-dependent summary balance (minor units). See GET /groups.
 type GroupSummary struct {
@@ -190,6 +194,77 @@ func (r *GroupRepo) AddMember(ctx context.Context, groupID, userID uuid.UUID, ro
 	return member, nil
 }
 
+// AddMemberTx is AddMember on a Querier so the add-by-email flow is
+// transactional. On the (group_id, user_id) PK duplicate it returns
+// ErrDuplicateMember (mapped to 409 by the handler, §4.4).
+func (r *GroupRepo) AddMemberTx(ctx context.Context, q Querier, groupID, userID uuid.UUID, role models.MemberRole) (*models.GroupMember, error) {
+	member := &models.GroupMember{
+		GroupID: groupID,
+		UserID:  userID,
+		Role:    role,
+	}
+
+	query := `
+		INSERT INTO group_members (group_id, user_id, role)
+		VALUES ($1, $2, $3)
+		RETURNING joined_at
+	`
+
+	err := q.QueryRow(ctx, query, groupID, userID, role).Scan(&member.JoinedAt)
+	if err != nil {
+		if isDuplicateKeyError(err) {
+			return nil, ErrDuplicateMember
+		}
+		return nil, fmt.Errorf("failed to add member: %w", err)
+	}
+
+	return member, nil
+}
+
+// ListHeadUserIDs returns the user ids of every head-role member of a group.
+// Used by the claim flow to notify admins (N-2). Runs on the caller's Querier.
+func (r *GroupRepo) ListHeadUserIDs(ctx context.Context, q Querier, groupID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx,
+		`SELECT user_id FROM group_members WHERE group_id = $1 AND role = 'head'`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list head user ids: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan head user id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ListGroupIDsForUser returns the ids of every group the user is a member of.
+// Used by the claim fan-out (N-2) to find the claimant's groups. Runs on the
+// caller's Querier.
+func (r *GroupRepo) ListGroupIDsForUser(ctx context.Context, q Querier, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx,
+		`SELECT group_id FROM group_members WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list group ids for user: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan group id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // GetMember retrieves a member from a group
 func (r *GroupRepo) GetMember(ctx context.Context, groupID, userID uuid.UUID) (*models.GroupMember, error) {
 	member := &models.GroupMember{}
@@ -219,7 +294,7 @@ func (r *GroupRepo) GetMember(ctx context.Context, groupID, userID uuid.UUID) (*
 // ListMembers retrieves all members of a group with user details
 func (r *GroupRepo) ListMembers(ctx context.Context, groupID uuid.UUID) ([]*models.MemberWithUser, error) {
 	query := `
-		SELECT gm.group_id, gm.user_id, gm.role, gm.joined_at, u.name, u.email
+		SELECT gm.group_id, gm.user_id, gm.role, gm.joined_at, u.name, u.email, u.status
 		FROM group_members gm
 		INNER JOIN users u ON gm.user_id = u.id
 		WHERE gm.group_id = $1
@@ -242,6 +317,7 @@ func (r *GroupRepo) ListMembers(ctx context.Context, groupID uuid.UUID) ([]*mode
 			&member.JoinedAt,
 			&member.Name,
 			&member.Email,
+			&member.Status,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan member: %w", err)
 		}
