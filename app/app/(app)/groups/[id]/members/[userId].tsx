@@ -1,23 +1,30 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Redirect, Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import type { Loan } from '../../../../../src/api';
+import type { LedgerEntry } from '../../../../../src/api';
 import { useAuth } from '../../../../../src/auth-context';
 import { useGroup } from '../../../../../src/hooks/useGroup';
 import { useChores } from '../../../../../src/hooks/useChores';
-import { useLedger, useBalance, useApproveLedger, useRejectLedger } from '../../../../../src/hooks/useLedger';
+import {
+  useLedger,
+  useBalance,
+  useApproveLedger,
+  useRejectLedger,
+  useDeleteLedgerEntry,
+} from '../../../../../src/hooks/useLedger';
 import { useAllowances } from '../../../../../src/hooks/useAllowances';
 import { useLoans } from '../../../../../src/hooks/useLoans';
 import { confirmAsync } from '../../../../../src/confirm';
 import { currentPeriod, currentAllowanceFor, upcomingAllowanceFor } from '../../../../../src/allowance-format';
-import { formatMoney, currencySymbol } from '../../../../../src/money';
+import { currencySymbol } from '../../../../../src/money';
 import { useRemoveMember } from '../../../../../src/hooks/useHygiene';
 import { theme } from '../../../../../src/theme';
 import {
   AmountText,
   Button,
-  Card,
   LedgerList,
+  LoanCard,
+  PassbookBaseHistory,
   AddEntrySheet,
   AllowanceSummary,
   AllowanceSheet,
@@ -27,15 +34,6 @@ import {
   ScreenContainer,
   useToast,
 } from '../../../../../src/components';
-
-function loanStatusTone(status: Loan['status']): 'neutral' | 'success' | 'warning' | 'danger' | 'info' {
-  switch (status) {
-    case 'requested': return 'warning';
-    case 'active':    return 'success';
-    case 'rejected':  return 'danger';
-    case 'closed':    return 'neutral';
-  }
-}
 
 export default function MemberDetailScreen() {
   const { id, userId, name } = useLocalSearchParams<{ id: string; userId: string; name?: string }>();
@@ -47,6 +45,9 @@ export default function MemberDetailScreen() {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [allowanceSheetVisible, setAllowanceSheetVisible] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  // Corrections (D3): entry being edited + session-local "Edited" badge set (§4.3).
+  const [editEntry, setEditEntry] = useState<LedgerEntry | null>(null);
+  const [editedIds, setEditedIds] = useState<Set<string>>(() => new Set());
 
   const groupQuery = useGroup(id ?? '');
   const group = groupQuery.data;
@@ -63,6 +64,7 @@ export default function MemberDetailScreen() {
   const approveMutation = useApproveLedger(id ?? '');
   const rejectMutation = useRejectLedger(id ?? '');
   const removeMutation = useRemoveMember(id ?? '');
+  const deleteEntryMutation = useDeleteLedgerEntry(id ?? '');
 
   const period = currentPeriod();
   const memberAllowances = (allowancesQuery.data ?? []).filter(a => a.user_id === userId);
@@ -112,6 +114,30 @@ export default function MemberDetailScreen() {
     }
   }
 
+  async function handleDeleteEntry(entry: LedgerEntry) {
+    const confirmed = await confirmAsync({
+      title: 'Delete entry',
+      message: "This entry will be removed and won't count toward the balance.",
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteEntryMutation.mutateAsync(entry.id);
+      showToast({ message: 'Entry deleted', tone: 'success' });
+    } catch (e) {
+      showToast({ message: e instanceof Error ? e.message : 'Failed to delete', tone: 'danger' });
+    }
+  }
+
+  function handleEdited(entryId: string) {
+    setEditedIds(prev => {
+      const next = new Set(prev);
+      next.add(entryId);
+      return next;
+    });
+  }
+
   async function handleRemoveMember() {
     const memberName = name || 'this member';
     const confirmed = await confirmAsync({
@@ -145,52 +171,6 @@ export default function MemberDetailScreen() {
 
   const balValue = memberBalance?.balance.value ?? 0;
   const balCurrency = memberBalance?.balance.currency ?? currency;
-
-  function renderLoanRow(loan: Loan) {
-    const isActive = loan.status === 'active';
-    return (
-      <Card key={loan.id} style={styles.loanRow}>
-        <View style={styles.loanHeader}>
-          <StatusBadge
-            label={isActive ? 'Active' : 'Pending'}
-            tone={loanStatusTone(loan.status)}
-          />
-          <AmountText minorUnits={loan.principal.value} currency={loan.principal.currency} variant="neutral" size="sm" />
-        </View>
-        {loan.note ? <Text style={styles.loanNote}>{loan.note}</Text> : null}
-        <View style={styles.loanDetails}>
-          {isActive && (
-            <>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Outstanding</Text>
-                <AmountText minorUnits={loan.outstanding.value} currency={loan.outstanding.currency} variant="debit" size="sm" />
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>EMI</Text>
-                <Text style={styles.detailValue}>≈ {formatMoney(loan.emi_amount.value, loan.emi_amount.currency)} / month</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Progress</Text>
-                <Text style={styles.detailValue}>{loan.installments_posted}/{loan.installments} paid</Text>
-              </View>
-            </>
-          )}
-          {!isActive && (
-            <>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Amount</Text>
-                <Text style={styles.detailValue}>{formatMoney(loan.principal.value, loan.principal.currency)} over {loan.installments} months</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Est. EMI</Text>
-                <Text style={styles.detailValue}>≈ {formatMoney(loan.emi_amount.value, loan.emi_amount.currency)} / month</Text>
-              </View>
-            </>
-          )}
-        </View>
-      </Card>
-    );
-  }
 
   return (
     <>
@@ -234,6 +214,11 @@ export default function MemberDetailScreen() {
           />
         </View>
 
+        {/* Base-amount (pocket money) history — hidden when none or on error */}
+        {!allowancesQuery.isError && (
+          <PassbookBaseHistory allowances={memberAllowances} currency={currency} />
+        )}
+
         {/* Loans section — read-only, hidden when none or on error */}
         {hasLoans && !loansQuery.isError && (
           <View style={styles.loansSection}>
@@ -246,7 +231,14 @@ export default function MemberDetailScreen() {
                 onPress={() => router.push(`/(app)/groups/${id}/loans` as never)}
               />
             </View>
-            {[...activeLoans, ...requestedLoans].map(renderLoanRow)}
+            {[...activeLoans, ...requestedLoans].map(loan => (
+              <LoanCard
+                key={loan.id}
+                loan={loan}
+                currency={currency}
+                onPress={() => router.push(`/(app)/groups/${id}/loans/${loan.id}` as never)}
+              />
+            ))}
           </View>
         )}
 
@@ -260,6 +252,10 @@ export default function MemberDetailScreen() {
           onApprove={handleApprove}
           onReject={handleReject}
           processingId={processingId}
+          canEdit={isHead}
+          onEditEntry={setEditEntry}
+          onDeleteEntry={handleDeleteEntry}
+          editedIds={editedIds}
           refreshing={ledgerQuery.isFetching}
           onRefresh={() => {
             ledgerQuery.refetch();
@@ -268,7 +264,7 @@ export default function MemberDetailScreen() {
             loansQuery.refetch();
           }}
           emptyTitle="No entries yet"
-          emptySubtitle="Add a chore, settlement, or adjustment"
+          emptySubtitle="Add a chore, payment, or adjustment"
         />
 
         <AddEntrySheet
@@ -279,6 +275,19 @@ export default function MemberDetailScreen() {
           chores={choresQuery.data ?? []}
           mode="head"
           fixedUserId={userId}
+        />
+
+        {/* Corrections edit sheet (D3) — type immutable, PUT /ledger/{id} */}
+        <AddEntrySheet
+          visible={editEntry !== null}
+          onClose={() => setEditEntry(null)}
+          groupId={id ?? ''}
+          currency={currency}
+          chores={choresQuery.data ?? []}
+          mode="head"
+          fixedUserId={userId}
+          editEntry={editEntry ?? undefined}
+          onEdited={handleEdited}
         />
 
         <AllowanceSheet
@@ -355,38 +364,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.semibold,
     color: theme.color.textSecondary,
-  },
-  loanRow: {
-    marginBottom: theme.spacing.sm,
-  },
-  loanHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.xs,
-  },
-  loanNote: {
-    fontSize: theme.fontSize.xs,
-    color: theme.color.textSecondary,
-    fontStyle: 'italic',
-    marginBottom: theme.spacing.xs,
-  },
-  loanDetails: {
-    gap: theme.spacing.xs,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  detailLabel: {
-    fontSize: theme.fontSize.xs,
-    color: theme.color.textSecondary,
-  },
-  detailValue: {
-    fontSize: theme.fontSize.xs,
-    color: theme.color.text,
-    fontWeight: theme.fontWeight.medium,
   },
   removeButtonRow: {
     padding: theme.spacing.lg,

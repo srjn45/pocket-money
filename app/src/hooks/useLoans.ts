@@ -21,6 +21,25 @@ export function useRequestLoan(groupId: string) {
   });
 }
 
+// Create a loan from the add-entry sheet. Admin passes user_id → a pre-approved
+// active loan that may post an immediate/next-period EMI, so it also invalidates
+// ledger/balance/group/statement (not just loans). Member omits user_id (self).
+export function useCreateLoan(groupId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { user_id?: string | null; principal: Money; installments: number; note?: string | null }) =>
+      loansApi.request(groupId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.loans(groupId) });
+      qc.invalidateQueries({ queryKey: qk.ledger(groupId) });
+      qc.invalidateQueries({ queryKey: qk.balance(groupId) });
+      qc.invalidateQueries({ queryKey: qk.group(groupId) });
+      qc.invalidateQueries({ queryKey: qk.statement(groupId) });
+      qc.invalidateQueries({ queryKey: qk.groups() });
+    },
+  });
+}
+
 export function useApproveLoan(groupId: string) {
   const qc = useQueryClient();
   return useMutation({

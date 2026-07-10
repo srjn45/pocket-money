@@ -159,7 +159,9 @@ export const loansApi = {
     return request<Loan[]>(`/groups/${groupId}/loans${qs ? `?${qs}` : ''}`);
   },
 
-  request: (groupId: string, data: { principal: Money; installments: number; note?: string | null }) =>
+  // user_id: admin creates a pre-approved active loan for that member; omit for a
+  // member self-request (openapi CreateLoanRequest already allows user_id).
+  request: (groupId: string, data: { user_id?: string | null; principal: Money; installments: number; note?: string | null }) =>
     request<Loan>(`/groups/${groupId}/loans`, { method: 'POST', body: JSON.stringify(data) }),
 
   approve: (loanId: string, data: { principal?: Money | null; installments?: number | null }) =>
@@ -199,6 +201,15 @@ export const ledgerApi = {
 
   reject: (id: string) =>
     request<LedgerEntry>(`/ledger/${id}/reject`, { method: 'POST' }),
+
+  // Corrections (V3-3.2 endpoints; D3). Manual entries only — the backend returns
+  // 403 for allowance/emi and for non-admins. EditLedgerRequest requires amount
+  // (value >= 1) even for a chore; direction is for adjustment only.
+  edit: (id: string, data: { amount: Money; direction?: 'credit' | 'debit' | null; note?: string | null }) =>
+    request<LedgerEntry>(`/ledger/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  remove: (id: string) =>
+    request<void>(`/ledger/${id}`, { method: 'DELETE' }),
 
   getBalance: (groupId: string) => request<Balance[]>(`/groups/${groupId}/balance`),
 };

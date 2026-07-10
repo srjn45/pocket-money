@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { theme } from '../theme';
-import type { Chore, Member, CurrencyCode } from '../api';
-import { parseMoneyToMinorUnits } from '../money';
-import { useCreateLedgerEntry } from '../hooks/useLedger';
+import type { Chore, Member, CurrencyCode, LedgerEntry } from '../api';
+import { parseMoneyToMinorUnits, formatMinor, formatMoney } from '../money';
+import { useCreateLedgerEntry, useEditLedgerEntry } from '../hooks/useLedger';
+import { useCreateLoan } from '../hooks/useLoans';
 import { Sheet } from './Sheet';
 import { Button } from './Button';
 import { TextField } from './TextField';
@@ -15,16 +16,21 @@ export interface AddEntrySheetProps {
   visible: boolean;
   onClose: () => void;
   groupId: string;
-  /** The group's currency — stamped onto outgoing settlement/adjustment amounts. */
+  /** The group's currency — stamped onto outgoing settlement/adjustment/loan amounts. */
   currency: CurrencyCode;
   chores: Chore[];
   mode: 'head' | 'member';
   members?: Member[];
   fixedUserId?: string;
   selfUserId?: string;
+  /** When set, the sheet is in edit mode (corrections, D3): type immutable, PUT /ledger/{id}. */
+  editEntry?: LedgerEntry;
+  /** Called with the entry id after a successful edit — passbook keeps a session "Edited" set. */
+  onEdited?: (entryId: string) => void;
 }
 
-type EntryKind = 'chore' | 'settlement' | 'adjustment';
+// 'loan' creates the loan ENTITY (POST /groups/{id}/loans), not a ledger row.
+type EntryKind = 'chore' | 'settlement' | 'adjustment' | 'loan';
 type Direction = 'credit' | 'debit';
 
 export function AddEntrySheet({
@@ -37,10 +43,15 @@ export function AddEntrySheet({
   members = [],
   fixedUserId,
   selfUserId,
+  editEntry,
+  onEdited,
 }: AddEntrySheetProps) {
   const { show: showToast } = useToast();
   const createEntry = useCreateLedgerEntry(groupId);
+  const editLedger = useEditLedgerEntry(groupId);
+  const createLoan = useCreateLoan(groupId);
 
+  const isEdit = !!editEntry;
   const nonSystemChores = chores.filter(c => !c.is_system);
 
   const [kind, setKind] = useState<EntryKind>('chore');
@@ -51,8 +62,7 @@ export function AddEntrySheet({
   const [amountStr, setAmountStr] = useState('');
   const [direction, setDirection] = useState<Direction>('credit');
   const [note, setNote] = useState('');
-
-  const selectedChore = nonSystemChores.find(c => c.id === selectedChoreId);
+  const [installmentsStr, setInstallmentsStr] = useState('');
 
   function resetForm() {
     setKind('chore');
@@ -61,23 +71,61 @@ export function AddEntrySheet({
     setAmountStr('');
     setDirection('credit');
     setNote('');
+    setInstallmentsStr('');
   }
+
+  // Prefill on open: edit-mode seeds from editEntry (type immutable); add-mode resets.
+  const prevVisible = useRef(visible);
+  useEffect(() => {
+    if (visible && !prevVisible.current) {
+      if (editEntry) {
+        setKind(editEntry.entry_type as EntryKind);
+        setAmountStr(formatMinor(editEntry.amount.value));
+        setDirection(editEntry.direction);
+        setNote(editEntry.note ?? '');
+      } else {
+        resetForm();
+      }
+    }
+    prevVisible.current = visible;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, editEntry]);
 
   function handleClose() {
     resetForm();
     onClose();
   }
 
+  const selectedChore = nonSystemChores.find(c => c.id === selectedChoreId);
+
+  // Derived EMI estimate for the "New loan" branch.
+  const parsedLoanInstallments = (() => {
+    const n = parseInt(installmentsStr.trim(), 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
+  const parsedLoanPrincipal = parseMoneyToMinorUnits(amountStr);
+  const loanEmiEstimate =
+    kind === 'loan' && parsedLoanPrincipal !== null && parsedLoanInstallments !== null
+      ? Math.ceil(parsedLoanPrincipal / parsedLoanInstallments)
+      : null;
+
   function validate(): string | null {
+    if (isEdit) {
+      // EditLedgerRequest requires amount (value >= 1) even for a chore row.
+      if (parseMoneyToMinorUnits(amountStr) === null) return 'Enter a valid amount (e.g. 12.50).';
+      return null;
+    }
     if (mode === 'head' && !fixedUserId && !selectedMemberId) {
       return 'Please select a member.';
     }
     if (kind === 'chore' && !selectedChoreId) {
       return 'Please select a chore.';
     }
-    if ((kind === 'settlement' || kind === 'adjustment')) {
-      const parsed = parseMoneyToMinorUnits(amountStr);
-      if (parsed === null) return 'Enter a valid amount (e.g. 12.50).';
+    if (kind === 'settlement' || kind === 'adjustment' || kind === 'loan') {
+      if (parseMoneyToMinorUnits(amountStr) === null) return 'Enter a valid amount (e.g. 12.50).';
+    }
+    if (kind === 'loan' && parsedLoanInstallments === null) {
+      return 'Enter a whole number of months (e.g. 6).';
     }
     return null;
   }
@@ -94,12 +142,28 @@ export function AddEntrySheet({
       : selfUserId;
 
     try {
+      if (isEdit) {
+        const value = parseMoneyToMinorUnits(amountStr)!;
+        await editLedger.mutateAsync({
+          id: editEntry!.id,
+          amount: { currency, value },
+          // Direction is editable for adjustment only; server keeps chore/settlement's.
+          direction: editEntry!.entry_type === 'adjustment' ? direction : undefined,
+          note: note.trim() || null,
+        });
+        onEdited?.(editEntry!.id);
+        showToast({ message: 'Entry updated', tone: 'success' });
+        handleClose();
+        return;
+      }
+
       if (kind === 'chore') {
         await createEntry.mutateAsync({
           entry_type: 'chore',
           user_id: mode === 'head' ? userId : undefined,
           chore_id: selectedChoreId,
         });
+        showToast({ message: 'Entry added', tone: 'success' });
       } else if (kind === 'settlement') {
         const value = parseMoneyToMinorUnits(amountStr)!;
         await createEntry.mutateAsync({
@@ -108,7 +172,8 @@ export function AddEntrySheet({
           amount: { currency, value },
           note: note || undefined,
         });
-      } else {
+        showToast({ message: 'Entry added', tone: 'success' });
+      } else if (kind === 'adjustment') {
         const value = parseMoneyToMinorUnits(amountStr)!;
         await createEntry.mutateAsync({
           entry_type: 'adjustment',
@@ -117,8 +182,19 @@ export function AddEntrySheet({
           direction,
           note: note || undefined,
         });
+        showToast({ message: 'Entry added', tone: 'success' });
+      } else {
+        // New loan — the loan entity, not a ledger row. Head with a fixed/selected
+        // user → pre-approved active loan (CreateLoanRequest.user_id).
+        const value = parseMoneyToMinorUnits(amountStr)!;
+        await createLoan.mutateAsync({
+          user_id: userId,
+          principal: { currency, value },
+          installments: parsedLoanInstallments!,
+          note: note.trim() || null,
+        });
+        showToast({ message: 'Loan added', tone: 'success' });
       }
-      showToast({ message: 'Entry added', tone: 'success' });
       handleClose();
     } catch (e) {
       showToast({
@@ -128,13 +204,20 @@ export function AddEntrySheet({
     }
   }
 
-  const isSubmitting = createEntry.isPending;
+  const isSubmitting = createEntry.isPending || editLedger.isPending || createLoan.isPending;
+  // Amount field shows for money kinds, and in edit mode for every manual type
+  // (EditLedgerRequest requires amount even for a chore correction).
+  const showAmount = isEdit || kind === 'settlement' || kind === 'adjustment' || kind === 'loan';
+  // Direction only when adjustment (chore/settlement keep a server-fixed direction).
+  const showDirection = kind === 'adjustment';
+  // Note shows in edit mode (any manual type) and in add mode for non-chore kinds.
+  const showNote = isEdit || kind === 'settlement' || kind === 'adjustment' || kind === 'loan';
 
   return (
     <Sheet
       visible={visible}
       onClose={handleClose}
-      title="Add entry"
+      title={isEdit ? 'Edit entry' : 'Add entry'}
       footer={
         <View style={styles.footerRow}>
           <Button
@@ -155,7 +238,7 @@ export function AddEntrySheet({
         </View>
       }
     >
-      {mode === 'head' && (
+      {mode === 'head' && !isEdit && (
         <>
           <Text style={styles.label}>Entry type</Text>
           <View style={styles.pickerWrap}>
@@ -165,14 +248,15 @@ export function AddEntrySheet({
               testID="entry-type-picker"
             >
               <Picker.Item label="Chore" value="chore" />
-              <Picker.Item label="Settlement" value="settlement" />
+              <Picker.Item label="Payment" value="settlement" />
               <Picker.Item label="Adjustment" value="adjustment" />
+              <Picker.Item label="New loan" value="loan" />
             </Picker>
           </View>
         </>
       )}
 
-      {mode === 'head' && !fixedUserId && (
+      {mode === 'head' && !fixedUserId && !isEdit && (
         <>
           <Text style={styles.label}>Member</Text>
           <View style={styles.pickerWrap}>
@@ -188,7 +272,7 @@ export function AddEntrySheet({
         </>
       )}
 
-      {kind === 'chore' && (
+      {!isEdit && kind === 'chore' && (
         <>
           <Text style={styles.label}>Chore</Text>
           {nonSystemChores.length === 0 ? (
@@ -222,20 +306,36 @@ export function AddEntrySheet({
         </>
       )}
 
-      {(kind === 'settlement' || kind === 'adjustment') && (
+      {showAmount && (
+        <TextField
+          label={kind === 'loan' ? 'Amount (loan)' : 'Amount'}
+          value={amountStr}
+          onChangeText={setAmountStr}
+          keyboardType="decimal-pad"
+          placeholder="e.g. 12.50"
+          testID="entry-amount"
+        />
+      )}
+
+      {!isEdit && kind === 'loan' && (
         <>
           <TextField
-            label="Amount"
-            value={amountStr}
-            onChangeText={setAmountStr}
-            keyboardType="decimal-pad"
-            placeholder="e.g. 12.50"
-            testID="entry-amount"
+            label="Repay over (months)"
+            value={installmentsStr}
+            onChangeText={setInstallmentsStr}
+            keyboardType="number-pad"
+            placeholder="e.g. 6"
+            testID="entry-loan-installments"
           />
+          {loanEmiEstimate !== null && (
+            <Text style={styles.hint}>
+              ≈ {formatMoney(loanEmiEstimate, currency)} / month
+            </Text>
+          )}
         </>
       )}
 
-      {kind === 'adjustment' && (
+      {showDirection && (
         <>
           <Text style={styles.label}>Direction</Text>
           <View style={styles.pickerWrap}>
@@ -251,7 +351,7 @@ export function AddEntrySheet({
         </>
       )}
 
-      {(kind === 'settlement' || kind === 'adjustment') && (
+      {showNote && (
         <TextField
           label={kind === 'adjustment' ? 'Note (why)' : 'Note (optional)'}
           value={note}

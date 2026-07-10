@@ -23,7 +23,8 @@ export default function GroupDetailLayout() {
     <Stack screenOptions={{ headerShown: true }}>
       <Stack.Screen name="index" options={{ title: group.name }} />
       <Stack.Screen name="chores" options={{ title: group.name }} />
-      <Stack.Screen name="loans" options={{ title: group.name }} />
+      <Stack.Screen name="loans/index" options={{ title: group.name }} />
+      <Stack.Screen name="loans/[loanId]" options={{ headerShown: true }} />
       <Stack.Screen name="members/[userId]" options={{ headerShown: true }} />
     </Stack>
   );

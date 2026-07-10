@@ -16,6 +16,9 @@ const TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   adjustment: 'create-outline',
 };
 
+/** Manual entry types (D3) — the only rows an admin may edit/delete. */
+const MANUAL_TYPES = new Set(['chore', 'settlement', 'adjustment']);
+
 export interface LedgerRowProps {
   entry: LedgerEntry;
   chores: Chore[];
@@ -26,6 +29,12 @@ export interface LedgerRowProps {
   processing?: boolean;
   /** Optional loans so EMI rows can render "EMI k/n"; omit for the plain fallback. */
   loans?: Loan[];
+  /** Corrections (D3): admin-only edit/delete on manual rows. */
+  canEdit?: boolean;
+  onEdit?: (entry: LedgerEntry) => void;
+  onDelete?: (entry: LedgerEntry) => void;
+  /** Session-local "Edited" badge (no durable API field — §4.3). */
+  edited?: boolean;
 }
 
 export function LedgerRow({
@@ -37,9 +46,16 @@ export function LedgerRow({
   onReject,
   processing = false,
   loans,
+  canEdit = false,
+  onEdit,
+  onDelete,
+  edited = false,
 }: LedgerRowProps) {
   const isPending = entry.status === 'pending_approval';
   const isRejected = entry.status === 'rejected';
+  // Manual, non-rejected rows are correctable by an admin (backend enforces the
+  // same — PUT/DELETE 403 for allowance/emi and non-admins).
+  const canCorrect = canEdit && isHead && !isRejected && MANUAL_TYPES.has(entry.entry_type);
   const icon = TYPE_ICONS[entry.entry_type] ?? 'ellipse-outline';
   const title = entryTitle(entry, chores, loans);
   const dateStr = new Date(entry.created_at).toLocaleDateString();
@@ -84,6 +100,31 @@ export function LedgerRow({
         </View>
       )}
       {isRejected && <StatusBadge label="Rejected" tone="danger" />}
+      {edited && (
+        <View testID={`ledger-edited-${entry.id}`}>
+          <StatusBadge label="Edited" tone="neutral" />
+        </View>
+      )}
+      {canCorrect && (
+        <View style={styles.actions}>
+          <Button
+            title=""
+            variant="ghost"
+            size="sm"
+            icon="pencil-outline"
+            onPress={() => onEdit?.(entry)}
+            testID={`ledger-edit-${entry.id}`}
+          />
+          <Button
+            title=""
+            variant="ghost"
+            size="sm"
+            icon="trash-outline"
+            onPress={() => onDelete?.(entry)}
+            testID={`ledger-delete-${entry.id}`}
+          />
+        </View>
+      )}
     </View>
   );
 

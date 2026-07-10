@@ -177,6 +177,14 @@ export default function GroupOverviewScreen() {
           </Text>
           <View style={styles.headerActions}>
             <Button
+              title="Chores"
+              variant="ghost"
+              icon="list-outline"
+              onPress={() => router.push(`/(app)/groups/${gid}/chores` as never)}
+              size="sm"
+              testID="overview-chores-link"
+            />
+            <Button
               title="Add member"
               variant="ghost"
               icon="person-add"
