@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -535,10 +534,4 @@ func TestNotif_N3_EURCurrency(t *testing.T) {
 	require.NoError(t, json.Unmarshal(notifs[0].Payload, &payload))
 	assert.Equal(t, models.CurrencyEUR, payload.Amount.Currency)
 	assert.Equal(t, int64(5000), payload.Amount.Value)
-}
-
-// doNotifRequest is a convenience wrapper (uses the shared doRequest from ledger_integration_test.go).
-// Kept as a local alias for test readability.
-func doNotifRequest(env *notifTestEnv, method, path string, token string) *httptest.ResponseRecorder {
-	return doRequest(env.router, method, path, nil, token)
 }
