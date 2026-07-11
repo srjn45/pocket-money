@@ -58,7 +58,7 @@ func setupLedgerTestEnv(t *testing.T) *ledgerTestEnv {
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, db.NewAuditRepo(pool))
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, db.NewAuditRepo(pool), db.NewNotificationRepo(pool))
 
 	router := gin.New()
 	authMw := auth.AuthMiddleware(testJWTSecret)

@@ -56,7 +56,7 @@ func setupAllowanceTestEnv(t *testing.T) *allowanceTestEnv {
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc, pool, db.NewAuditRepo(pool))
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc, pool, db.NewAuditRepo(pool), db.NewNotificationRepo(pool))
 	ah := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
 
 	router := gin.New()

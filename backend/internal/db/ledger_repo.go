@@ -69,10 +69,10 @@ const selectLedgerColumns = `
 	id, group_id, user_id, chore_id, amount, status, entry_type, direction,
 	loan_id, period, note, created_by_user_id, decided_by, decided_at, created_at`
 
-// Create inserts a new ledger entry.
-// period and loan_id are always NULL on the API-create path (set by posting engine in WP-2.1/3.1).
-func (r *LedgerRepo) Create(ctx context.Context, groupID, userID uuid.UUID, choreID *uuid.UUID,
-	createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
+// CreateTx inserts a new ledger entry on the given Querier (pool or tx).
+// period and loan_id are always NULL on the API-create path.
+func (r *LedgerRepo) CreateTx(ctx context.Context, q Querier, groupID, userID uuid.UUID,
+	choreID *uuid.UUID, createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
 	direction models.LedgerDirection, status models.LedgerStatus, note *string,
 	decidedBy *uuid.UUID, decidedAt *time.Time) (*models.LedgerEntry, error) {
 
@@ -83,7 +83,7 @@ func (r *LedgerRepo) Create(ctx context.Context, groupID, userID uuid.UUID, chor
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING ` + selectLedgerColumns
 
-	entry, err := scanEntry(r.pool.QueryRow(ctx, query,
+	entry, err := scanEntry(q.QueryRow(ctx, query,
 		uuid.New(), groupID, userID, choreID, amount, status, entryType, direction, note,
 		createdBy, decidedBy, decidedAt,
 	))
@@ -91,6 +91,16 @@ func (r *LedgerRepo) Create(ctx context.Context, groupID, userID uuid.UUID, chor
 		return nil, fmt.Errorf("failed to create ledger entry: %w", err)
 	}
 	return entry, nil
+}
+
+// Create inserts a new ledger entry on the pool (non-transactional convenience wrapper).
+// period and loan_id are always NULL on the API-create path (set by posting engine in WP-2.1/3.1).
+func (r *LedgerRepo) Create(ctx context.Context, groupID, userID uuid.UUID, choreID *uuid.UUID,
+	createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
+	direction models.LedgerDirection, status models.LedgerStatus, note *string,
+	decidedBy *uuid.UUID, decidedAt *time.Time) (*models.LedgerEntry, error) {
+	return r.CreateTx(ctx, r.pool, groupID, userID, choreID, createdBy, amount, entryType,
+		direction, status, note, decidedBy, decidedAt)
 }
 
 // GetByID retrieves a ledger entry by ID

@@ -1812,6 +1812,160 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List notifications
+      description: Returns the caller's notifications, newest first, keyset-paged on (created_at, id).
+      operationId: listNotifications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Page size (default 20, min 1, max 100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Opaque keyset cursor returned as next_cursor from the previous page; omit for the first page
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '400':
+          description: Bad limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/unread_count:
+    get:
+      tags:
+        - Notifications
+      summary: Get unread notification count
+      description: Returns the count of the caller's unread notifications (read_at IS NULL).
+      operationId: getUnreadCount
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCountResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/{id}/read:
+    post:
+      tags:
+        - Notifications
+      summary: Mark notification read
+      description: Marks a single notification read (idempotent). Returns 404 for foreign or nonexistent ids — both cases are indistinguishable to avoid leaking existence.
+      operationId: markNotificationRead
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Notification ID (UUID)
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Marked read (no content)
+        '400':
+          description: Invalid notification ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Notification not found or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/read_all:
+    post:
+      tags:
+        - Notifications
+      summary: Mark all notifications read
+      description: Marks every unread notification for the caller read. Returns the number of rows updated (0 if all were already read).
+      operationId: markAllNotificationsRead
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Number of notifications marked read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkAllReadResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -2714,3 +2868,77 @@ components:
         - installments_posted
         - outstanding
 
+    Notification:
+      type: object
+      description: |
+        An in-app notification for the authenticated user. `payload` is free-form per `type`:
+        - `added_to_group`: `{ group_id, group_name }`
+        - `shadow_claimed`: `{ group_id, group_name, claimed_user_id, claimed_user_name, claimed_user_email }`
+        - `payment_recorded`: `{ group_id, group_name, amount: Money }` — `amount` uses the `Money` schema (currency + value in minor units).
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Notification ID
+        type:
+          type: string
+          enum:
+            - added_to_group
+            - shadow_claimed
+            - payment_recorded
+          description: Notification type
+        payload:
+          type: object
+          additionalProperties: true
+          description: Free-form payload; shape depends on type (see description above)
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the notification was marked read; null means unread
+        created_at:
+          type: string
+          format: date-time
+          description: When the notification was created
+      required:
+        - id
+        - type
+        - payload
+        - created_at
+
+    NotificationListResponse:
+      type: object
+      description: Paged list of notifications, newest first.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+          description: Notifications for this page
+        next_cursor:
+          type: string
+          nullable: true
+          description: Opaque keyset cursor; pass as `cursor` to get the next page; null on the last page
+      required:
+        - items
+        - next_cursor
+
+    UnreadCountResponse:
+      type: object
+      description: Count of unread (read_at IS NULL) notifications for the caller.
+      properties:
+        count:
+          type: integer
+          description: Number of unread notifications
+      required:
+        - count
+
+    MarkAllReadResponse:
+      type: object
+      description: Result of marking all notifications read.
+      properties:
+        updated:
+          type: integer
+          description: Number of notifications that were marked read (0 if all were already read)
+      required:
+        - updated

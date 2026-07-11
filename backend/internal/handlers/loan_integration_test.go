@@ -57,7 +57,7 @@ func setupLoanTestEnv(t *testing.T) *loanTestEnv {
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc, pool, db.NewAuditRepo(pool))
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc, pool, db.NewAuditRepo(pool), db.NewNotificationRepo(pool))
 	loansH := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 
 	router := gin.New()

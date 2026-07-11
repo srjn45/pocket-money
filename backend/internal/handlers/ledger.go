@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -22,25 +23,28 @@ const errChoreSubmissionDisabled = "member chore submission is disabled for this
 
 // LedgerHandler handles ledger-related requests
 type LedgerHandler struct {
-	ledgerRepo *db.LedgerRepo
-	groupRepo  *db.GroupRepo
-	choreRepo  *db.ChoreRepo
-	postingSvc *posting.Service
-	pool       *pgxpool.Pool // edit/delete correction transaction (V3-3.2 §1.4)
-	auditRepo  *db.AuditRepo // entry_audit writer for corrections (V3-3.2 §2)
+	ledgerRepo       *db.LedgerRepo
+	groupRepo        *db.GroupRepo
+	choreRepo        *db.ChoreRepo
+	postingSvc       *posting.Service
+	pool             *pgxpool.Pool        // correction tx (V3-3.2 §1.4) + settlement tx (V3-5.1 §4.4)
+	auditRepo        *db.AuditRepo        // entry_audit writer for corrections (V3-3.2 §2)
+	notificationRepo *db.NotificationRepo // N-3 payment_recorded (V3-5.1 §4)
 }
 
 // NewLedgerHandler creates a new LedgerHandler. pool + auditRepo back the
 // edit/delete correction transaction (V3-3.2 §1.4/§2); they may be nil in tests
-// that never exercise the correction endpoints.
-func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service, pool *pgxpool.Pool, auditRepo *db.AuditRepo) *LedgerHandler {
+// that never exercise the correction endpoints. notificationRepo backs N-3 on
+// settlement posting; may be nil in tests that never post settlements.
+func NewLedgerHandler(ledgerRepo *db.LedgerRepo, groupRepo *db.GroupRepo, choreRepo *db.ChoreRepo, postingSvc *posting.Service, pool *pgxpool.Pool, auditRepo *db.AuditRepo, notificationRepo *db.NotificationRepo) *LedgerHandler {
 	return &LedgerHandler{
-		ledgerRepo: ledgerRepo,
-		groupRepo:  groupRepo,
-		choreRepo:  choreRepo,
-		postingSvc: postingSvc,
-		pool:       pool,
-		auditRepo:  auditRepo,
+		ledgerRepo:       ledgerRepo,
+		groupRepo:        groupRepo,
+		choreRepo:        choreRepo,
+		postingSvc:       postingSvc,
+		pool:             pool,
+		auditRepo:        auditRepo,
+		notificationRepo: notificationRepo,
 	}
 }
 
@@ -419,14 +423,74 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		return
 	}
 
-	entry, err := h.ledgerRepo.Create(
-		c.Request.Context(), groupID, targetUserID, choreID,
-		userID, amount, req.EntryType, direction, status,
-		req.Note, decidedBy, decidedAt,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ledger entry"})
-		return
+	var entry *models.LedgerEntry
+
+	if req.EntryType == models.EntryTypeSettlement {
+		// Settlement: wrap ledger insert + N-3 notification in a single transaction
+		// so they are atomic — if either fails, both roll back (§4.4).
+		ctx := c.Request.Context()
+
+		// Fetch group name for the N-3 payload before opening the transaction.
+		var groupName string
+		if h.notificationRepo != nil && targetUserID != userID {
+			grp, err := h.groupRepo.GetByID(ctx, groupID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group"})
+				return
+			}
+			groupName = grp.Name
+		}
+
+		tx, err := h.pool.Begin(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to begin transaction"})
+			return
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck
+
+		entry, err = h.ledgerRepo.CreateTx(ctx, tx, groupID, targetUserID, choreID,
+			userID, amount, req.EntryType, direction, status,
+			req.Note, decidedBy, decidedAt,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ledger entry"})
+			return
+		}
+
+		// N-3: notify the payee, but skip when the admin is paying themselves
+		// (mirrors N-2 self-skip at auth.go:212).
+		if targetUserID != userID && h.notificationRepo != nil {
+			notifPayload, err := json.Marshal(map[string]interface{}{
+				"group_id":   groupID.String(),
+				"group_name": groupName,
+				"amount":     models.NewMoney(currency, amount),
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build notification payload"})
+				return
+			}
+			if err := h.notificationRepo.Insert(ctx, tx, targetUserID, models.NotificationPaymentRecorded, notifPayload); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to insert notification"})
+				return
+			}
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit transaction"})
+			return
+		}
+	} else {
+		// Chore / adjustment: non-transactional (no notification for these types).
+		var err error
+		entry, err = h.ledgerRepo.Create(
+			c.Request.Context(), groupID, targetUserID, choreID,
+			userID, amount, req.EntryType, direction, status,
+			req.Note, decidedBy, decidedAt,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ledger entry"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, entryToResponse(entry, currency))
