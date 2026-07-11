@@ -163,6 +163,9 @@ test('golden path (EUR currency): create EUR group → € dashboard balance →
   // 3. Seed a €12.50 chore + add a member by email.
   const { token } = await apiLogin(adminEmail, adminPass);
   await apiCreateChore(token, gid, 'Gelato', 1250, 'EUR');
+  // Navigate back into the group overview (we left it for the dashboard € check).
+  await page.goto(`/groups/${gid}`);
+  await expect(page.getByTestId('group-overview-root')).toBeVisible({ timeout: 15_000 });
   await addMemberByEmail(page, uniqueEmail(), 'Euro Kid');
 
   // 4. Post the chore from the statement → payable renders as € (never ₹).
