@@ -381,7 +381,7 @@ func TestNotif_Pagination(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, wBad.Code)
 
 	// limit=0 → 400.
-	wL0 := doRequest(env.router, http.MethodGet, notifListURL("", 0), nil, tok)
+	wL0 := doRequest(env.router, http.MethodGet, "/notifications?limit=0", nil, tok)
 	assert.Equal(t, http.StatusBadRequest, wL0.Code)
 
 	// limit=101 → 400.
