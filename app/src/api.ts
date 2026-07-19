@@ -28,6 +28,10 @@ export type CurrencyCode         = Money['currency'];
 export type Statement            = Schemas['StatementResponse'];
 export type MemberStatement      = Schemas['MemberStatementResponse'];
 export type StatementTotals      = Schemas['StatementTotals'];
+export type Notification             = Schemas['Notification'];
+export type NotificationListResponse = Schemas['NotificationListResponse'];
+export type UnreadCountResponse      = Schemas['UnreadCountResponse'];
+export type MarkAllReadResponse      = Schemas['MarkAllReadResponse'];
 
 let onUnauthorized: (() => void) | null = null;
 
@@ -220,4 +224,23 @@ export const ledgerApi = {
 export const statementApi = {
   get: (groupId: string, period: string) =>
     request<Statement>(`/groups/${groupId}/statement?period=${period}`),
+};
+
+// Notifications API (V3-5.1 endpoints; consumed by the V3-5.2 bell + list screen).
+// User-scoped server-side (D6): every call returns/mutates only the caller's own
+// notifications. `cursor` is opaque keyset paging (null ⇒ last page).
+export const notificationsApi = {
+  list: (cursor?: string | null) =>
+    request<NotificationListResponse>(
+      `/notifications${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+    ),
+
+  unreadCount: () => request<UnreadCountResponse>('/notifications/unread_count'),
+
+  // 204 No Content; request() already maps 204 → undefined. Idempotent server-side.
+  markRead: (id: string) =>
+    request<void>(`/notifications/${id}/read`, { method: 'POST' }),
+
+  markAllRead: () =>
+    request<MarkAllReadResponse>('/notifications/read_all', { method: 'POST' }),
 };
