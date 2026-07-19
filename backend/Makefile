@@ -21,14 +21,14 @@ help: ## Show this help message
 build: ## Build the server binary
 	go build -o bin/server ./cmd/server
 
-docker-build: ## Build Docker image
-	docker build -t pocket-money-backend:latest .
+docker-build: ## Build the single-image (root Dockerfile: web export + go + alpine)
+	docker build -t pocket-money:latest -f ../Dockerfile ..
 
-docker-run: docker-build ## Build and run Docker image
+docker-run: docker-build ## Build and run the single image
 	docker run -p 8080:8080 \
 		-e DATABASE_URL="postgres://pocket:pocket@host.docker.internal:5432/pocket_money?sslmode=disable" \
 		-e JWT_SECRET="dev-secret" \
-		pocket-money-backend:latest
+		pocket-money:latest
 
 # ============================================================================
 # DEVELOPMENT
