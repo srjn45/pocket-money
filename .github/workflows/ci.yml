@@ -182,6 +182,9 @@ jobs:
       E2E_WEB_BASE: http://localhost:8080
       E2E_API_BASE: http://localhost:8080/api/v1
       E2E_EXTERNAL_SERVER: "1" # single image serves the web; no npx serve
+      # Every `docker compose` call interpolates the app service's JWT_SECRET
+      # guard (incl. logs/down), so set it job-wide.
+      JWT_SECRET: ci-smoke-secret
 
     steps:
       - name: Checkout code
@@ -201,8 +204,6 @@ jobs:
           cache-dependency-path: e2e/package-lock.json
 
       - name: Build + boot single image
-        env:
-          JWT_SECRET: ci-smoke-secret
         run: docker compose up -d --build
 
       - name: Wait for app health
@@ -260,6 +261,11 @@ jobs:
   backup-verify:
     name: Backup Verify
     runs-on: ubuntu-latest
+    # docker compose interpolates ALL services at parse time, so even
+    # `up -d postgres` requires JWT_SECRET (the app service's fail-fast guard).
+    # This job never starts the app; a placeholder satisfies the interpolation.
+    env:
+      JWT_SECRET: backup-verify-unused
 
     steps:
       - name: Checkout code
