@@ -192,6 +192,14 @@ export function autoAcceptDialogs(page: Page): void {
   page.on('dialog', (d) => d.accept().catch(() => {}));
 }
 
+// ─── Notifications helpers (V3-5.2) ────────────────────────────────────────────
+
+/** Open the notifications list from the Dashboard bell. */
+export async function openNotifications(page: Page): Promise<void> {
+  await page.getByTestId('header-bell').click();
+  await expect(page.getByTestId('notifications-root')).toBeVisible({ timeout: 15_000 });
+}
+
 // ─── Ledger helpers ───────────────────────────────────────────────────────────
 
 /**
