@@ -2,25 +2,29 @@ package db
 
 import (
 	"fmt"
-	"path/filepath"
-	"runtime"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
+
+	"github.com/srjn45/pocket-money/backend/migrations"
 )
+
+// newMigrate builds a migrate instance whose source is the embedded migrations
+// FS (iofs), so the runtime binary is self-contained and needs no on-disk
+// migrations/ directory. The postgres DB driver is still selected from the URL
+// scheme via the blank import above.
+func newMigrate(databaseURL string) (*migrate.Migrate, error) {
+	src, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build iofs source: %w", err)
+	}
+	return migrate.NewWithSourceInstance("iofs", src, databaseURL)
+}
 
 // RunMigrations runs all pending migrations
 func RunMigrations(databaseURL string) error {
-	migrationsPath, err := getMigrationsPath()
-	if err != nil {
-		return fmt.Errorf("failed to get migrations path: %w", err)
-	}
-
-	m, err := migrate.New(
-		fmt.Sprintf("file://%s", migrationsPath),
-		databaseURL,
-	)
+	m, err := newMigrate(databaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
@@ -35,15 +39,7 @@ func RunMigrations(databaseURL string) error {
 
 // RunMigrationsDown rolls back all migrations
 func RunMigrationsDown(databaseURL string) error {
-	migrationsPath, err := getMigrationsPath()
-	if err != nil {
-		return fmt.Errorf("failed to get migrations path: %w", err)
-	}
-
-	m, err := migrate.New(
-		fmt.Sprintf("file://%s", migrationsPath),
-		databaseURL,
-	)
+	m, err := newMigrate(databaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
@@ -54,18 +50,4 @@ func RunMigrationsDown(databaseURL string) error {
 	}
 
 	return nil
-}
-
-// getMigrationsPath returns the absolute path to the migrations directory
-func getMigrationsPath() (string, error) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("failed to get current file path")
-	}
-
-	// Go from internal/db/migrate.go to migrations/
-	dir := filepath.Dir(filename)
-	migrationsPath := filepath.Join(dir, "..", "..", "migrations")
-
-	return filepath.Abs(migrationsPath)
 }
