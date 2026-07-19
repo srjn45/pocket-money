@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,12 +80,23 @@ const (
 	UserStatusRegistered = "registered"
 )
 
-// Notification types (§3.7). Only N-1 and N-2 are in scope for V3-2.1;
-// N-3 (payment_recorded) is Phase 5.
+// Notification types (§3.7).
 const (
-	NotificationAddedToGroup  = "added_to_group" // N-1
-	NotificationShadowClaimed = "shadow_claimed" // N-2
+	NotificationAddedToGroup    = "added_to_group"   // N-1
+	NotificationShadowClaimed   = "shadow_claimed"   // N-2
+	NotificationPaymentRecorded = "payment_recorded" // N-3
 )
+
+// Notification is a user-scoped in-app notification. Payload is free-form JSONB
+// per type; the read API passes it through byte-for-byte (json.RawMessage).
+type Notification struct {
+	ID        uuid.UUID       `json:"id"`
+	UserID    uuid.UUID       `json:"user_id"`
+	Type      string          `json:"type"`
+	Payload   json.RawMessage `json:"payload"` // free-form per type
+	ReadAt    *time.Time      `json:"read_at"` // null ⇒ unread
+	CreatedAt time.Time       `json:"created_at"`
+}
 
 // Audit actions recorded in entry_audit for manual ledger-entry corrections
 // (V3-3.2 §2). One row is written, capturing the prior values, before every

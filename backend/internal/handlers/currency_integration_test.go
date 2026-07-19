@@ -57,7 +57,7 @@ func setupCurrencyTestEnv(t *testing.T) *currencyTestEnv {
 
 	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, "")
 	ch := handlers.NewChoreHandler(choreRepo, groupRepo)
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, db.NewAuditRepo(pool))
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, db.NewAuditRepo(pool), db.NewNotificationRepo(pool))
 	ah := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
 	loanH := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 

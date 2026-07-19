@@ -62,7 +62,7 @@ func setupHygieneTestEnv(t *testing.T) *hygieneTestEnv {
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
 	authH := handlers.NewAuthHandler(userRepo, groupRepo, notificationRepo, pool, testJWTSecret)
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc, pool, db.NewAuditRepo(pool))
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, nil, postingSvc, pool, db.NewAuditRepo(pool), db.NewNotificationRepo(pool))
 	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, "")
 	loansH := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 

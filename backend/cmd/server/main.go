@@ -50,7 +50,8 @@ func main() {
 	authHandler := handlers.NewAuthHandler(userRepo, groupRepo, notificationRepo, pool, cfg.JWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, cfg.AppBaseURL)
 	choreHandler := handlers.NewChoreHandler(choreRepo, groupRepo)
-	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, auditRepo)
+	notificationHandler := handlers.NewNotificationHandler(notificationRepo)
+	ledgerHandler := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, auditRepo, notificationRepo)
 	allowanceHandler := handlers.NewAllowanceHandler(allowanceRepo, groupRepo)
 	loanHandler := handlers.NewLoanHandler(loanRepo, ledgerRepo, groupRepo, pool)
 
@@ -115,6 +116,12 @@ func main() {
 			protected.POST("/loans/:id/approve", loanHandler.ApproveLoan)
 			protected.POST("/loans/:id/reject", loanHandler.RejectLoan)
 			protected.POST("/loans/:id/close", loanHandler.CloseLoan)
+
+			// Notification routes (V3-5.1)
+			protected.GET("/notifications", notificationHandler.ListNotifications)
+			protected.GET("/notifications/unread_count", notificationHandler.GetUnreadCount)
+			protected.POST("/notifications/:id/read", notificationHandler.MarkRead)
+			protected.POST("/notifications/read_all", notificationHandler.MarkAllRead)
 		}
 	}
 

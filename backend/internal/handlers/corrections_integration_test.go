@@ -61,7 +61,7 @@ func setupCorrectionsTestEnv(t *testing.T) *correctionsTestEnv {
 
 	postingSvc := posting.NewService(allowanceRepo, ledgerRepo, loanRepo, groupRepo, pool)
 
-	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, auditRepo)
+	lh := handlers.NewLedgerHandler(ledgerRepo, groupRepo, choreRepo, postingSvc, pool, auditRepo, db.NewNotificationRepo(pool))
 	gh := handlers.NewGroupHandler(groupRepo, inviteRepo, choreRepo, ledgerRepo, loanRepo, allowanceRepo, userRepo, notificationRepo, postingSvc, pool, "")
 	ch := handlers.NewChoreHandler(choreRepo, groupRepo)
 
