@@ -115,6 +115,75 @@ the API with `EXPO_PUBLIC_API_URL` (e.g. `http://localhost:8080/api/v1`).
 
 ---
 
+## Native App (Android APK)
+
+Producing an installable Android APK is an **operator step**: it needs an **Expo
+account** (`npx expo login`). This repo ships the build config (`app/eas.json`) and this
+guide — **not** a pre-built binary. Follow the steps below to produce one.
+
+> **⚠️ The API URL is baked into the binary at build time — it cannot be changed after
+> install.** A native build inlines `EXPO_PUBLIC_API_URL` into the JS bundle inside the
+> APK. Before you build, point it at **your** server (the same host the single image from
+> [Quick Start](#quick-start) serves; the API lives at `…/api/v1`). Two ways:
+>
+> - Edit `app/eas.json` → `build.preview.env.EXPO_PUBLIC_API_URL` to your server
+>   (e.g. `https://money.example.com/api/v1`), **or**
+> - store it as an EAS environment variable so it isn't committed:
+>   `eas env:create --name EXPO_PUBLIC_API_URL --value https://money.example.com/api/v1`.
+>
+> The value committed in `eas.json` is a **placeholder** (`https://your-server.example.com/api/v1`);
+> leaving it unchanged ships an APK that talks to nothing. EAS cloud builds do **not** read
+> your shell's `EXPO_PUBLIC_*` — the value must live in `eas.json` (or an EAS env var).
+
+### Cloud build (Expo account) — primary path
+
+```bash
+cd app
+npm install
+npx expo login                 # operator's Expo credentials (operator step)
+npx eas build --platform android --profile preview
+```
+
+EAS runs the build in the cloud and returns an **install URL / QR** and a downloadable
+**APK** (internal distribution). Install it by opening the URL on the device, or transfer
+the `.apk` and allow "install unknown apps".
+
+### No-account local build — the alternative
+
+Build directly on a machine with the Android SDK + JDK and a connected device/emulator,
+**no Expo account required**:
+
+```bash
+cd app
+npm install
+EXPO_PUBLIC_API_URL=https://money.example.com/api/v1 npx expo run:android
+```
+
+Here Metro runs on your machine and **does** read the shell/`.env` value (unlike the cloud
+build), so set `EXPO_PUBLIC_API_URL` inline as shown. This prebuilds the native project
+(`app/android/`, gitignored), compiles a debug APK, and installs it on the connected
+device/emulator.
+
+**Prerequisites:** Android Studio / Android SDK, JDK 17, and a device with USB debugging
+enabled (or a running emulator).
+
+- iOS analogue for QA: `npx expo run:ios` (simulator) — no Apple account needed for the
+  simulator; a provisioned device needs an Apple Developer account.
+- Third option: `npx eas build --platform android --profile preview --local` runs the EAS
+  build locally (still needs the Android toolchain, but no cloud).
+
+### After install — QA
+
+Run **[`docs/qa-device-checklist.md`](docs/qa-device-checklist.md)** on the device to sign
+off the golden path (register → create INR + EUR groups → add member by email → chores /
+base / loan → statement → record payment → notifications bell). This on-device sign-off is
+the native-acceptance gate — there is no emulator in CI.
+
+> **iOS internal distribution** additionally needs Apple provisioning (an Apple Developer
+> account) — an operator step; for local iOS QA use `npx expo run:ios` (simulator).
+
+---
+
 ## Development Guide
 
 ### Backend Commands
@@ -194,7 +263,7 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:8081
 
 | Variable | Description |
 |----------|-------------|
-| `EXPO_PUBLIC_API_URL` | Backend API URL (e.g., `http://192.168.1.x:8080/api/v1`) |
+| `EXPO_PUBLIC_API_URL` | Backend API URL (e.g., `http://192.168.1.x:8080/api/v1`). For a **native build** this is **build-time** — baked into the APK from the `eas.json` profile `env` (see [Native App (Android APK)](#native-app-android-apk)); for the local `npx expo run:android` path it is read from the shell/`.env`. For the web single image it isn't needed — the web app is same-origin with the API at `/api/v1`. |
 
 ---
 
