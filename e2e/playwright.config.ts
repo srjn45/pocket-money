@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// When E2E_EXTERNAL_SERVER is set, the web app is already being served by an
+// external origin (e.g. the single-image server at http://localhost:8080), so
+// Playwright must NOT spin up its own `npx serve` dev server.
+const useExternalServer = !!process.env.E2E_EXTERNAL_SERVER;
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -30,11 +35,14 @@ export default defineConfig({
   ],
   // Serve the exported Expo web bundle. Playwright waits for the URL to be
   // ready before starting tests. reuseExistingServer lets local dev skip the
-  // serve step when a dev server is already running.
-  webServer: {
-    command: 'npx serve -s ../app/dist -l 8081',
-    url: 'http://localhost:8081',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // serve step when a dev server is already running. Skipped entirely when
+  // E2E_EXTERNAL_SERVER is set (single-image server already serves the web).
+  webServer: useExternalServer
+    ? undefined
+    : {
+        command: 'npx serve -s ../app/dist -l 8081',
+        url: 'http://localhost:8081',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });
