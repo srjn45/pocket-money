@@ -129,8 +129,9 @@ jobs:
           CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o bin/server ./cmd/server
           ls -la bin/
 
-      - name: Build Docker image
-        run: docker build -t pocket-money-backend:${{ github.sha }} .
+      - name: Build single-image (root Dockerfile)
+        working-directory: ${{ github.workspace }}
+        run: docker build -t pocket-money:${{ github.sha }} .
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -166,121 +167,78 @@ jobs:
         run: npx expo export --platform web
 
   # ============================================================================
-  # E2E JOB (WP-4.4)
-  # Runs Playwright tests against a real backend + seeded demo data.
-  # Depends on fe-web-export so the Expo web bundle exists before serving.
+  # COMPOSE SMOKE JOB (V3-6.1)
+  # Boots postgres + the SINGLE-IMAGE app via docker compose and runs the
+  # existing Playwright e2e suite against the single origin (http://localhost:8080,
+  # same-origin API at /api/v1) — proving the packaged artifact, not dev servers.
+  # Replaces the old dev-server `e2e` job.
   # ============================================================================
-  e2e:
-    name: E2E
+  compose-smoke:
+    name: Compose Smoke (single-image e2e)
     runs-on: ubuntu-latest
-    needs: [build, fe-web-export]
+    needs: [lint, test] # gate the expensive Docker job behind the cheap floors
     env:
       TZ: UTC
+      E2E_WEB_BASE: http://localhost:8080
       E2E_API_BASE: http://localhost:8080/api/v1
-      E2E_WEB_BASE: http://localhost:8081
-      APP_BASE_URL: http://localhost:8081
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: pocket
-          POSTGRES_PASSWORD: pocket
-          POSTGRES_DB: pocket_money
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      E2E_EXTERNAL_SERVER: "1" # single image serves the web; no npx serve
+      # Every `docker compose` call interpolates the app service's JWT_SECRET
+      # guard (incl. logs/down), so set it job-wide.
+      JWT_SECRET: ci-smoke-secret
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: Setup Go # for the host-run seed
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: backend/go.sum
 
-      - name: Setup Node.js
+      - name: Setup Node.js # for e2e deps + playwright
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: e2e/package-lock.json
 
-      - name: Download Go dependencies
-        working-directory: ./backend
-        run: go mod download
+      - name: Build + boot single image
+        run: docker compose up -d --build
 
-      - name: Install app dependencies (for web export)
-        working-directory: ./app
-        run: npm ci
-
-      - name: Export Expo web bundle
-        working-directory: ./app
-        env:
-          EXPO_PUBLIC_API_URL: http://localhost:8080/api/v1
-          NODE_ENV: production
-        run: npx expo export --platform web
-
-      - name: Start backend
-        working-directory: ./backend
-        env:
-          DATABASE_URL: postgres://pocket:pocket@localhost:5432/pocket_money?sslmode=disable
-          JWT_SECRET: ci-e2e-secret
-          PORT: 8080
-          CORS_ORIGINS: "*"
+      - name: Wait for app health
         run: |
-          go run ./cmd/server &
-          # Wait for the server to be ready.
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/health; then
-              echo "Backend ready"
-              break
-            fi
-            echo "Waiting for backend... ($i)"
-            sleep 2
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8080/health && echo "app ready" && exit 0
+            echo "waiting for app... ($i)"; sleep 3
           done
+          echo "app never became healthy" >&2
+          docker compose logs app
+          exit 1
 
-      - name: Run database migrations
+      - name: Seed demo family (host go-run → exposed postgres)
         working-directory: ./backend
         env:
           DATABASE_URL: postgres://pocket:pocket@localhost:5432/pocket_money?sslmode=disable
-          JWT_SECRET: ci-e2e-secret
-        run: |
-          # Migrations run on server boot; wait for schema_migrations to exist.
-          for i in $(seq 1 15); do
-            n=$(psql postgres://pocket:pocket@localhost:5432/pocket_money -tAc \
-              "SELECT COUNT(*) FROM schema_migrations" 2>/dev/null || echo 0)
-            [ "$n" -gt 0 ] && echo "Migrations applied ($n)" && break
-            echo "Waiting for migrations... ($i)"
-            sleep 2
-          done
+          JWT_SECRET: ci-smoke-secret
+          # APP_BASE_URL intentionally unset → invites use the request host (same origin)
+        run: go run ./cmd/seed --reset --out ../e2e/fixtures/seed.summary.json
 
-      - name: Seed demo family
-        working-directory: ./backend
-        env:
-          DATABASE_URL: postgres://pocket:pocket@localhost:5432/pocket_money?sslmode=disable
-          JWT_SECRET: ci-e2e-secret
-          APP_BASE_URL: http://localhost:8081
-        run: |
-          go run ./cmd/seed --reset --out ../e2e/fixtures/seed.summary.json
-
-      - name: Install E2E dependencies
+      - name: Install e2e deps
         working-directory: ./e2e
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright chromium
         working-directory: ./e2e
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
+      - name: Run e2e against single image
         working-directory: ./e2e
         run: npx playwright test
+
+      - name: App logs on failure
+        if: failure()
+        run: docker compose logs app
 
       - name: Upload Playwright report on failure
         if: failure()
@@ -290,13 +248,9 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 7
 
-      - name: Upload test results on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-test-results
-          path: e2e/test-results/
-          retention-days: 7
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
 
   # ============================================================================
   # BACKUP VERIFY JOB (WP-1.4)
@@ -307,6 +261,11 @@ jobs:
   backup-verify:
     name: Backup Verify
     runs-on: ubuntu-latest
+    # docker compose interpolates ALL services at parse time, so even
+    # `up -d postgres` requires JWT_SECRET (the app service's fail-fast guard).
+    # This job never starts the app; a placeholder satisfies the interpolation.
+    env:
+      JWT_SECRET: backup-verify-unused
 
     steps:
       - name: Checkout code

@@ -8,12 +8,13 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/srjn45/pocket-money/backend/internal/db"
+	"github.com/srjn45/pocket-money/backend/migrations"
 	"github.com/srjn45/pocket-money/backend/testutil"
 )
 
@@ -166,9 +167,11 @@ func TestMigration015_RenamesHeadToAdmin(t *testing.T) {
 
 	require.NoError(t, testutil.ResetTestDB(pool))
 
-	// Tests run with CWD = package dir (backend/internal/db), so this resolves to
-	// backend/migrations.
-	m, err := migrate.New("file://../../migrations", dbURL)
+	// Build the migrate instance from the embedded migrations FS (iofs), matching
+	// the production source. No dependency on the on-disk source/file driver.
+	src, err := iofs.New(migrations.FS, ".")
+	require.NoError(t, err)
+	m, err := migrate.NewWithSourceInstance("iofs", src, dbURL)
 	require.NoError(t, err)
 	defer m.Close()
 

@@ -40,6 +40,14 @@ build/
 out/
 backend/bin/
 
+# Embedded web export (built by the Docker image / `expo export`).
+# The `dist/` rule above prunes this directory, so re-include the directory
+# first, then ignore its contents except the committed compile stub (needed so
+# the `web` package builds without a real export).
+!/backend/internal/web/dist/
+/backend/internal/web/dist/*
+!/backend/internal/web/dist/index.html
+
 # Dependency directories
 jspm_packages/
 

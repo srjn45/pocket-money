@@ -11,6 +11,7 @@ import (
 	"github.com/srjn45/pocket-money/backend/internal/handlers"
 	"github.com/srjn45/pocket-money/backend/internal/middleware"
 	"github.com/srjn45/pocket-money/backend/internal/posting"
+	"github.com/srjn45/pocket-money/backend/internal/web"
 )
 
 func main() {
@@ -123,6 +124,12 @@ func main() {
 			protected.POST("/notifications/:id/read", notificationHandler.MarkRead)
 			protected.POST("/notifications/read_all", notificationHandler.MarkAllRead)
 		}
+	}
+
+	// Serve the embedded web SPA (must be AFTER all /api and /health routes so
+	// NoRoute only catches unmatched paths and never shadows the API/health).
+	if err := web.RegisterSPA(router); err != nil {
+		log.Fatalf("Failed to register web SPA: %v", err)
 	}
 
 	// Start server

@@ -24,16 +24,17 @@ Children (members) can:
 
 ```
 pocket-money/
-├── backend/               # Go API server
+├── backend/               # Go API server (also embeds the web SPA + migrations)
 │   ├── cmd/server/        # Main entry point
 │   ├── internal/          # Application code
-│   ├── migrations/        # Database migrations
-│   ├── Dockerfile         # Container build
+│   │   └── web/           # Embedded Expo web export (go:embed) + SPA fallback
+│   ├── migrations/        # Database migrations (embedded via iofs)
 │   └── Makefile           # Build & dev commands
 ├── app/                   # React Native (Expo) app
 │   ├── app/               # Screens and routes
 │   └── src/               # Shared code
-├── docker-compose.yml     # Development environment
+├── Dockerfile             # Multi-stage single-image build (web → go → alpine)
+├── docker-compose.yml     # postgres + app (the single image)
 └── .github/workflows/     # CI/CD pipelines
 ```
 
@@ -48,31 +49,53 @@ pocket-money/
 
 ## Quick Start
 
+The whole product — the web app **and** the API — ships as **one image**. You need
+only Docker and a single secret.
+
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- [Go 1.24+](https://golang.org/dl/) (for local development)
-- [Node.js 18+](https://nodejs.org/) (for mobile app)
-- [golangci-lint](https://golangci-lint.run/usage/install/) (for linting)
 
-### Option 1: Docker Compose (Recommended)
+That's it. (Go and Node are only needed for [local development](#local-development).)
 
-Start the entire stack with one command:
+### Run it
 
 ```bash
-# Start database and backend
-docker compose up -d
-
-# View logs
-docker compose logs -f backend
-
-# Stop everything
-docker compose down
+git clone https://github.com/srjn45/pocket-money.git && cd pocket-money
+export JWT_SECRET=$(openssl rand -hex 32)
+docker compose up --build
 ```
 
-The API will be available at `http://localhost:8080`.
+Then open **http://localhost:8080**, register an account, and create a group.
 
-### Option 2: Local Development
+- The **web app** is served at `http://localhost:8080`.
+- The **API** is same-origin at `http://localhost:8080/api/v1`.
+- **Health** check at `http://localhost:8080/health`.
+
+How it works:
+
+- **One image serves the web app + API.** The Expo web bundle is `go:embed`-ed into
+  the Go server (with an SPA fallback), so there is no separate frontend server and
+  no CORS to configure — the web app is same-origin with the API.
+- **Migrations run automatically on boot** (embedded in the binary), so a fresh
+  Postgres is set up on first start.
+- **`JWT_SECRET` is the only required env var.** `docker compose up` fails fast with a
+  clear message if it is unset. No base-URL config is needed — invite links default
+  to the request host.
+
+To stop and remove the volume:
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Local Development
+
+For iterating on the backend or the app directly (requires
+[Go 1.24+](https://golang.org/dl/), [Node.js 22+](https://nodejs.org/), and
+[golangci-lint](https://golangci-lint.run/usage/install/)):
 
 ```bash
 cd backend
@@ -86,6 +109,9 @@ make dev
 # Stop the database when done
 make dev-down
 ```
+
+Run the Expo app against the local backend from `app/` (`npm start`), pointing it at
+the API with `EXPO_PUBLIC_API_URL` (e.g. `http://localhost:8080/api/v1`).
 
 ---
 

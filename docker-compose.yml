@@ -1,10 +1,10 @@
 services:
-  # PostgreSQL database for development
+  # PostgreSQL database
   postgres:
     image: postgres:15-alpine
     container_name: pocket_money_db
     ports:
-      - "5432:5432"
+      - "5432:5432" # exposed so the CI seed (host go-run) can reach it
     environment:
       POSTGRES_USER: pocket
       POSTGRES_PASSWORD: pocket
@@ -16,33 +16,30 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - pocket_network
 
-  # Backend API service
-  backend:
+  # Single-image app: serves the web SPA + API from one Go binary.
+  app:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: pocket_money_backend
+    container_name: pocket_money_app
     ports:
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://pocket:pocket@postgres:5432/pocket_money?sslmode=disable
-      JWT_SECRET: dev-secret-key-change-in-production
-      PORT: "8080"
-      CORS_ORIGINS: "*"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (e.g. export JWT_SECRET=$(openssl rand -hex 32))}
+      # PORT defaults to 8080. CORS_ORIGINS unneeded (web app is same-origin).
+      # APP_BASE_URL unset → invite links default to the request host.
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - pocket_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
 
 volumes:
   postgres_data:
-    driver: local
-
-networks:
-  pocket_network:
-    driver: bridge
