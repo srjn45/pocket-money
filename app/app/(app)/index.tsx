@@ -17,6 +17,7 @@ import {
   ErrorMessage,
   LoadingSpinner,
   ScreenContainer,
+  HeaderBell,
   useToast,
 } from '../../src/components';
 import { theme } from '../../src/theme';
@@ -132,6 +133,7 @@ export default function DashboardScreen() {
     <ScreenContainer style={styles.container} testID="dashboard-root">
       <View style={styles.header}>
         <Text style={styles.welcome}>Welcome, {user?.name || 'User'}!</Text>
+        <HeaderBell />
       </View>
 
       <View style={styles.actions}>
@@ -223,12 +225,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: theme.spacing.lg,
     backgroundColor: theme.color.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.color.border,
   },
   welcome: {
+    flex: 1,
     fontSize: theme.fontSize.xl,
     fontWeight: theme.fontWeight.bold,
     color: theme.color.text,

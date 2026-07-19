@@ -39,6 +39,12 @@ export default function AppLayout() {
         options={{ href: null, headerShown: false }}
       />
       <Tabs.Screen
+        // Notifications list (V3-5.2). Hidden route reached via the header bell's
+        // router.push; href:null keeps it out of the bottom bar / top nav.
+        name="notifications"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
