@@ -142,7 +142,11 @@ export interface paths {
         get: operations["getGroup"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete (archive) a group
+         * @description Soft-deletes the group (sets deleted_at = now()). Admin only. The group then disappears from every read — the dashboard listing, the group list, and direct fetch-by-id (which returns 404). History rows (ledger, loans, allowances, memberships) are preserved, so the group is recoverable in principle at the database level; there is intentionally NO restore endpoint in this pass. Idempotent: deleting an already-deleted group returns 404.
+         */
+        delete: operations["deleteGroup"];
         options?: never;
         head?: never;
         /**
@@ -842,6 +846,8 @@ export interface components {
             email: string;
             /** @description Display name. Used only when creating a new shadow user; ignored when the email already resolves to a user. */
             name: string;
+            /** @description Optional base pay (monthly allowance) to seed for the new member, set atomically with the membership. currency must equal the group's; value >= 0 (0 = paused). Omit to add the member with no allowance. */
+            base_pay?: components["schemas"]["Money"] | null;
         };
         InviteRequest: {
             /**
@@ -1125,12 +1131,16 @@ export interface components {
             /** @description Number of monthly installments. > 0. */
             installments: number;
             note?: string | null;
+            /** @description Optional. When true, the first EMI installment lands in the current calendar month; when omitted or false the loan starts next month (the default). Only meaningful for the admin pre-approved path. */
+            start_current_month?: boolean | null;
         };
         /** @description Optional overrides applied before approval; emi_amount is recomputed. */
         ApproveLoanRequest: {
             /** @description Optional principal override in the group's currency. value >= 1 when present; currency must equal the group's. */
             principal?: components["schemas"]["Money"] | null;
             installments?: number | null;
+            /** @description Optional. When true, the first EMI installment lands in the current calendar month; when omitted or false the loan starts next month (the default). */
+            start_current_month?: boolean | null;
         };
         LoanResponse: {
             /** Format: uuid */
@@ -1577,6 +1587,72 @@ export interface operations {
                 };
             };
             /** @description Group not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Group ID (UUID) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Group deleted (no content) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid group ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Only the group admin can delete the group */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Group not found (or already deleted) */
             404: {
                 headers: {
                     [name: string]: unknown;

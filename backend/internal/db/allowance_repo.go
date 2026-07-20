@@ -40,6 +40,27 @@ func (r *AllowanceRepo) SetAllowance(ctx context.Context,
 	return a, nil
 }
 
+// SetAllowanceTx is SetAllowance on a caller-supplied Querier so it can run inside
+// an existing transaction (e.g. the add-member flow seeding a base pay atomically
+// with the membership insert — QA batch 1, Item 4).
+func (r *AllowanceRepo) SetAllowanceTx(ctx context.Context, q Querier,
+	groupID, userID uuid.UUID, amount int64, effectiveFrom string, createdBy uuid.UUID) (*models.Allowance, error) {
+
+	a := &models.Allowance{}
+	err := q.QueryRow(ctx, `
+		INSERT INTO allowances (id, group_id, user_id, amount, effective_from, created_by)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
+		ON CONFLICT (group_id, user_id, effective_from)
+		DO UPDATE SET amount = EXCLUDED.amount, created_by = EXCLUDED.created_by
+		RETURNING id, group_id, user_id, amount, effective_from, created_by, created_at`,
+		groupID, userID, amount, effectiveFrom, createdBy,
+	).Scan(&a.ID, &a.GroupID, &a.UserID, &a.Amount, &a.EffectiveFrom, &a.CreatedBy, &a.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set allowance: %w", err)
+	}
+	return a, nil
+}
+
 // ListForGroup returns all allowance rows for a group (head view), ordered by user then month.
 func (r *AllowanceRepo) ListForGroup(ctx context.Context, groupID uuid.UUID) ([]*models.Allowance, error) {
 	rows, err := r.pool.Query(ctx, `

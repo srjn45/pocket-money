@@ -109,9 +109,14 @@ type MemberResponse struct {
 }
 
 // AddMemberRequest is the body for POST /groups/:id/members (add by email, §4).
+// BasePay is optional (QA batch 1, Item 4): when present it seeds the new member's
+// monthly allowance in the same transaction that creates the membership, so the
+// admin can set pocket money without a second trip to the member-detail sheet. Its
+// currency must match the group's; value >= 0 (0 = paused, same as SetAllowance).
 type AddMemberRequest struct {
-	Email string `json:"email" binding:"required,email"`
-	Name  string `json:"name"  binding:"required"`
+	Email   string        `json:"email" binding:"required,email"`
+	Name    string        `json:"name"  binding:"required"`
+	BasePay *models.Money `json:"base_pay,omitempty"`
 }
 
 // GroupDetailResponse represents detailed group information
@@ -410,7 +415,7 @@ func (h *GroupHandler) AddMemberByEmail(c *gin.Context) {
 		return
 	}
 
-	// Group name for the N-1 payload (group is not deletable in this codebase).
+	// Group name for the N-1 payload, and the currency for base-pay validation.
 	group, err := h.groupRepo.GetByID(ctx, groupID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -419,6 +424,19 @@ func (h *GroupHandler) AddMemberByEmail(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get group"})
 		return
+	}
+
+	// Optional base pay (QA batch 1, Item 4): validate before opening the tx so a
+	// bad amount is a clean 400 with nothing written. Currency must match the group
+	// (D7); value >= 0 (0 = paused, same rule as SetAllowance).
+	if req.BasePay != nil {
+		if !checkMoneyCurrency(c, *req.BasePay, group.Currency) {
+			return
+		}
+		if req.BasePay.Value < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "base_pay amount must be >= 0"})
+			return
+		}
 	}
 
 	tx, err := h.pool.Begin(ctx)
@@ -457,6 +475,17 @@ func (h *GroupHandler) AddMemberByEmail(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member"})
 		return
+	}
+
+	// Seed the optional base pay in the SAME tx as the membership insert, so we
+	// never leave a member created without the allowance the admin asked for
+	// (QA batch 1, Item 4). effective_from = current month; created_by = the admin.
+	if req.BasePay != nil {
+		effectiveFrom := time.Now().Format("2006-01")
+		if _, err := h.allowanceRepo.SetAllowanceTx(ctx, tx, groupID, user.ID, req.BasePay.Value, effectiveFrom, callerID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to set base pay"})
+			return
+		}
 	}
 
 	// N-1: tell a registered user they were added to the group.
@@ -732,6 +761,57 @@ func (h *GroupHandler) UpdateGroup(c *gin.Context) {
 		MemberChoreSubmissionEnabled: group.MemberChoreSubmissionEnabled,
 		CreatedAt:                    group.CreatedAt,
 	})
+}
+
+// DeleteGroup soft-deletes (archives) a group. Admin-only (QA batch 1, Item 1).
+// Sets deleted_at = now(); the group then vanishes from every read (dashboard,
+// list, direct fetch → 404). History rows are preserved (recoverable-in-principle
+// at the DB level); there is no restore endpoint in this pass. Idempotent: a
+// second call on an already-deleted group returns 404, matching GetGroup.
+// DELETE /api/v1/groups/:id
+func (h *GroupHandler) DeleteGroup(c *gin.Context) {
+	userIDStr, exists := auth.GetUserID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid user ID"})
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group ID"})
+		return
+	}
+
+	// Authz: only the group admin may delete the group (same gate as UpdateGroup).
+	member, err := h.groupRepo.GetMember(c.Request.Context(), groupID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check membership"})
+		return
+	}
+	if member.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admin can delete the group"})
+		return
+	}
+
+	if err := h.groupRepo.SoftDelete(c.Request.Context(), groupID); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			// Already deleted (or never existed): treat as not-found, idempotent.
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete group"})
+		return
+	}
+
+	c.Status(http.StatusNoContent) // 204
 }
 
 // RemoveMember handles DELETE /api/v1/groups/:id/members/:userId.

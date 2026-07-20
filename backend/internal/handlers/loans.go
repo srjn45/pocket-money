@@ -96,12 +96,30 @@ type CreateLoanRequest struct {
 	Principal    models.Money `json:"principal"` // value >= 1; currency must match group
 	Installments int          `json:"installments"`
 	Note         *string      `json:"note"`
+	// StartCurrentMonth (QA batch 1, Item 5) is optional. When true, the first EMI
+	// installment lands in the current calendar month; when omitted/false the loan
+	// keeps the historical default of starting next month. Only applies to the
+	// admin pre-approved path (a member request has no start until approval).
+	StartCurrentMonth *bool `json:"start_current_month"`
 }
 
 // ApproveLoanRequest is the body for POST /loans/:id/approve.
 type ApproveLoanRequest struct {
 	Principal    *models.Money `json:"principal"` // value >= 1 when present; currency must match group
 	Installments *int          `json:"installments"`
+	// StartCurrentMonth (QA batch 1, Item 5) is optional; same semantics as on
+	// CreateLoanRequest — true starts the first EMI this month, omitted/false next month.
+	StartCurrentMonth *bool `json:"start_current_month"`
+}
+
+// loanStartPeriod resolves the first-installment YYYY-MM from the caller's choice.
+// startCurrentMonth true → the current calendar month; nil/false → next month
+// (the historical default). Keeps both loan-creation paths in lockstep.
+func loanStartPeriod(now time.Time, startCurrentMonth *bool) string {
+	if startCurrentMonth != nil && *startCurrentMonth {
+		return now.Format("2006-01")
+	}
+	return loanNextPeriod(now)
 }
 
 // loanCeilDiv returns ceil(a / b) for positive a, b.
@@ -282,7 +300,7 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 			return
 		}
 
-		start := loanNextPeriod(now)
+		start := loanStartPeriod(now, req.StartCurrentMonth)
 		decidedAt := now
 		loan, err = h.loanRepo.Create(c.Request.Context(),
 			groupID, *req.UserID,
@@ -394,8 +412,8 @@ func (h *LoanHandler) ApproveLoan(c *gin.Context) {
 	}
 
 	effectiveEMI := loanCeilDiv(effectivePrincipal, effectiveInstallments)
-	start := loanNextPeriod(time.Now())
 	now := time.Now()
+	start := loanStartPeriod(now, req.StartCurrentMonth)
 
 	tx, err := h.pool.Begin(c.Request.Context())
 	if err != nil {

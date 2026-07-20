@@ -26,5 +26,6 @@ export { AddMemberSheet } from './AddMemberSheet';
 export { LoanApproveSheet } from './LoanApproveSheet';
 export { ScreenContainer, CONTENT_MAX_WIDTH } from './ScreenContainer';
 export { HeaderBell } from './HeaderBell';
+export { HeaderBackButton } from './HeaderBackButton';
 export { GroupSectionTabs } from './GroupSectionTabs';
 export type { GroupSection } from './GroupSectionTabs';
