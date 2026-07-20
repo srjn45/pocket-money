@@ -2,9 +2,9 @@ import { useState, useCallback } from 'react';
 import { View, Text, SectionList, StyleSheet, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '../../src/auth-context';
-import { useGroups, useJoinGroup } from '../../src/hooks/useGroups';
-import { qk } from '../../src/query-keys';
+import { useAuth } from '../../../src/auth-context';
+import { useGroups, useJoinGroup } from '../../../src/hooks/useGroups';
+import { qk } from '../../../src/query-keys';
 import {
   Button,
   Card,
@@ -19,10 +19,10 @@ import {
   ScreenContainer,
   HeaderBell,
   useToast,
-} from '../../src/components';
-import { theme } from '../../src/theme';
-import { INVITES_ENABLED } from '../../src/flags';
-import type { GroupSummary } from '../../src/api';
+} from '../../../src/components';
+import { theme } from '../../../src/theme';
+import { INVITES_ENABLED } from '../../../src/flags';
+import type { GroupSummary } from '../../../src/api';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
