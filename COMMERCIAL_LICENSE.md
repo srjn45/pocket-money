@@ -21,6 +21,6 @@ Use of this software for any commercial purpose—including but not limited to:
 To use Pocket Money for commercial or production use, please contact the copyright holder to discuss terms and pricing:
 
 - **Repository:** [github.com/srjn45/pocket-money](https://github.com/srjn45/pocket-money)
-- **Contact:** [Add your contact method: email, website, or issue template]
+- **Contact:** Srajan Pathak — srajanpathak45@gmail.com / [github.com/srjn45](https://github.com/srjn45)
 
 Commercial licenses typically grant rights to use, modify, and distribute the software for commercial purposes without the restrictions of the non-commercial license.
