@@ -1,5 +1,4 @@
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { useAuth } from '../../src/auth-context';
 import { LoadingSpinner } from '../../src/components';
@@ -18,42 +17,22 @@ export default function AppLayout() {
     );
   }
 
+  // (app) is a STACK, not Tabs. The two primary destinations (Dashboard, Profile)
+  // live inside the nested (tabs) group; group detail and notifications are
+  // push-in siblings. Making group entry a real Stack push/pop — instead of a
+  // hidden-Tab focus/blur — is the fix for the stale-content nav leak: on the web
+  // build the outer Tabs never set display:none on the inactive `groups` tab, so
+  // its nested Stack accumulated a fresh layer on every re-entry. A Stack push
+  // correctly hides the superseded screen and a pop unmounts it, so re-entering a
+  // group is always clean. headerShown:false here → no duplicate header; each
+  // section owns its header ((tabs) screens in-body, groups via their own Stack,
+  // notifications in-body).
   return (
-    // headerShown:false → the (app) Tabs is the SOLE nav chrome (bottom bar on
-    // native / top nav on web) with NO tab-level header. Each screen owns its one
-    // meaningful header in-body (Dashboard/Profile) or via its own Stack (groups).
-    <Tabs screenOptions={{ headerShown: false }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="groups"
-        // headerShown:false kills the leaked lowercase "groups" folder-name header
-        // that the outer Tabs otherwise derived for this hidden route.
-        options={{ href: null, headerShown: false }}
-      />
-      <Tabs.Screen
-        // Notifications list (V3-5.2). Hidden route reached via the header bell's
-        // router.push; href:null keeps it out of the bottom bar / top nav.
-        name="notifications"
-        options={{ href: null, headerShown: false }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="groups" />
+      <Stack.Screen name="notifications" />
+    </Stack>
   );
 }
 

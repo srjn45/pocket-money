@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Text, StyleSheet, Pressable } from 'react-native';
 import Constants from 'expo-constants';
-import { useAuth } from '../../src/auth-context';
-import { Card, Avatar, Button, Sheet, TextField, ScreenContainer, useToast } from '../../src/components';
-import { useChangePassword } from '../../src/hooks/useHygiene';
-import { theme } from '../../src/theme';
-import { getApiBaseUrl, getDefaultApiBaseUrl, setApiBaseUrlOverride } from '../../src/api';
+import { useAuth } from '../../../src/auth-context';
+import { Card, Avatar, Button, Sheet, TextField, ScreenContainer, useToast } from '../../../src/components';
+import { useChangePassword } from '../../../src/hooks/useHygiene';
+import { theme } from '../../../src/theme';
+import { getApiBaseUrl, getDefaultApiBaseUrl, setApiBaseUrlOverride } from '../../../src/api';
 
 const DEV_TAP_THRESHOLD = 7;
 
