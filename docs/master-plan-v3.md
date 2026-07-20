@@ -1,10 +1,16 @@
 # Pocket Money — Master Plan v3 (Product Reframe)
 
-Status: READY FOR EXECUTION (2026-07-10) — approved product decisions D1–D9,
-roadmap in §8, agent conventions in §9–§10, autopilot handover in §11.
+Status: ✅ COMPLETE (2026-07-20) — all §8 WPs (Phases 1–6) merged; CI fully
+green including the single-image compose smoke and e2e golden path. Approved
+product decisions D1–D9, roadmap in §8, agent conventions in §9–§10.
 Supersedes the *product framing* of `master-plan.md` v2.1. The v2.1 build (all
 phases merged, e2e green at `3a920bd`) remains the technical foundation; this
-document redefines what the product is and specifies the delta.
+document redefined what the product is and specified the delta.
+
+Final SHA: `c16af96` — the `autopilot/integration` head this WP lands on. The
+true final SHA is the V3-6.3 merge commit (unknown at implement time); the owner
+fast-forwards `master` to the landed integration head, and the brain confirms
+the merge SHA post-land.
 
 ---
 
@@ -331,7 +337,7 @@ specs) before implementation starts.
 |---|---|---|
 | **V3-6.1** Single-image server | Serve the product from one artifact: `go:embed` the `expo export --platform web` dist into the Go server with SPA fallback (`NoRoute` → index.html); migrations via `iofs` embed; web built with relative `EXPO_PUBLIC_API_URL=/api/v1` (same origin → CORS moot, invite/`APP_BASE_URL` defaults to request host). Multi-stage root `Dockerfile` (node export → go build → alpine); `docker-compose.yml` slims to `postgres` + `app`; README quick-start rewritten (`docker compose up` + one `JWT_SECRET`). | CI builds the image; a compose smoke job boots postgres+app and runs the e2e suite against the **single-image** server (not the dev servers); README verified from scratch. |
 | **V3-6.2** Android build & device QA | Commit `eas.json` (preview profile, `EXPO_PUBLIC_API_URL` documented as build-time env) + a `docs/qa-device-checklist.md` covering the golden path on Android/iOS: install, safe areas, statement flow, add-by-email, payment, notifications, icons/splash. Local-build path (`npx expo run:android`) documented as the no-account alternative. **Running `eas build` needs the operator's Expo credentials — the WP delivers config + docs + doctor-clean, and flags the build itself as an operator step.** | `npx expo-doctor` clean; `eas.json` validates; checklist committed; operator can produce an installable APK by following the README section verbatim. |
-| **V3-6.3** Final acceptance & closeout | Fresh-machine golden path executed by the review agent against the V3-6.1 image: register → create INR + EUR groups → add member by email (shadow) → chores/base/loan → month statement → record payment → claim by registering the member → member sees own statement → bell notification. Prune dead v2 docs, mark this plan COMPLETE with final SHA, update README screenshots. | The scripted golden path passes against the single image; plan marked COMPLETE; no red anywhere in CI. |
+| ✅ **V3-6.3** Final acceptance & closeout | Fresh-machine golden path executed by the review agent against the V3-6.1 image: register → create INR + EUR groups → add member by email (shadow) → chores/base/loan → month statement → record payment → claim by registering the member → member sees own statement → bell notification. Prune dead v2 docs, mark this plan COMPLETE with final SHA, update README screenshots. | The scripted golden path passes against the single image; plan marked COMPLETE; no red anywhere in CI. |
 
 ## 9. Conventions for Coding Agents (Definition of Done)
 
