@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = 'auth_token';
 const PENDING_TOKEN_KEY = 'pending_invite_token';
+const API_URL_OVERRIDE_KEY = 'dev_api_url_override';
 
 // Use SecureStore on native, AsyncStorage on web
 const isWeb = Platform.OS === 'web';
@@ -76,4 +77,22 @@ export async function clearPendingInviteToken(): Promise<void> {
   } catch (error) {
     console.error('Failed to clear pending invite token:', error);
   }
+}
+
+// Dev-only API base URL override — not sensitive, plain AsyncStorage on every
+// platform (unlike the token, no need for SecureStore here).
+export async function getApiUrlOverride(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(API_URL_OVERRIDE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setApiUrlOverride(url: string): Promise<void> {
+  await AsyncStorage.setItem(API_URL_OVERRIDE_KEY, url);
+}
+
+export async function clearApiUrlOverride(): Promise<void> {
+  await AsyncStorage.removeItem(API_URL_OVERRIDE_KEY);
 }

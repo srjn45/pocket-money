@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { authApi, User, setOnUnauthorized } from './api';
+import { authApi, User, setOnUnauthorized, initApiBaseUrl } from './api';
 import { getToken, setToken, clearToken } from './storage';
 
 interface AuthContextValue {
@@ -35,6 +35,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadMe = async () => {
     try {
+      // Must resolve before any request() call — picks up a saved dev API-URL
+      // override (see src/api.ts) so the very first network call already uses it.
+      await initApiBaseUrl();
       const storedToken = await getToken();
       if (storedToken) {
         setTokenState(storedToken);

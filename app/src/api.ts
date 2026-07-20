@@ -1,13 +1,46 @@
 import Constants from 'expo-constants';
-import { getToken, clearToken } from './storage';
+import { getToken, clearToken, getApiUrlOverride, setApiUrlOverride, clearApiUrlOverride } from './storage';
 import type { components } from './api-types.gen';
 
 type Schemas = components['schemas'];
 
-// Get API URL from environment or use default
-const BASE_URL = Constants.expoConfig?.extra?.apiUrl ||
+// Get API URL from environment or use default. Mutable so a dev-only override
+// (see initApiBaseUrl / setApiBaseUrlOverride) can repoint it at runtime
+// without a rebuild — e.g. testing an APK against a backend on a LAN IP that
+// changes between sessions.
+const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.apiUrl ||
   process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:8080/api/v1';
+let BASE_URL = DEFAULT_BASE_URL;
+
+export function getApiBaseUrl(): string {
+  return BASE_URL;
+}
+
+export function getDefaultApiBaseUrl(): string {
+  return DEFAULT_BASE_URL;
+}
+
+// Call once at app startup, before any request() call, to pick up a
+// previously-saved override.
+export async function initApiBaseUrl(): Promise<void> {
+  const override = await getApiUrlOverride();
+  if (override) {
+    BASE_URL = override;
+  }
+}
+
+// Dev-settings entry point: persist (or clear) the override and apply it
+// immediately — no app restart needed.
+export async function setApiBaseUrlOverride(url: string | null): Promise<void> {
+  if (url) {
+    await setApiUrlOverride(url);
+    BASE_URL = url;
+  } else {
+    await clearApiUrlOverride();
+    BASE_URL = DEFAULT_BASE_URL;
+  }
+}
 
 export type ApiError             = Schemas['ErrorResponse'];
 export type User                 = Schemas['UserResponse'];
