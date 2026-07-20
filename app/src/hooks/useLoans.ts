@@ -27,7 +27,7 @@ export function useRequestLoan(groupId: string) {
 export function useCreateLoan(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { user_id?: string | null; principal: Money; installments: number; note?: string | null }) =>
+    mutationFn: (data: { user_id?: string | null; principal: Money; installments: number; note?: string | null; start_current_month?: boolean | null }) =>
       loansApi.request(groupId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.loans(groupId) });
@@ -43,7 +43,7 @@ export function useCreateLoan(groupId: string) {
 export function useApproveLoan(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ loanId, ...data }: { loanId: string; principal?: Money | null; installments?: number | null }) =>
+    mutationFn: ({ loanId, ...data }: { loanId: string; principal?: Money | null; installments?: number | null; start_current_month?: boolean | null }) =>
       loansApi.approve(loanId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.loans(groupId) });

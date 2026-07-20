@@ -63,6 +63,8 @@ export function AddEntrySheet({
   const [direction, setDirection] = useState<Direction>('credit');
   const [note, setNote] = useState('');
   const [installmentsStr, setInstallmentsStr] = useState('');
+  // Loan first-installment month (QA batch 1, Item 5). false = next month (default).
+  const [startCurrentMonth, setStartCurrentMonth] = useState(false);
 
   function resetForm() {
     setKind('chore');
@@ -72,6 +74,7 @@ export function AddEntrySheet({
     setDirection('credit');
     setNote('');
     setInstallmentsStr('');
+    setStartCurrentMonth(false);
   }
 
   // Prefill on open: edit-mode seeds from editEntry (type immutable); add-mode resets.
@@ -192,6 +195,7 @@ export function AddEntrySheet({
           principal: { currency, value },
           installments: parsedLoanInstallments!,
           note: note.trim() || null,
+          start_current_month: startCurrentMonth,
         });
         showToast({ message: 'Loan added', tone: 'success' });
       }
@@ -332,6 +336,25 @@ export function AddEntrySheet({
               ≈ {formatMoney(loanEmiEstimate, currency)} / month
             </Text>
           )}
+          <Text style={styles.label}>First installment</Text>
+          <View style={styles.startRow}>
+            <Button
+              title="Next month"
+              variant={startCurrentMonth ? 'secondary' : 'primary'}
+              size="sm"
+              onPress={() => setStartCurrentMonth(false)}
+              style={styles.startBtn}
+              testID="loan-start-next-month"
+            />
+            <Button
+              title="This month"
+              variant={startCurrentMonth ? 'primary' : 'secondary'}
+              size="sm"
+              onPress={() => setStartCurrentMonth(true)}
+              style={styles.startBtn}
+              testID="loan-start-this-month"
+            />
+          </View>
         </>
       )}
 
@@ -396,5 +419,13 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     gap: 8,
+  },
+  startRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  startBtn: {
+    flex: 1,
   },
 });

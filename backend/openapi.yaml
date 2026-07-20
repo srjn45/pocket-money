@@ -389,6 +389,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Groups
+      summary: Delete (archive) a group
+      description: >
+        Soft-deletes the group (sets deleted_at = now()). Admin only. The group
+        then disappears from every read — the dashboard listing, the group list,
+        and direct fetch-by-id (which returns 404). History rows (ledger, loans,
+        allowances, memberships) are preserved, so the group is recoverable in
+        principle at the database level; there is intentionally NO restore endpoint
+        in this pass. Idempotent: deleting an already-deleted group returns 404.
+      operationId: deleteGroup
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Group ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Group deleted (no content)
+        '400':
+          description: Invalid group ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Only the group admin can delete the group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Group not found (or already deleted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/groups/{id}/members:
     get:
@@ -2304,6 +2359,14 @@ components:
           description: >
             Display name. Used only when creating a new shadow user; ignored when
             the email already resolves to a user.
+        base_pay:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          description: >
+            Optional base pay (monthly allowance) to seed for the new member, set
+            atomically with the membership. currency must equal the group's;
+            value >= 0 (0 = paused). Omit to add the member with no allowance.
       required:
         - email
         - name
@@ -2788,6 +2851,13 @@ components:
         note:
           type: string
           nullable: true
+        start_current_month:
+          type: boolean
+          nullable: true
+          description: >
+            Optional. When true, the first EMI installment lands in the current
+            calendar month; when omitted or false the loan starts next month (the
+            default). Only meaningful for the admin pre-approved path.
       required:
         - principal
         - installments
@@ -2804,6 +2874,13 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        start_current_month:
+          type: boolean
+          nullable: true
+          description: >
+            Optional. When true, the first EMI installment lands in the current
+            calendar month; when omitted or false the loan starts next month (the
+            default).
       description: Optional overrides applied before approval; emi_amount is recomputed.
 
     LoanResponse:

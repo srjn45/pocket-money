@@ -68,7 +68,7 @@ func (r *GroupRepo) Create(ctx context.Context, name string, adminUserID uuid.UU
 // when a response builder only needs the code to wrap amounts into Money.
 func (r *GroupRepo) GetCurrency(ctx context.Context, groupID uuid.UUID) (string, error) {
 	var currency string
-	err := r.pool.QueryRow(ctx, `SELECT currency FROM groups WHERE id = $1`, groupID).Scan(&currency)
+	err := r.pool.QueryRow(ctx, `SELECT currency FROM groups WHERE id = $1 AND deleted_at IS NULL`, groupID).Scan(&currency)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrNotFound
@@ -83,7 +83,7 @@ func (r *GroupRepo) GetCurrency(ctx context.Context, groupID uuid.UUID) (string,
 func (r *GroupRepo) GetChoreSubmissionEnabled(ctx context.Context, groupID uuid.UUID) (bool, error) {
 	var enabled bool
 	err := r.pool.QueryRow(ctx,
-		`SELECT member_chore_submission_enabled FROM groups WHERE id = $1`, groupID).Scan(&enabled)
+		`SELECT member_chore_submission_enabled FROM groups WHERE id = $1 AND deleted_at IS NULL`, groupID).Scan(&enabled)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, ErrNotFound
@@ -97,9 +97,27 @@ func (r *GroupRepo) GetChoreSubmissionEnabled(ctx context.Context, groupID uuid.
 // flag (D2 admin toggle, §3.2). ErrNotFound when the group does not exist.
 func (r *GroupRepo) SetChoreSubmissionEnabled(ctx context.Context, groupID uuid.UUID, enabled bool) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE groups SET member_chore_submission_enabled = $2 WHERE id = $1`, groupID, enabled)
+		`UPDATE groups SET member_chore_submission_enabled = $2 WHERE id = $1 AND deleted_at IS NULL`, groupID, enabled)
 	if err != nil {
 		return fmt.Errorf("failed to set chore submission flag: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SoftDelete archives a group by stamping deleted_at = now() (QA batch 1, Item 1).
+// Idempotent-by-404: the `deleted_at IS NULL` guard means a second call on an
+// already-deleted (or non-existent) group affects zero rows and returns
+// ErrNotFound, which the handler maps to 404 — matching how every read now treats
+// a deleted group as not-found. History rows (ledger/loans/allowances/members) are
+// left intact so the group is recoverable-in-principle at the DB level.
+func (r *GroupRepo) SoftDelete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE groups SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return fmt.Errorf("failed to soft-delete group: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
@@ -114,7 +132,7 @@ func (r *GroupRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Group, e
 	query := `
 		SELECT id, name, admin_user_id, currency, member_chore_submission_enabled, created_at
 		FROM groups
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
@@ -145,7 +163,7 @@ func (r *GroupRepo) ListForUserWithSummary(ctx context.Context, userID uuid.UUID
 			SELECT g.id, g.name, g.admin_user_id, g.currency, g.created_at, gm.role
 			FROM groups g
 			JOIN group_members gm ON gm.group_id = g.id
-			WHERE gm.user_id = $1
+			WHERE gm.user_id = $1 AND g.deleted_at IS NULL
 		),
 		member_counts AS (
 			SELECT group_id, COUNT(*)::int AS member_count

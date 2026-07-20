@@ -85,6 +85,7 @@ func main() {
 			protected.GET("/groups", groupHandler.ListGroups)
 			protected.GET("/groups/:id", groupHandler.GetGroup)
 			protected.PATCH("/groups/:id", groupHandler.UpdateGroup)
+			protected.DELETE("/groups/:id", groupHandler.DeleteGroup)
 			protected.GET("/groups/:id/members", groupHandler.ListMembers)
 			protected.POST("/groups/:id/members", groupHandler.AddMemberByEmail)
 			protected.DELETE("/groups/:id/members/:userId", groupHandler.RemoveMember)

@@ -22,6 +22,7 @@ import type { MemberStatement } from '../../../../src/api';
 import { currencySymbol } from '../../../../src/money';
 import { confirmAsync } from '../../../../src/confirm';
 import { useLeaveGroup } from '../../../../src/hooks/useHygiene';
+import { useDeleteGroup } from '../../../../src/hooks/useGroups';
 import { INVITES_ENABLED } from '../../../../src/flags';
 import { theme } from '../../../../src/theme';
 import {
@@ -74,6 +75,7 @@ export default function GroupOverviewScreen() {
 
   const myLedgerQuery = useLedger(gid, isHead ? undefined : {});
   const leaveMutation = useLeaveGroup(gid);
+  const deleteGroupMutation = useDeleteGroup();
 
   const memberCurrentAllow = currentAllowanceFor(allowancesQuery.data ?? [], currentPeriod());
   const memberUpcomingAllow = upcomingAllowanceFor(allowancesQuery.data ?? [], currentPeriod());
@@ -97,6 +99,23 @@ export default function GroupOverviewScreen() {
       router.replace('/(app)' as never);
     } catch (e) {
       showToast({ tone: 'danger', message: e instanceof Error ? e.message : 'Failed to leave group' });
+    }
+  }
+
+  async function handleDeleteGroup() {
+    const confirmed = await confirmAsync({
+      title: 'Delete group',
+      message: `Delete ${group?.name ?? 'this group'}? It will be removed from everyone's list and no longer appear anywhere in the app. Its history is archived, not permanently erased.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteGroupMutation.mutateAsync(gid);
+      showToast({ tone: 'success', message: 'Group deleted' });
+      router.replace('/(app)' as never);
+    } catch (e) {
+      showToast({ tone: 'danger', message: e instanceof Error ? e.message : 'Failed to delete group' });
     }
   }
 
@@ -273,6 +292,18 @@ export default function GroupOverviewScreen() {
               groupQuery.refetch();
               statementQuery.refetch();
             }}
+            ListFooterComponent={
+              <View style={styles.deleteButtonRow}>
+                <Button
+                  title="Delete group"
+                  variant="danger"
+                  loading={deleteGroupMutation.isPending}
+                  onPress={handleDeleteGroup}
+                  fullWidth
+                  testID="group-delete-button"
+                />
+              </View>
+            }
             contentContainerStyle={[styles.listContent, { paddingBottom: theme.spacing.lg + insets.bottom }]}
           />
         )}
@@ -299,6 +330,7 @@ export default function GroupOverviewScreen() {
           visible={addMemberVisible}
           onClose={() => setAddMemberVisible(false)}
           groupId={gid}
+          currency={currency}
         />
 
         {INVITES_ENABLED && (
@@ -451,6 +483,10 @@ const styles = StyleSheet.create({
   },
   addButtonRow: {
     padding: theme.spacing.lg,
+  },
+  deleteButtonRow: {
+    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
   },
   listContent: {
     paddingBottom: theme.spacing.lg,

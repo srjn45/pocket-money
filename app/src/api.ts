@@ -105,7 +105,9 @@ export const groupsApi = {
 
   getMembers: (id: string) => request<Member[]>(`/groups/${id}/members`),
 
-  addMember: (id: string, data: { email: string; name: string }) =>
+  // base_pay is optional (QA batch 1, Item 4): when present the server seeds the
+  // new member's monthly allowance atomically with the membership.
+  addMember: (id: string, data: { email: string; name: string; base_pay?: Money | null }) =>
     request<Member>(`/groups/${id}/members`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -123,6 +125,9 @@ export const groupsApi = {
   // Serves both "head removes member" and "member leaves" (caller passes own id).
   removeMember: (groupId: string, userId: string) =>
     request<void>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
+
+  // Soft-delete (archive) a group — admin only, 204 on success (QA batch 1, Item 1).
+  delete: (id: string) => request<void>(`/groups/${id}`, { method: 'DELETE' }),
 };
 
 // Chores API
@@ -165,10 +170,10 @@ export const loansApi = {
 
   // user_id: admin creates a pre-approved active loan for that member; omit for a
   // member self-request (openapi CreateLoanRequest already allows user_id).
-  request: (groupId: string, data: { user_id?: string | null; principal: Money; installments: number; note?: string | null }) =>
+  request: (groupId: string, data: { user_id?: string | null; principal: Money; installments: number; note?: string | null; start_current_month?: boolean | null }) =>
     request<Loan>(`/groups/${groupId}/loans`, { method: 'POST', body: JSON.stringify(data) }),
 
-  approve: (loanId: string, data: { principal?: Money | null; installments?: number | null }) =>
+  approve: (loanId: string, data: { principal?: Money | null; installments?: number | null; start_current_month?: boolean | null }) =>
     request<Loan>(`/loans/${loanId}/approve`, { method: 'POST', body: JSON.stringify(data) }),
 
   reject: (loanId: string) =>

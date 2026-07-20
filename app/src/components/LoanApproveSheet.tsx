@@ -35,6 +35,8 @@ export function LoanApproveSheet({ visible, onClose, groupId, currency, loan }: 
   const [installmentsStr, setInstallmentsStr] = useState(initialInstallments);
   const [principalError, setPrincipalError] = useState('');
   const [installmentsError, setInstallmentsError] = useState('');
+  // First-installment month (QA batch 1, Item 5). false = next month (default).
+  const [startCurrentMonth, setStartCurrentMonth] = useState(false);
 
   // Re-prefill when the sheet opens (closed→open edge), matching the AllowanceSheet pattern.
   const prevVisible = useRef(visible);
@@ -44,6 +46,7 @@ export function LoanApproveSheet({ visible, onClose, groupId, currency, loan }: 
       setInstallmentsStr(initialInstallments());
       setPrincipalError('');
       setInstallmentsError('');
+      setStartCurrentMonth(false);
     }
     prevVisible.current = visible;
   }, [visible, initialPrincipal, initialInstallments]);
@@ -80,7 +83,7 @@ export function LoanApproveSheet({ visible, onClose, groupId, currency, loan }: 
 
     if (!loan) return;
     try {
-      await approveLoan.mutateAsync({ loanId: loan.id, principal: { currency, value: principalValue }, installments });
+      await approveLoan.mutateAsync({ loanId: loan.id, principal: { currency, value: principalValue }, installments, start_current_month: startCurrentMonth });
       showToast({ tone: 'success', message: 'Loan approved' });
       handleClose();
     } catch (e) {
@@ -131,6 +134,25 @@ export function LoanApproveSheet({ visible, onClose, groupId, currency, loan }: 
           ≈ {formatMoney(estimateEmi, currency)} / month
         </Text>
       )}
+      <Text style={styles.startLabel}>First installment</Text>
+      <View style={styles.startRow}>
+        <Button
+          title="Next month"
+          variant={startCurrentMonth ? 'secondary' : 'primary'}
+          size="sm"
+          onPress={() => setStartCurrentMonth(false)}
+          style={styles.startBtn}
+          testID="loan-approve-start-next-month"
+        />
+        <Button
+          title="This month"
+          variant={startCurrentMonth ? 'primary' : 'secondary'}
+          size="sm"
+          onPress={() => setStartCurrentMonth(true)}
+          style={styles.startBtn}
+          testID="loan-approve-start-this-month"
+        />
+      </View>
       {loan?.note ? (
         <Text style={styles.noteText}>Note: {loan.note}</Text>
       ) : null}
@@ -147,6 +169,20 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.color.textSecondary,
     marginTop: theme.spacing.sm,
+  },
+  startLabel: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.color.textSecondary,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+  },
+  startRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  startBtn: {
+    flex: 1,
   },
   noteText: {
     fontSize: theme.fontSize.sm,
