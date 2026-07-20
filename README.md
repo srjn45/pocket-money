@@ -9,16 +9,18 @@ A family-oriented chore tracking and pocket money management app.
 
 ## Overview
 
-Pocket Money helps families track chores completed by children and manage their earnings. Parents (heads) can:
-- Create groups for their family
-- Define chores with monetary values
-- Review and approve completed chores
-- Record cash payouts (settlements)
+Pocket Money is family payroll, organized around one monthly question: **"how much do I
+transfer to each person this month, and is it settled?"** The **admin** keeps the books
+for a group — `base + chores + adjustments − loan EMI = monthly payable` — and can:
+- Create groups (each with a permanent currency: EUR / USD / INR)
+- Add people by email (registered users attach; unknown emails become shadow members
+  the admin can bookkeep against immediately)
+- Manage the chores catalog, base amounts, and loans
+- Record real-world payments against each member's monthly statement
 
-Children (members) can:
-- Log completed chores
-- View their earnings balance
-- Track their settlement history
+**Members** get a read-only view of **their own** money — their statement, passbook, and
+loans — and never see other members' amounts. (Member-submitted chores exist but are off
+by default behind a per-group flag.)
 
 ## Project Structure
 
@@ -71,6 +73,10 @@ Then open **http://localhost:8080**, register an account, and create a group.
 - The **web app** is served at `http://localhost:8080`.
 - The **API** is same-origin at `http://localhost:8080/api/v1`.
 - **Health** check at `http://localhost:8080/health`.
+
+**From your phone:** on the same network, open `http://<host-lan-ip>:8080` in the phone's
+browser — the web app and its API are same-origin (`/api/v1`), so no extra config or CORS
+setup is needed. (Find the host IP with `ip addr` / `ipconfig`.)
 
 How it works:
 
@@ -313,7 +319,10 @@ The project uses GitHub Actions for continuous integration. Every push triggers:
 
 1. **Lint**: Runs `golangci-lint` to check code quality
 2. **Test**: Runs unit and integration tests with coverage
-3. **Build**: Builds binary and Docker image
+3. **Build**: Builds the server binary and the single-image root Docker image
+4. **Frontend Web Export**: Runs the Expo web export as a bundle smoke test
+5. **Compose Smoke (single-image e2e)**: Boots postgres + the single image and runs the Playwright suite against it at `http://localhost:8080`
+6. **Backup Verify**: Verifies a database dump restores cleanly into a throwaway db
 
 ### Pipeline Status
 
