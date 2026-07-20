@@ -1,0 +1,85 @@
+name: Build Android APK & publish to Release
+
+# Builds the Android APK with EAS (preview profile) and attaches it to a
+# GitHub Release, so the promo site can link to a stable "latest" URL:
+#   https://github.com/srjn45/pocket-money/releases/latest/download/pocket-money.apk
+#
+# Operator setup (one-time):
+#   - Secret  EXPO_TOKEN    : an Expo access token (expo.dev → Access tokens).
+#   - Variable EAS_API_URL  : the server API base URL baked into the APK, e.g.
+#                             https://money.example.com/api/v1
+#                             (build-time; the APK talks only to this host).
+#
+# Trigger: push a version tag (e.g. v1.0.0), or run manually (workflow_dispatch)
+# from a tag ref, optionally overriding the API URL.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'EXPO_PUBLIC_API_URL to bake into the APK (overrides the EAS_API_URL repo variable)'
+        required: false
+        type: string
+
+permissions:
+  contents: write   # create/update releases and upload the APK asset
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Resolve & bake the API URL
+        run: |
+          API_URL="${{ github.event.inputs.api_url || vars.EAS_API_URL }}"
+          if [ -z "$API_URL" ]; then
+            echo "::error::No API URL. Set the EAS_API_URL repo variable or pass api_url on manual run — otherwise the APK would ship pointing at the eas.json placeholder."
+            exit 1
+          fi
+          echo "Baking EXPO_PUBLIC_API_URL=$API_URL into the preview profile"
+          # eas.json is edited only in this ephemeral checkout — never committed.
+          node -e "const fs=require('fs');const f='eas.json';const j=JSON.parse(fs.readFileSync(f));j.build.preview.env.EXPO_PUBLIC_API_URL=process.env.API_URL;fs.writeFileSync(f,JSON.stringify(j,null,2));" API_URL="$API_URL"
+        env:
+          API_URL: ${{ github.event.inputs.api_url || vars.EAS_API_URL }}
+
+      - name: Build APK (EAS cloud, wait for result)
+        run: |
+          eas build --platform android --profile preview --non-interactive --wait --json > build.json
+          cat build.json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d);const b=Array.isArray(a)?a[0]:a;const url=b.artifacts&&(b.artifacts.applicationArchiveUrl||b.artifacts.buildUrl);if(!url){console.error('No artifact URL in EAS output');process.exit(1);}require('fs').appendFileSync(process.env.GITHUB_ENV,'APK_URL='+url+'\n');})"
+
+      - name: Download the built APK
+        run: curl -fL --retry 3 -o pocket-money.apk "$APK_URL"
+
+      - name: Publish APK to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/pocket-money.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
