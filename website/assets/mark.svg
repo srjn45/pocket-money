@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="96" y="96" width="832" height="832" rx="184" fill="#4F46E5"/>
+  <text x="512" y="512" fill="#FFFFFF" font-family="'DejaVu Sans','Noto Sans',sans-serif"
+        font-weight="700" font-size="620" text-anchor="middle" dominant-baseline="central">&#8377;</text>
+</svg>
