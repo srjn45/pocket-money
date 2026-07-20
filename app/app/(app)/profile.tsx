@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet, Pressable } from 'react-native';
+import Constants from 'expo-constants';
 import { useAuth } from '../../src/auth-context';
 import { Card, Avatar, Button, Sheet, TextField, ScreenContainer, useToast } from '../../src/components';
 import { useChangePassword } from '../../src/hooks/useHygiene';
 import { theme } from '../../src/theme';
+import { getApiBaseUrl, getDefaultApiBaseUrl, setApiBaseUrlOverride } from '../../src/api';
+
+const DEV_TAP_THRESHOLD = 7;
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -15,6 +19,38 @@ export default function ProfileScreen() {
   const [confirmPw, setConfirmPw] = useState('');
 
   const changeMutation = useChangePassword();
+
+  // Hidden dev-only API URL override — tap the version text DEV_TAP_THRESHOLD
+  // times to reveal it. Not gated behind __DEV__: this is meant for testing a
+  // release/preview build against a backend whose LAN address changes between
+  // sessions, not just local development.
+  const [devTapCount, setDevTapCount] = useState(0);
+  const [devSheetVisible, setDevSheetVisible] = useState(false);
+  const [devUrlInput, setDevUrlInput] = useState('');
+
+  function handleVersionTap() {
+    const next = devTapCount + 1;
+    if (next >= DEV_TAP_THRESHOLD) {
+      setDevTapCount(0);
+      setDevUrlInput(getApiBaseUrl());
+      setDevSheetVisible(true);
+    } else {
+      setDevTapCount(next);
+    }
+  }
+
+  async function handleSaveApiUrl() {
+    const trimmed = devUrlInput.trim();
+    await setApiBaseUrlOverride(trimmed || null);
+    showToast({ tone: 'success', message: trimmed ? 'API URL overridden' : 'API URL override cleared' });
+    setDevSheetVisible(false);
+  }
+
+  async function handleClearApiUrl() {
+    await setApiBaseUrlOverride(null);
+    setDevUrlInput(getDefaultApiBaseUrl());
+    showToast({ tone: 'success', message: 'API URL override cleared — using default' });
+  }
 
   // Re-clear fields each time the sheet opens (closed→open reset pattern).
   const prevVisible = useRef(sheetVisible);
@@ -128,6 +164,48 @@ export default function ProfileScreen() {
           style={styles.cancelButton}
         />
       </Sheet>
+
+      {/* Hidden trigger: tap DEV_TAP_THRESHOLD times to reveal the API URL override. */}
+      <Pressable onPress={handleVersionTap} testID="profile-version-tap">
+        <Text style={styles.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+      </Pressable>
+
+      <Sheet visible={devSheetVisible} onClose={() => setDevSheetVisible(false)} title="Developer settings">
+        <Text style={styles.devHint}>
+          Overrides the API base URL on this device only. Useful for pointing a preview/test
+          build at a backend on your LAN. Takes effect immediately — no restart needed.
+        </Text>
+        <TextField
+          label="API base URL"
+          value={devUrlInput}
+          onChangeText={setDevUrlInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={getDefaultApiBaseUrl()}
+          testID="dev-api-url-input"
+        />
+        <Button
+          title="Save"
+          variant="primary"
+          onPress={handleSaveApiUrl}
+          fullWidth
+          testID="dev-api-url-save"
+        />
+        <Button
+          title="Clear override (use default)"
+          variant="secondary"
+          onPress={handleClearApiUrl}
+          fullWidth
+          style={styles.cancelButton}
+        />
+        <Button
+          title="Cancel"
+          variant="ghost"
+          onPress={() => setDevSheetVisible(false)}
+          fullWidth
+          style={styles.cancelButton}
+        />
+      </Sheet>
     </ScreenContainer>
   );
 }
@@ -167,5 +245,17 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     marginTop: theme.spacing.sm,
+  },
+  version: {
+    fontSize: theme.fontSize.sm,
+    color: theme.color.textSecondary,
+    textAlign: 'center',
+    marginTop: theme.spacing.xl,
+    padding: theme.spacing.md,
+  },
+  devHint: {
+    fontSize: theme.fontSize.sm,
+    color: theme.color.textSecondary,
+    marginBottom: theme.spacing.md,
   },
 });
