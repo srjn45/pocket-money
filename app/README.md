@@ -43,6 +43,10 @@ npm run android
 npm run web
 ```
 
+> To produce an installable **Android APK** (or a store AAB), see the root
+> [**Native App (Android APK)**](../README.md#native-app-android-apk) guide and the build
+> config in [`eas.json`](./eas.json).
+
 ## Deep Linking
 
 The app supports deep links for invite tokens:
