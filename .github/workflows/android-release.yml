@@ -1,8 +1,15 @@
-name: Build Android APK & publish to Release
+name: Submit Android build (EAS, async)
 
-# Builds the Android APK with EAS (preview profile) and attaches it to a
-# GitHub Release, so the promo site can link to a stable "latest" URL:
+# Submits an Android APK build to EAS (preview profile) and returns immediately
+# (--no-wait). A separate scheduled workflow, "Publish finished APK to Release"
+# (android-publish.yml), attaches the finished APK to the matching GitHub Release
+# (v<appVersion>) so the promo site can link to a stable "latest" URL:
 #   https://github.com/srjn45/pocket-money/releases/latest/download/pocket-money.apk
+#
+# Why async: EAS free-tier builds can sit in a shared queue for HOURS. Blocking a
+# runner on `--wait` meant the job hit its timeout and was cancelled before the
+# APK could be published (this bit v1.0.2 and v1.0.3). Submitting async keeps this
+# job ~2 min and moves publishing to the poll-based android-publish.yml.
 #
 # Operator setup (one-time):
 #   - Secret  EXPO_TOKEN    : an Expo access token (expo.dev → Access tokens).
@@ -23,7 +30,7 @@ on:
         type: string
 
 permissions:
-  contents: write   # create/update releases and upload the APK asset
+  contents: read   # only submits the build; android-publish.yml owns releases
 
 concurrency:
   group: android-release-${{ github.ref }}
@@ -32,10 +39,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # EAS free-tier builds queue before they start, so this covers queue + build
-    # time, not just build time. 60 min was too tight — v1.0.2 (run 29921516550)
-    # was cancelled at the ceiling while the EAS build was still queued.
-    timeout-minutes: 120
+    # Async submit only (npm ci + eas setup + project upload). No queue waiting.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: app
@@ -72,17 +77,8 @@ jobs:
         env:
           API_URL: ${{ github.event.inputs.api_url || vars.EAS_API_URL }}
 
-      - name: Build APK (EAS cloud, wait for result)
+      - name: Submit EAS build (async, no wait)
         run: |
-          eas build --platform android --profile preview --non-interactive --wait --json > build.json
-          cat build.json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d);const b=Array.isArray(a)?a[0]:a;const url=b.artifacts&&(b.artifacts.applicationArchiveUrl||b.artifacts.buildUrl);if(!url){console.error('No artifact URL in EAS output');process.exit(1);}require('fs').appendFileSync(process.env.GITHUB_ENV,'APK_URL='+url+'\n');})"
-
-      - name: Download the built APK
-        run: curl -fL --retry 3 -o pocket-money.apk "$APK_URL"
-
-      - name: Publish APK to the GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: app/pocket-money.apk
-          fail_on_unmatched_files: true
-          generate_release_notes: true
+          eas build --platform android --profile preview --non-interactive --no-wait --json > build.json
+          node -e "const a=require('./build.json');const b=Array.isArray(a)?a[0]:a;console.log('Submitted EAS build',b.id||'(unknown id)');"
+          echo "Build submitted. 'Publish finished APK to Release' (android-publish.yml) will attach the APK to ${{ github.ref_name }} once it finishes."
