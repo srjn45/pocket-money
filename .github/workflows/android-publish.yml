@@ -42,6 +42,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # `eas build:list` evaluates the Expo config, which resolves the config
+      # plugins (expo-router, expo-build-properties, datetimepicker) from
+      # node_modules — so the project's deps must be present or the command dies
+      # with a generic "command failed". Cache node_modules and only reinstall
+      # when the lockfile changes, so the 15-min cron stays cheap.
+      - name: Cache node_modules
+        id: node_modules
+        uses: actions/cache@v4
+        with:
+          path: app/node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node_modules.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Setup EAS
         uses: expo/expo-github-action@v8
@@ -53,7 +71,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          EXPO_DEBUG: '1'          # surface the real eas error (else --json hides it)
         run: |
           set -euo pipefail
 
