@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -21,6 +22,7 @@ import type { Notification } from '../../src/api';
 
 export default function NotificationsScreen() {
   const toast = useToast();
+  const insets = useSafeAreaInsets(); // native: status-bar/cutout inset; web: 0
   const listQuery = useNotifications();
   const unread = useUnreadCount();
   const markRead = useMarkNotificationRead();
@@ -81,7 +83,7 @@ export default function NotificationsScreen() {
 
   return (
     <ScreenContainer style={styles.screen} testID="notifications-root">
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
         <Pressable
           testID="notifications-back"
           onPress={goBack}

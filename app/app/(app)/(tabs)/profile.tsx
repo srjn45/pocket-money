@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Text, StyleSheet, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { useAuth } from '../../../src/auth-context';
 import { Card, Avatar, Button, Sheet, TextField, ScreenContainer, useToast } from '../../../src/components';
@@ -11,6 +12,7 @@ const DEV_TAP_THRESHOLD = 7;
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets(); // native: status-bar/cutout inset; web: 0
   const { show: showToast } = useToast();
 
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -98,7 +100,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScreenContainer style={styles.container} testID="profile-root">
+    <ScreenContainer style={[styles.container, { paddingTop: insets.top + theme.spacing.lg }]} testID="profile-root">
       {/* In-body title — the one meaningful header now that the tab header is off. */}
       <Text style={styles.title}>Profile</Text>
       <Card style={styles.profileCard}>

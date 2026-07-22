@@ -5,6 +5,7 @@ export { AmountText } from './AmountText';
 export { StatusBadge } from './StatusBadge';
 export { Sheet } from './Sheet';
 export { TextField } from './TextField';
+export { DateField } from './DateField';
 export { MonthHeader } from './MonthHeader';
 export { ToastProvider, useToast } from './Toast';
 export { EmptyState } from './EmptyState';

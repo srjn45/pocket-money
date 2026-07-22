@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { View, Text, SectionList, StyleSheet, RefreshControl } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/auth-context';
@@ -26,6 +27,7 @@ import type { GroupSummary } from '../../../src/api';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets(); // native: status-bar/cutout inset; web: 0
   const qc = useQueryClient();
   const toast = useToast();
   const [joinVisible, setJoinVisible] = useState(false);
@@ -131,7 +133,7 @@ export default function DashboardScreen() {
 
   return (
     <ScreenContainer style={styles.container} testID="dashboard-root">
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.lg }]}>
         <Text style={styles.welcome}>Welcome, {user?.name || 'User'}!</Text>
         <HeaderBell />
       </View>
