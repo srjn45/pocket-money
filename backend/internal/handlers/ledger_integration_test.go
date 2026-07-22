@@ -322,6 +322,50 @@ func TestLedger_HeadOnlySettlementAdjustment(t *testing.T) {
 	assert.Equal(t, chore.Amount, created.Amount.Value, "custom amount must be ignored for chore entries")
 }
 
+// --- occurred_at back-dating (optional created_at override) ---
+
+func TestLedger_OccurredAtBackdate(t *testing.T) {
+	env := setupLedgerTestEnv(t)
+	defer env.cleanup()
+
+	head, member, group, _ := env.seedGroupWithMembers(t, "occ")
+	path := fmt.Sprintf("/groups/%s/ledger", group.ID)
+
+	// Back-dated settlement → created_at reflects occurred_at, not now().
+	backdate := "2025-03-15T12:00:00Z"
+	w := doRequest(env.router, http.MethodPost, path, map[string]interface{}{
+		"entry_type":  "settlement",
+		"user_id":     member.ID,
+		"amount":      inr(300),
+		"occurred_at": backdate,
+	}, bearerToken(t, head.ID))
+	require.Equal(t, http.StatusCreated, w.Code)
+	var created handlers.LedgerResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	assert.Equal(t, "2025-03-15", created.CreatedAt.UTC().Format("2006-01-02"))
+
+	// Future occurred_at → 400.
+	future := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{
+		"entry_type":  "adjustment",
+		"user_id":     member.ID,
+		"amount":      inr(100),
+		"direction":   "credit",
+		"occurred_at": future,
+	}, bearerToken(t, head.ID))
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// Omitted occurred_at → server stamps ~now.
+	w = doRequest(env.router, http.MethodPost, path, map[string]interface{}{
+		"entry_type": "settlement",
+		"user_id":    member.ID,
+		"amount":     inr(150),
+	}, bearerToken(t, head.ID))
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	assert.WithinDuration(t, time.Now(), created.CreatedAt, time.Minute)
+}
+
 // --- Test #4: decided_by recorded on approve/reject ---
 
 func TestLedger_DecidedByOnApproveReject(t *testing.T) {

@@ -69,28 +69,47 @@ const selectLedgerColumns = `
 	id, group_id, user_id, chore_id, amount, status, entry_type, direction,
 	loan_id, period, note, created_by_user_id, decided_by, decided_at, created_at`
 
-// CreateTx inserts a new ledger entry on the given Querier (pool or tx).
+// createTx is the shared insert. occurredAt overrides the entry's created_at
+// (its effective date, used for month grouping); nil falls back to the DB now().
 // period and loan_id are always NULL on the API-create path.
-func (r *LedgerRepo) CreateTx(ctx context.Context, q Querier, groupID, userID uuid.UUID,
+func (r *LedgerRepo) createTx(ctx context.Context, q Querier, groupID, userID uuid.UUID,
 	choreID *uuid.UUID, createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
 	direction models.LedgerDirection, status models.LedgerStatus, note *string,
-	decidedBy *uuid.UUID, decidedAt *time.Time) (*models.LedgerEntry, error) {
+	decidedBy *uuid.UUID, decidedAt *time.Time, occurredAt *time.Time) (*models.LedgerEntry, error) {
 
 	query := `
 		INSERT INTO ledger_entries
 			(id, group_id, user_id, chore_id, amount, status, entry_type, direction, note,
-			 created_by_user_id, decided_by, decided_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			 created_by_user_id, decided_by, decided_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, now()))
 		RETURNING ` + selectLedgerColumns
 
 	entry, err := scanEntry(q.QueryRow(ctx, query,
 		uuid.New(), groupID, userID, choreID, amount, status, entryType, direction, note,
-		createdBy, decidedBy, decidedAt,
+		createdBy, decidedBy, decidedAt, occurredAt,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ledger entry: %w", err)
 	}
 	return entry, nil
+}
+
+// CreateTx inserts a new ledger entry on the given Querier (pool or tx), dated now().
+func (r *LedgerRepo) CreateTx(ctx context.Context, q Querier, groupID, userID uuid.UUID,
+	choreID *uuid.UUID, createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
+	direction models.LedgerDirection, status models.LedgerStatus, note *string,
+	decidedBy *uuid.UUID, decidedAt *time.Time) (*models.LedgerEntry, error) {
+	return r.createTx(ctx, q, groupID, userID, choreID, createdBy, amount, entryType,
+		direction, status, note, decidedBy, decidedAt, nil)
+}
+
+// CreateAtTx is CreateTx with an explicit occurred date (created_at override).
+func (r *LedgerRepo) CreateAtTx(ctx context.Context, q Querier, groupID, userID uuid.UUID,
+	choreID *uuid.UUID, createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
+	direction models.LedgerDirection, status models.LedgerStatus, note *string,
+	decidedBy *uuid.UUID, decidedAt *time.Time, occurredAt *time.Time) (*models.LedgerEntry, error) {
+	return r.createTx(ctx, q, groupID, userID, choreID, createdBy, amount, entryType,
+		direction, status, note, decidedBy, decidedAt, occurredAt)
 }
 
 // Create inserts a new ledger entry on the pool (non-transactional convenience wrapper).
@@ -99,8 +118,17 @@ func (r *LedgerRepo) Create(ctx context.Context, groupID, userID uuid.UUID, chor
 	createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
 	direction models.LedgerDirection, status models.LedgerStatus, note *string,
 	decidedBy *uuid.UUID, decidedAt *time.Time) (*models.LedgerEntry, error) {
-	return r.CreateTx(ctx, r.pool, groupID, userID, choreID, createdBy, amount, entryType,
-		direction, status, note, decidedBy, decidedAt)
+	return r.createTx(ctx, r.pool, groupID, userID, choreID, createdBy, amount, entryType,
+		direction, status, note, decidedBy, decidedAt, nil)
+}
+
+// CreateAt is Create with an explicit occurred date (created_at override).
+func (r *LedgerRepo) CreateAt(ctx context.Context, groupID, userID uuid.UUID, choreID *uuid.UUID,
+	createdBy uuid.UUID, amount int64, entryType models.LedgerEntryType,
+	direction models.LedgerDirection, status models.LedgerStatus, note *string,
+	decidedBy *uuid.UUID, decidedAt *time.Time, occurredAt *time.Time) (*models.LedgerEntry, error) {
+	return r.createTx(ctx, r.pool, groupID, userID, choreID, createdBy, amount, entryType,
+		direction, status, note, decidedBy, decidedAt, occurredAt)
 }
 
 // GetByID retrieves a ledger entry by ID

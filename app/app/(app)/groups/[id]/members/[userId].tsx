@@ -172,76 +172,95 @@ export default function MemberDetailScreen() {
   const balValue = memberBalance?.balance.value ?? 0;
   const balCurrency = memberBalance?.balance.currency ?? currency;
 
+  // Header + footer are fed into LedgerList so the WHOLE screen scrolls as one
+  // list, instead of a fixed header sitting above a separately-scrolling ledger.
+  const listHeader = (
+    <View>
+      {/* Balance header */}
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryLabel}>{name ? `${name}'s balance` : 'Balance'}</Text>
+        {viewedMember?.status === 'shadow' && (
+          <View testID="member-detail-shadow-badge" style={styles.shadowBadge}>
+            <StatusBadge label="Not registered yet" tone="neutral" />
+          </View>
+        )}
+        <AmountText
+          minorUnits={balValue}
+          currency={balCurrency}
+          variant={balValue < 0 ? 'debit' : 'credit'}
+          size="xl"
+        />
+        <Text style={styles.summaryHint}>
+          {balValue < 0 ? 'owes you' : 'owed'}
+        </Text>
+        {!allowancesQuery.isError && (
+          <AllowanceSummary
+            current={currentAllow}
+            upcoming={upcomingAllow}
+            currency={currency}
+            onEdit={() => setAllowanceSheetVisible(true)}
+          />
+        )}
+      </View>
+
+      <View style={styles.addButtonRow}>
+        <Button
+          title="Add entry"
+          variant="primary"
+          icon="add"
+          onPress={() => setSheetVisible(true)}
+          fullWidth
+          testID="member-add-entry-button"
+        />
+      </View>
+
+      {/* Base-amount (pocket money) history — hidden when none or on error */}
+      {!allowancesQuery.isError && (
+        <PassbookBaseHistory allowances={memberAllowances} currency={currency} />
+      )}
+
+      {/* Loans section — read-only, hidden when none or on error */}
+      {hasLoans && !loansQuery.isError && (
+        <View style={styles.loansSection}>
+          <View style={styles.loansSectionHeader}>
+            <Text style={styles.sectionTitle}>Loans</Text>
+            <Button
+              title="Manage in Loans tab"
+              variant="ghost"
+              size="sm"
+              onPress={() => router.push(`/(app)/groups/${id}/loans` as never)}
+            />
+          </View>
+          {[...activeLoans, ...requestedLoans].map(loan => (
+            <LoanCard
+              key={loan.id}
+              loan={loan}
+              currency={currency}
+              onPress={() => router.push(`/(app)/groups/${id}/loans/${loan.id}` as never)}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
+  const listFooter = canRemove ? (
+    <View style={styles.removeButtonRow}>
+      <Button
+        title="Remove member"
+        variant="danger"
+        loading={removeMutation.isPending}
+        onPress={handleRemoveMember}
+        fullWidth
+        testID="member-remove-button"
+      />
+    </View>
+  ) : null;
+
   return (
     <>
       <Stack.Screen options={{ title: name ? `${name}'s ledger` : 'Ledger' }} />
       <ScreenContainer style={styles.screen} testID="member-detail-root">
-        {/* Balance header */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>{name ? `${name}'s balance` : 'Balance'}</Text>
-          {viewedMember?.status === 'shadow' && (
-            <View testID="member-detail-shadow-badge" style={styles.shadowBadge}>
-              <StatusBadge label="Not registered yet" tone="neutral" />
-            </View>
-          )}
-          <AmountText
-            minorUnits={balValue}
-            currency={balCurrency}
-            variant={balValue < 0 ? 'debit' : 'credit'}
-            size="xl"
-          />
-          <Text style={styles.summaryHint}>
-            {balValue < 0 ? 'owes you' : 'owed'}
-          </Text>
-          {!allowancesQuery.isError && (
-            <AllowanceSummary
-              current={currentAllow}
-              upcoming={upcomingAllow}
-              currency={currency}
-              onEdit={() => setAllowanceSheetVisible(true)}
-            />
-          )}
-        </View>
-
-        <View style={styles.addButtonRow}>
-          <Button
-            title="Add entry"
-            variant="primary"
-            icon="add"
-            onPress={() => setSheetVisible(true)}
-            fullWidth
-            testID="member-add-entry-button"
-          />
-        </View>
-
-        {/* Base-amount (pocket money) history — hidden when none or on error */}
-        {!allowancesQuery.isError && (
-          <PassbookBaseHistory allowances={memberAllowances} currency={currency} />
-        )}
-
-        {/* Loans section — read-only, hidden when none or on error */}
-        {hasLoans && !loansQuery.isError && (
-          <View style={styles.loansSection}>
-            <View style={styles.loansSectionHeader}>
-              <Text style={styles.sectionTitle}>Loans</Text>
-              <Button
-                title="Manage in Loans tab"
-                variant="ghost"
-                size="sm"
-                onPress={() => router.push(`/(app)/groups/${id}/loans` as never)}
-              />
-            </View>
-            {[...activeLoans, ...requestedLoans].map(loan => (
-              <LoanCard
-                key={loan.id}
-                loan={loan}
-                currency={currency}
-                onPress={() => router.push(`/(app)/groups/${id}/loans/${loan.id}` as never)}
-              />
-            ))}
-          </View>
-        )}
-
         <LedgerList
           entries={entries}
           chores={choresQuery.data ?? []}
@@ -266,6 +285,9 @@ export default function MemberDetailScreen() {
           }}
           emptyTitle="No entries yet"
           emptySubtitle="Add a chore, payment, or adjustment"
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
+          style={styles.list}
         />
 
         <AddEntrySheet
@@ -300,19 +322,6 @@ export default function MemberDetailScreen() {
           memberName={name}
           current={currentAllow}
         />
-
-        {canRemove && (
-          <View style={styles.removeButtonRow}>
-            <Button
-              title="Remove member"
-              variant="danger"
-              loading={removeMutation.isPending}
-              onPress={handleRemoveMember}
-              fullWidth
-              testID="member-remove-button"
-            />
-          </View>
-        )}
       </ScreenContainer>
     </>
   );
@@ -322,6 +331,9 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.color.background,
+  },
+  list: {
+    flex: 1,
   },
   centered: {
     flex: 1,

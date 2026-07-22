@@ -33,6 +33,22 @@ export interface AddEntrySheetProps {
 type EntryKind = 'chore' | 'settlement' | 'adjustment' | 'loan';
 type Direction = 'credit' | 'debit';
 
+// Optional back-date for an entry. Empty → undefined (server stamps now()).
+// A valid 'YYYY-MM-DD' becomes a noon-UTC RFC3339 timestamp (noon avoids day/
+// month drift when the server buckets created_at into a month). Returns an
+// `error` string for malformed / rolled-over (e.g. 2026-02-31) / future dates.
+function parseOccurredAt(input: string): { value?: string; error?: string } {
+  const t = input.trim();
+  if (!t) return {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return { error: 'Date must be YYYY-MM-DD.' };
+  const d = new Date(`${t}T12:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t) {
+    return { error: 'Enter a valid date (YYYY-MM-DD).' };
+  }
+  if (d.getTime() > Date.now() + 60_000) return { error: 'Date cannot be in the future.' };
+  return { value: d.toISOString() };
+}
+
 export function AddEntrySheet({
   visible,
   onClose,
@@ -62,6 +78,8 @@ export function AddEntrySheet({
   const [amountStr, setAmountStr] = useState('');
   const [direction, setDirection] = useState<Direction>('credit');
   const [note, setNote] = useState('');
+  // Optional effective date (add-mode only; edit keeps created_at immutable).
+  const [dateStr, setDateStr] = useState('');
   const [installmentsStr, setInstallmentsStr] = useState('');
   // Loan first-installment month (QA batch 1, Item 5). false = next month (default).
   const [startCurrentMonth, setStartCurrentMonth] = useState(false);
@@ -73,6 +91,7 @@ export function AddEntrySheet({
     setAmountStr('');
     setDirection('credit');
     setNote('');
+    setDateStr('');
     setInstallmentsStr('');
     setStartCurrentMonth(false);
   }
@@ -130,6 +149,11 @@ export function AddEntrySheet({
     if (kind === 'loan' && parsedLoanInstallments === null) {
       return 'Enter a whole number of months (e.g. 6).';
     }
+    // Optional back-date applies to ledger rows (not the loan entity).
+    if (kind !== 'loan') {
+      const { error } = parseOccurredAt(dateStr);
+      if (error) return error;
+    }
     return null;
   }
 
@@ -160,11 +184,15 @@ export function AddEntrySheet({
         return;
       }
 
+      // Optional back-date (validated above); undefined → server stamps now().
+      const occurred_at = parseOccurredAt(dateStr).value;
+
       if (kind === 'chore') {
         await createEntry.mutateAsync({
           entry_type: 'chore',
           user_id: mode === 'head' ? userId : undefined,
           chore_id: selectedChoreId,
+          occurred_at,
         });
         showToast({ message: 'Entry added', tone: 'success' });
       } else if (kind === 'settlement') {
@@ -174,6 +202,7 @@ export function AddEntrySheet({
           user_id: userId,
           amount: { currency, value },
           note: note || undefined,
+          occurred_at,
         });
         showToast({ message: 'Entry added', tone: 'success' });
       } else if (kind === 'adjustment') {
@@ -184,6 +213,7 @@ export function AddEntrySheet({
           amount: { currency, value },
           direction,
           note: note || undefined,
+          occurred_at,
         });
         showToast({ message: 'Entry added', tone: 'success' });
       } else {
@@ -249,6 +279,8 @@ export function AddEntrySheet({
             <Picker<EntryKind>
               selectedValue={kind}
               onValueChange={setKind}
+              style={styles.picker}
+              dropdownIconColor={theme.color.textSecondary}
               testID="entry-type-picker"
             >
               <Picker.Item label="Chore" value="chore" />
@@ -267,6 +299,8 @@ export function AddEntrySheet({
             <Picker<string>
               selectedValue={selectedMemberId}
               onValueChange={setSelectedMemberId}
+              style={styles.picker}
+              dropdownIconColor={theme.color.textSecondary}
             >
               {members.filter(m => m.role !== 'admin').map(m => (
                 <Picker.Item key={m.user_id} label={m.name} value={m.user_id} />
@@ -286,6 +320,8 @@ export function AddEntrySheet({
               <Picker<string>
                 selectedValue={selectedChoreId}
                 onValueChange={setSelectedChoreId}
+                style={styles.picker}
+                dropdownIconColor={theme.color.textSecondary}
                 testID="entry-chore-picker"
               >
                 {nonSystemChores.map(c => (
@@ -365,6 +401,8 @@ export function AddEntrySheet({
             <Picker<Direction>
               selectedValue={direction}
               onValueChange={setDirection}
+              style={styles.picker}
+              dropdownIconColor={theme.color.textSecondary}
               testID="entry-direction-picker"
             >
               <Picker.Item label="Add to balance (credit)" value="credit" />
@@ -372,6 +410,18 @@ export function AddEntrySheet({
             </Picker>
           </View>
         </>
+      )}
+
+      {!isEdit && kind !== 'loan' && (
+        <TextField
+          label="Date (optional)"
+          value={dateStr}
+          onChangeText={setDateStr}
+          placeholder="YYYY-MM-DD — defaults to today"
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="entry-date"
+        />
       )}
 
       {showNote && (
@@ -399,6 +449,12 @@ const styles = StyleSheet.create({
     borderColor: theme.color.border,
     borderRadius: 8,
     marginBottom: 4,
+  },
+  // Android renders the collapsed selected-value text in the Picker's own text
+  // color, which defaults to an (often invisible) system color in a release
+  // build — force it to the theme text color so the selection is readable.
+  picker: {
+    color: theme.color.text,
   },
   hint: {
     fontSize: 13,

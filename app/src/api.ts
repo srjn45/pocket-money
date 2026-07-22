@@ -235,6 +235,8 @@ export const ledgerApi = {
     amount?: Money | null;
     direction?: 'credit' | 'debit';
     note?: string;
+    /** RFC3339 effective date (created_at) override; omit for server now(). */
+    occurred_at?: string;
   }) =>
     request<LedgerEntry>(`/groups/${groupId}/ledger`, { method: 'POST', body: JSON.stringify(data) }),
 

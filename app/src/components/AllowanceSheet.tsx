@@ -142,6 +142,8 @@ export function AllowanceSheet({
         <Picker<string>
           selectedValue={effectiveMonth}
           onValueChange={setEffectiveMonth}
+          style={styles.picker}
+          dropdownIconColor={theme.color.textSecondary}
         >
           <Picker.Item label="This month" value={thisPeriod} />
           <Picker.Item label={`Next month (${humanMonth(nextP)})`} value={nextP} />
@@ -170,6 +172,10 @@ const styles = StyleSheet.create({
     color: theme.color.textSecondary,
     marginBottom: theme.spacing.xs,
     marginTop: theme.spacing.md,
+  },
+  // Force readable selected-value text on Android (see AddEntrySheet.picker).
+  picker: {
+    color: theme.color.text,
   },
   pickerWrap: {
     borderWidth: 1,
