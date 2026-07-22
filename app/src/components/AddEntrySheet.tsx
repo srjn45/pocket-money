@@ -9,6 +9,7 @@ import { useCreateLoan } from '../hooks/useLoans';
 import { Sheet } from './Sheet';
 import { Button } from './Button';
 import { TextField } from './TextField';
+import { DateField } from './DateField';
 import { useToast } from './Toast';
 import { AmountText } from './AmountText';
 
@@ -413,13 +414,12 @@ export function AddEntrySheet({
       )}
 
       {!isEdit && kind !== 'loan' && (
-        <TextField
+        <DateField
           label="Date (optional)"
           value={dateStr}
-          onChangeText={setDateStr}
-          placeholder="YYYY-MM-DD — defaults to today"
-          autoCapitalize="none"
-          autoCorrect={false}
+          onChange={setDateStr}
+          placeholder="Defaults to today"
+          maximumDate={new Date()}
           testID="entry-date"
         />
       )}
