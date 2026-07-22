@@ -53,13 +53,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          EXPO_DEBUG: '1'          # surface the real eas error (else --json hides it)
         run: |
           set -euo pipefail
 
           # Newest finished Android builds. Scan a few so a brief race (or a missed
-          # cron tick) still gets backfilled rather than stranded.
-          eas build:list --platform android --status finished --limit 5 \
-            --json --non-interactive > builds.json
+          # cron tick) still gets backfilled rather than stranded. Retry the EAS
+          # call so a transient API blip doesn't fail the whole run; stderr is
+          # captured and echoed so real errors are visible in the log.
+          ok=0
+          for attempt in 1 2 3; do
+            if eas build:list --platform android --status finished --limit 5 \
+                 --json --non-interactive > builds.json 2> eas.err; then
+              ok=1; break
+            fi
+            echo "::warning::eas build:list attempt $attempt failed:"
+            sed 's/^/    /' eas.err || true
+            sleep 10
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::eas build:list failed after 3 attempts (see stderr above). Next cron will retry."
+            exit 1
+          fi
 
           count=$(node -e "console.log(require('./builds.json').length)")
           echo "Scanning $count finished build(s)."
