@@ -1,0 +1,105 @@
+name: Publish finished APK to Release
+
+# EAS Android builds are submitted asynchronously by android-release.yml
+# (--no-wait), because the free-tier queue can be hours long and blocking a runner
+# on --wait made release jobs time out (v1.0.2, v1.0.3). This scheduled job closes
+# the loop: it polls EAS for recently-finished builds and attaches each build's APK
+# to the matching GitHub Release, named v<appVersion> (our tag convention).
+#
+# Idempotent by design — a build is published only when ALL of:
+#   - it has an appVersion and an artifact URL,
+#   - a git tag v<appVersion> actually exists (so non-release builds are ignored),
+#   - the release doesn't already carry pocket-money.apk.
+# So the cron can run forever with nothing to do, and a manual re-run is safe.
+#
+# Setup: reuses the EXPO_TOKEN secret already configured for android-release.yml.
+# No new secrets. Publish lands within ~15 min of a build finishing.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # every 15 min; skips fast when nothing is pending
+  workflow_dispatch:          # manual "publish now" after a build finishes
+
+permissions:
+  contents: write             # create releases + upload the APK asset
+
+concurrency:
+  group: android-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish any finished-but-unpublished builds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Newest finished Android builds. Scan a few so a brief race (or a missed
+          # cron tick) still gets backfilled rather than stranded.
+          eas build:list --platform android --status finished --limit 5 \
+            --json --non-interactive > builds.json
+
+          count=$(node -e "console.log(require('./builds.json').length)")
+          echo "Scanning $count finished build(s)."
+          published=0
+
+          for i in $(seq 0 $((count - 1))); do
+            # appVersion, artifact URL, id — one line, space-separated.
+            line=$(node -e "
+              const b = require('./builds.json')[$i];
+              const url = (b.artifacts && (b.artifacts.applicationArchiveUrl || b.artifacts.buildUrl)) || '';
+              console.log([b.appVersion || '', url, b.id || ''].join(' '));
+            ")
+            VER=$(echo "$line" | cut -d' ' -f1)
+            URL=$(echo "$line" | cut -d' ' -f2)
+            ID=$(echo "$line" | cut -d' ' -f3)
+
+            if [ -z "$VER" ] || [ -z "$URL" ]; then
+              echo "build $ID: missing appVersion or artifact, skip"; continue
+            fi
+            TAG="v$VER"
+
+            # Only publish builds that map to a real release tag.
+            if ! gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+              echo "$TAG: no such tag — skip (non-release build $ID)"; continue
+            fi
+
+            # Idempotent: already-attached APK means nothing to do.
+            if gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null \
+                | grep -qx 'pocket-money.apk'; then
+              echo "$TAG: already has pocket-money.apk — skip"; continue
+            fi
+
+            echo "$TAG: attaching APK from build $ID"
+            curl -fL --retry 3 -o pocket-money.apk "$URL"
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" pocket-money.apk --clobber
+            else
+              gh release create "$TAG" pocket-money.apk --title "$TAG" --generate-notes
+            fi
+            published=$((published + 1))
+          done
+
+          echo "Done. Published $published release(s) this run."
