@@ -1,4 +1,6 @@
-import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
+import type { ReactElement } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { theme } from '../theme';
 import type { LedgerEntry, Chore, Member, Loan, CurrencyCode } from '../api';
 import { groupEntriesByMonth, type MonthGroup } from '../ledger-format';
@@ -29,6 +31,16 @@ export interface LedgerListProps {
   onDeleteEntry?: (entry: LedgerEntry) => void;
   /** Entry ids that were edited this session (in-memory, §4.3). */
   editedIds?: Set<string>;
+  /**
+   * Optional content rendered above/below the entries and scrolled together
+   * with the list — lets a screen make its whole body scrollable through this
+   * single list (e.g. the member ledger header + remove-member footer) instead
+   * of stacking a fixed header over a separately-scrolling list.
+   */
+  ListHeaderComponent?: ReactElement | null;
+  ListFooterComponent?: ReactElement | null;
+  /** Style for the list container (e.g. flex:1 to fill the screen). */
+  style?: StyleProp<ViewStyle>;
 }
 
 export function LedgerList({
@@ -49,23 +61,44 @@ export function LedgerList({
   onEditEntry,
   onDeleteEntry,
   editedIds,
+  ListHeaderComponent,
+  ListFooterComponent,
+  style,
 }: LedgerListProps) {
   const sections = groupEntriesByMonth(entries);
 
+  const emptyState = (
+    <EmptyState icon="wallet-outline" title={emptyTitle} subtitle={emptySubtitle} />
+  );
+
   if (sections.length === 0) {
+    // With no header/footer, keep the bare centered empty state (other callers).
+    // With them, scroll header + empty + footer together so the screen still scrolls.
+    if (!ListHeaderComponent && !ListFooterComponent) return emptyState;
     return (
-      <EmptyState
-        icon="wallet-outline"
-        title={emptyTitle}
-        subtitle={emptySubtitle}
-      />
+      <ScrollView
+        style={style}
+        contentContainerStyle={styles.emptyScroll}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          ) : undefined
+        }
+      >
+        {ListHeaderComponent}
+        {emptyState}
+        {ListFooterComponent}
+      </ScrollView>
     );
   }
 
   return (
     <SectionList<LedgerEntry, MonthGroup>
+      style={style}
       sections={sections}
       keyExtractor={(item) => item.id}
+      ListHeaderComponent={ListHeaderComponent}
+      ListFooterComponent={ListFooterComponent}
       renderItem={({ item }) => (
         <LedgerRow
           entry={item}
@@ -105,5 +138,8 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: theme.color.border,
+  },
+  emptyScroll: {
+    flexGrow: 1,
   },
 });

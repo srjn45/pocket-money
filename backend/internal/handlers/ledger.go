@@ -57,6 +57,9 @@ type CreateLedgerRequest struct {
 	Amount    *models.Money           `json:"amount"`    // required (value>=1) iff settlement/adjustment; currency must match group
 	Direction *models.LedgerDirection `json:"direction"` // required iff entry_type=adjustment
 	Note      *string                 `json:"note"`
+	// OccurredAt overrides the entry's effective date (created_at). Optional;
+	// omitted/null → server stamps now(). Must not be in the future.
+	OccurredAt *time.Time `json:"occurred_at"`
 }
 
 // LedgerResponse represents a ledger entry in API responses
@@ -293,6 +296,12 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		return
 	}
 
+	// A back-dated entry may not be in the future (small skew tolerated).
+	if req.OccurredAt != nil && req.OccurredAt.After(time.Now().Add(time.Minute)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "occurred_at cannot be in the future"})
+		return
+	}
+
 	// If any amount is supplied, its currency must match the group's — even for
 	// chore entries where the value itself is ignored (§4c).
 	if req.Amount != nil && !checkMoneyCurrency(c, *req.Amount, currency) {
@@ -448,9 +457,9 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 		}
 		defer tx.Rollback(ctx) //nolint:errcheck
 
-		entry, err = h.ledgerRepo.CreateTx(ctx, tx, groupID, targetUserID, choreID,
+		entry, err = h.ledgerRepo.CreateAtTx(ctx, tx, groupID, targetUserID, choreID,
 			userID, amount, req.EntryType, direction, status,
-			req.Note, decidedBy, decidedAt,
+			req.Note, decidedBy, decidedAt, req.OccurredAt,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ledger entry"})
@@ -482,10 +491,10 @@ func (h *LedgerHandler) CreateLedger(c *gin.Context) {
 	} else {
 		// Chore / adjustment: non-transactional (no notification for these types).
 		var err error
-		entry, err = h.ledgerRepo.Create(
+		entry, err = h.ledgerRepo.CreateAt(
 			c.Request.Context(), groupID, targetUserID, choreID,
 			userID, amount, req.EntryType, direction, status,
-			req.Note, decidedBy, decidedAt,
+			req.Note, decidedBy, decidedAt, req.OccurredAt,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ledger entry"})
