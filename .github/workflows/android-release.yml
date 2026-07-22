@@ -32,7 +32,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # EAS free-tier builds queue before they start, so this covers queue + build
+    # time, not just build time. 60 min was too tight — v1.0.2 (run 29921516550)
+    # was cancelled at the ceiling while the EAS build was still queued.
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: app
