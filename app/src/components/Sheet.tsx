@@ -32,11 +32,8 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
     </View>
   ) : null;
 
-  const sheetContent = (
-    <Pressable
-      style={isWeb ? styles.webContent : styles.nativeContent}
-      onPress={(e) => e.stopPropagation()}
-    >
+  const body = (
+    <>
       {headerNode}
       <ScrollView
         style={styles.body}
@@ -48,7 +45,21 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
       {footer ? (
         <View style={styles.footer}>{footer}</View>
       ) : null}
+    </>
+  );
+
+  // Web: the scrim is a *parent* Pressable (webOverlay), so content taps bubble to
+  // it — wrap in a Pressable that stops propagation to avoid dismiss-on-content-tap.
+  // Native: the scrim is a *sibling* below the content, so taps never reach it. A
+  // Pressable wrapper here is unnecessary AND breaks typing — on Android it captures
+  // the touch responder before the inner TextInputs can focus, so fields can't be
+  // typed into. Use a plain View on native.
+  const sheetContent = isWeb ? (
+    <Pressable style={styles.webContent} onPress={(e) => e.stopPropagation()}>
+      {body}
     </Pressable>
+  ) : (
+    <View style={styles.nativeContent}>{body}</View>
   );
 
   return (
