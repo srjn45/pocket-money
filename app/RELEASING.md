@@ -72,8 +72,8 @@ signed) must be uninstalled once before an upload-key-signed build installs.
 The app talks only to the server URL baked in at bundle time:
 
 - **CI** bakes the `EXPO_PUBLIC_API_URL` **repo variable** (currently the
-  Tailscale address `http://100.77.207.6:8080/api/v1`); the release job fails
-  fast if the variable is unset. Change it with
+  Fly.io deployment `https://pocket-money-srjn45.fly.dev/api/v1`); the release
+  job fails fast if the variable is unset. Change it with
   `gh variable set EXPO_PUBLIC_API_URL --body "https://..."`.
 - **Local builds** read `app/.env.local` (gitignored; template:
   `app/.env.local.example`) or the `EXPO_PUBLIC_API_URL` env var.
