@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../src/auth-context';
+import { BiometricLockProvider, BiometricLockOverlay } from '../src/biometric-lock';
 import { ToastProvider } from '../src/components';
 import { getPendingInviteToken } from '../src/storage';
 
@@ -81,16 +82,20 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <ToastProvider>
-            <AuthGate />
-            <Stack>
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="(app)" options={{ headerShown: false }} />
-              <Stack.Screen name="invite" options={{ title: 'Join Group' }} />
-            </Stack>
-            <StatusBar style="auto" />
-          </ToastProvider>
+          <BiometricLockProvider>
+            <ToastProvider>
+              <AuthGate />
+              <Stack>
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                <Stack.Screen name="(app)" options={{ headerShown: false }} />
+                <Stack.Screen name="invite" options={{ title: 'Join Group' }} />
+              </Stack>
+              <StatusBar style="auto" />
+              {/* Last child: the lock Modal must mount above every screen. */}
+              <BiometricLockOverlay />
+            </ToastProvider>
+          </BiometricLockProvider>
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
