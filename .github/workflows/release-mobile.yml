@@ -66,9 +66,6 @@ jobs:
   release:
     needs: verify
     runs-on: ubuntu-latest
-    env:
-      # Server base URL Metro inlines into the JS bundle at Gradle bundle time.
-      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -93,10 +90,19 @@ jobs:
         run: npm ci
 
       - name: Check API URL is configured
+        # The repo variable must only reach the environment when it is
+        # non-empty: an empty EXPO_PUBLIC_API_URL still counts as "set", which
+        # blocks .env.production from loading and bakes the localhost fallback
+        # into the APK (this shipped broken in v1.1.0).
+        env:
+          API_URL_OVERRIDE: ${{ vars.EXPO_PUBLIC_API_URL }}
         run: |
-          if [ -n "$EXPO_PUBLIC_API_URL" ]; then
-            echo "Baking EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL (repo variable override)"
+          if [ -n "$API_URL_OVERRIDE" ]; then
+            echo "EXPO_PUBLIC_API_URL=$API_URL_OVERRIDE" >> "$GITHUB_ENV"
+            echo "RESOLVED_API_URL=$API_URL_OVERRIDE" >> "$GITHUB_ENV"
+            echo "Baking EXPO_PUBLIC_API_URL=$API_URL_OVERRIDE (repo variable override)"
           elif grep -q '^EXPO_PUBLIC_API_URL=..*' .env.production; then
+            echo "RESOLVED_API_URL=$(grep -m1 '^EXPO_PUBLIC_API_URL=' .env.production | cut -d= -f2-)" >> "$GITHUB_ENV"
             echo "Baking $(grep '^EXPO_PUBLIC_API_URL=' .env.production) (from app/.env.production)"
           else
             echo "::error::No API URL: neither the EXPO_PUBLIC_API_URL repo variable nor app/.env.production provides one — the APK would ship without a server URL." >&2
@@ -162,6 +168,18 @@ jobs:
             echo "::error::AAB signing cert mismatch: expected $EXPECTED_CERT_SHA256" >&2
             exit 1
           fi
+
+      - name: Verify baked API URL in the bundle
+        # Signing and versions can be green while the JS bundle carries the
+        # wrong server URL (v1.1.0 shipped pointing at localhost). Fail unless
+        # the URL resolved at the top of the job is really in the bundle.
+        run: |
+          unzip -p pocket-money.apk assets/index.android.bundle | strings > "$RUNNER_TEMP/bundle-strings.txt"
+          if ! grep -qF "$RESOLVED_API_URL" "$RUNNER_TEMP/bundle-strings.txt"; then
+            echo "::error::Bundle does not contain $RESOLVED_API_URL — an env misconfiguration baked the wrong server URL." >&2
+            exit 1
+          fi
+          echo "Bundle contains $RESOLVED_API_URL"
 
       # Tag build → publish a GitHub Release the website can serve.
       # Asset MUST be named pocket-money.apk — the site's
