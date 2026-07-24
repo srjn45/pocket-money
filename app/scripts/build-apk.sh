@@ -18,7 +18,7 @@
 # debug-signed ↔ upload-signed) needs a one-time uninstall.
 #
 # Usage:
-#   app/scripts/build-apk.sh            # reads EXPO_PUBLIC_API_URL from app/.env.local
+#   app/scripts/build-apk.sh            # API URL from .env.production (or .env.local override)
 #   EXPO_PUBLIC_API_URL=https://... app/scripts/build-apk.sh
 #
 # Prereqs (already set up on this box, see ~/.zshrc): JDK 21, Android SDK at
@@ -30,13 +30,21 @@ cd "$(dirname "$0")/.."
 APP_DIR="$(pwd)"
 
 # --- API URL baked into the APK (metro inlines EXPO_PUBLIC_* at bundle time) ---
+# Precedence: real env var > .env.local (gitignored override) > .env.production
+# (canonical, committed). The Gradle release bundling loads the .env files
+# itself; we only resolve here to fail fast and echo what will be baked.
 if [ -z "${EXPO_PUBLIC_API_URL:-}" ] && [ -f .env.local ]; then
   # shellcheck disable=SC1091
   set -a; . ./.env.local; set +a
 fi
+if [ -z "${EXPO_PUBLIC_API_URL:-}" ] && [ -f .env.production ]; then
+  # shellcheck disable=SC1091
+  set -a; . ./.env.production; set +a
+fi
 if [ -z "${EXPO_PUBLIC_API_URL:-}" ]; then
   echo "ERROR: EXPO_PUBLIC_API_URL is not set." >&2
-  echo "  Create app/.env.local (copy app/.env.local.example) or export it, e.g." >&2
+  echo "  Expected app/.env.production (committed) to provide it, or override" >&2
+  echo "  via app/.env.local / the env var, e.g." >&2
   echo "  EXPO_PUBLIC_API_URL=https://money.example.com/api/v1 app/scripts/build-apk.sh" >&2
   exit 1
 fi
