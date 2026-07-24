@@ -7,6 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "build:apk": "bash scripts/build-apk.sh",
     "lint": "expo lint",
     "codegen": "openapi-typescript ../backend/openapi.yaml -o ./src/api-types.gen.ts",
     "codegen:check": "openapi-typescript ../backend/openapi.yaml -o ./src/api-types.gen.ts && git diff --exit-code src/api-types.gen.ts"

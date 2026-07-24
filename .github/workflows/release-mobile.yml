@@ -1,0 +1,201 @@
+name: Release Mobile
+
+# Cuts a public release: verifies the app (lint + API-types drift check), builds
+# a signed Android APK (sideloading) AND an AAB (Play Console upload) on the
+# runner with Gradle (no EAS, no build quota), and publishes both as a GitHub
+# Release so the website's fixed download URL
+# (releases/latest/download/pocket-money.apk) picks it up. See app/RELEASING.md.
+#
+# Trigger a release by bumping app/app.json's expo.version AND
+# expo.android.versionCode on master, then tagging that commit and pushing:
+#   git tag v1.2.0 && git push origin v1.2.0
+#
+# You can also run it manually (workflow_dispatch) to build + upload the
+# APK/AAB as run artifacts WITHOUT publishing a release — useful for
+# smoke-testing the build itself.
+#
+# Signing: the artifacts are signed with the upload keystore in repo secrets
+# (ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS /
+# ANDROID_KEY_PASSWORD), fed into the release signingConfig by
+# app/plugins/withReleaseSigning.js. The API base URL baked into the JS bundle
+# comes from the EXPO_PUBLIC_API_URL repo variable.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: app
+
+permissions:
+  contents: write
+
+env:
+  # Keep in sync with the Expo SDK's Android toolchain (SDK 54 → NDK 27.1).
+  ANDROID_NDK_VERSION: '27.1.12297006'
+  # The Pocket Money upload key's certificate SHA-256. A build signed by
+  # anything else (misconfigured secret, wrong keystore) must fail before it
+  # can ship — a wrongly-signed AAB uploaded to Play is not recoverable.
+  EXPECTED_CERT_SHA256: 346b33240a069dfca791b0b24f395a9cfaf68121a0678eb020084a51d5b68139
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: API types drift check
+        run: npm run codegen:check
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      # Server base URL Metro inlines into the JS bundle at Gradle bundle time.
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;${ANDROID_NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check API URL is configured
+        run: |
+          if [ -z "$EXPO_PUBLIC_API_URL" ]; then
+            echo "::error::EXPO_PUBLIC_API_URL repo variable is not set — the APK would ship without a server URL." >&2
+            exit 1
+          fi
+          echo "Baking EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
+
+      - name: Check tag matches app.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          if [ "$TAG_VERSION" != "$APP_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match app/app.json expo.version ($APP_VERSION)." >&2
+            echo "Bump expo.version (and expo.android.versionCode) to $TAG_VERSION on master first." >&2
+            exit 1
+          fi
+
+      - name: Prebuild native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+
+      - name: Configure release signing
+        # NB: prebuild writes android/gradle.properties WITHOUT a trailing
+        # newline — emit one first or the first property glues onto the last
+        # existing line and Gradle configure dies with an inscrutable
+        # "Process 'command 'node'' finished with non-zero exit value 1".
+        run: |
+          {
+            echo ""
+            echo "POCKET_MONEY_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.keystore"
+            echo "POCKET_MONEY_UPLOAD_STORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+            echo "POCKET_MONEY_UPLOAD_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}"
+            echo "POCKET_MONEY_UPLOAD_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
+          } >> android/gradle.properties
+
+      - name: Build signed release APK and AAB
+        working-directory: app/android
+        run: ./gradlew :app:assembleRelease :app:bundleRelease --no-daemon
+
+      - name: Stage artifacts as pocket-money.apk / pocket-money.aab
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk pocket-money.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab pocket-money.aab
+          ls -lh pocket-money.apk pocket-money.aab
+
+      - name: Verify artifacts are signed with the release key
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          ACTUAL=$("$APKSIGNER" verify --print-certs pocket-money.apk \
+            | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}')
+          echo "APK signer cert: $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK signing cert mismatch: expected $EXPECTED_CERT_SHA256" >&2
+            exit 1
+          fi
+          # AABs are JAR-signed, not APK-Scheme-signed — check via keytool.
+          AAB_ACTUAL=$(keytool -printcert -jarfile pocket-money.aab \
+            | grep -m1 'SHA256:' | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "AAB signer cert: $AAB_ACTUAL"
+          if [ "$AAB_ACTUAL" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::AAB signing cert mismatch: expected $EXPECTED_CERT_SHA256" >&2
+            exit 1
+          fi
+
+      # Tag build → publish a GitHub Release the website can serve.
+      # Asset MUST be named pocket-money.apk — the site's
+      # releases/latest/download/pocket-money.apk redirect depends on it.
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            ./pocket-money.apk#pocket-money.apk \
+            ./pocket-money.aab#pocket-money.aab \
+            --repo "${{ github.repository }}" \
+            --target master \
+            --title "Pocket Money $GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Verify public download link
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          curl -sL -o /dev/null -w '%{http_code} %{content_type}\n' \
+            "https://github.com/${{ github.repository }}/releases/latest/download/pocket-money.apk"
+
+      # Manual run (no tag) → keep the artifacts for smoke-testing.
+      - name: Upload APK/AAB artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-money-apk
+          path: |
+            app/pocket-money.apk
+            app/pocket-money.aab
+          if-no-files-found: error
+
+      # Runners are ephemeral, but the keystore + passwords are the app's
+      # permanent signing identity — do not leave them lying around post-build.
+      - name: Scrub signing credentials
+        if: always()
+        run: |
+          shred -u "$RUNNER_TEMP/upload.keystore" 2>/dev/null || true
+          sed -i '/^POCKET_MONEY_UPLOAD_/d' android/gradle.properties 2>/dev/null || true

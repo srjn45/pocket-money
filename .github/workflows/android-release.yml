@@ -17,11 +17,12 @@ name: Submit Android build (EAS, async)
 #                             https://money.example.com/api/v1
 #                             (build-time; the APK talks only to this host).
 #
-# Trigger: push a version tag (e.g. v1.0.0), or run manually (workflow_dispatch)
-# from a tag ref, optionally overriding the API URL.
+# DISABLED (2026-07-23): releases now build locally via app/scripts/build-apk.sh
+# (see app/RELEASING.md) to avoid the multi-hour EAS free-tier queue. This
+# workflow is retained for reference and can still be run by hand
+# (workflow_dispatch) if you ever want a cloud build again — the tag-push trigger
+# has been removed so it never runs automatically.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       api_url:
