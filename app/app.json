@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pocket Money",
     "slug": "pocket-money",
-    "version": "1.0.4",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "pocketmoney",
@@ -23,7 +23,7 @@
         "backgroundColor": "#F5F1EE"
       },
       "package": "com.pocketmoney.app",
-      "versionCode": 5
+      "versionCode": 6
     },
     "web": {
       "bundler": "metro",

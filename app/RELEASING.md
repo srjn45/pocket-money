@@ -71,12 +71,19 @@ signed) must be uninstalled once before an upload-key-signed build installs.
 
 The app talks only to the server URL baked in at bundle time:
 
-- **CI** bakes the `EXPO_PUBLIC_API_URL` **repo variable** (currently the
-  Tailscale address `http://100.77.207.6:8080/api/v1`); the release job fails
-  fast if the variable is unset. Change it with
-  `gh variable set EXPO_PUBLIC_API_URL --body "https://..."`.
-- **Local builds** read `app/.env.local` (gitignored; template:
-  `app/.env.local.example`) or the `EXPO_PUBLIC_API_URL` env var.
+Environment-based config via committed dotenv files:
+
+- **`app/.env.production`** — the canonical production URL (the Fly.io
+  deployment `https://pocket-money-srjn45.fly.dev/api/v1`). Loaded by all
+  production bundling: CI releases, `expo export`, Gradle release builds,
+  `scripts/build-apk.sh`. The release job fails fast if no URL is available.
+- **`app/.env.development`** — `http://localhost:8080/api/v1`, loaded by
+  `npx expo start` for local dev against a locally running backend.
+- **Overrides** (highest first): a real `EXPO_PUBLIC_API_URL` env var (in CI,
+  the repo variable — normally unset; set it only as an emergency override:
+  `gh variable set EXPO_PUBLIC_API_URL --body "https://..."`), then
+  `app/.env.local` (gitignored; template: `app/.env.local.example`), then the
+  `.env.production` / `.env.development` file for the active mode.
 
 ## Local build (fallback)
 

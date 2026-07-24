@@ -1,0 +1,31 @@
+# Fly.io config for the single-image app (Go binary serving API + web SPA).
+# Build context is the repo root — same Dockerfile as docker-compose.
+#
+# Required secrets (fly secrets set ...): DATABASE_URL, JWT_SECRET.
+# Migrations are embedded in the binary and run automatically at startup.
+
+app = "pocket-money-srjn45"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale to zero when idle: stopped machines cost ~nothing; first request
+  # after idle takes a few seconds to wake the VM (plus Neon's ~1s resume).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

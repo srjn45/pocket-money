@@ -18,7 +18,8 @@ name: Release Mobile
 # (ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS /
 # ANDROID_KEY_PASSWORD), fed into the release signingConfig by
 # app/plugins/withReleaseSigning.js. The API base URL baked into the JS bundle
-# comes from the EXPO_PUBLIC_API_URL repo variable.
+# comes from app/.env.production, unless the EXPO_PUBLIC_API_URL repo variable
+# is set, which overrides it.
 
 on:
   push:
@@ -93,11 +94,14 @@ jobs:
 
       - name: Check API URL is configured
         run: |
-          if [ -z "$EXPO_PUBLIC_API_URL" ]; then
-            echo "::error::EXPO_PUBLIC_API_URL repo variable is not set — the APK would ship without a server URL." >&2
+          if [ -n "$EXPO_PUBLIC_API_URL" ]; then
+            echo "Baking EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL (repo variable override)"
+          elif grep -q '^EXPO_PUBLIC_API_URL=..*' .env.production; then
+            echo "Baking $(grep '^EXPO_PUBLIC_API_URL=' .env.production) (from app/.env.production)"
+          else
+            echo "::error::No API URL: neither the EXPO_PUBLIC_API_URL repo variable nor app/.env.production provides one — the APK would ship without a server URL." >&2
             exit 1
           fi
-          echo "Baking EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
 
       - name: Check tag matches app.json version
         if: startsWith(github.ref, 'refs/tags/')
