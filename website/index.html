@@ -427,9 +427,12 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div class="hero-copy reveal">
-      <a class="release-banner" href="https://github.com/srjn45/pocket-money" target="_blank" rel="noopener">
+      <!-- Version is filled in at load time from the GitHub releases API (see
+           script at the bottom); this static text is only the no-JS/API-down
+           fallback, so keep it version-free — it must never go stale. -->
+      <a class="release-banner" href="https://github.com/srjn45/pocket-money/releases/latest" target="_blank" rel="noopener">
         <span class="tag"><span class="live"></span> New</span>
-        Pocket Money v1.0 — now open source
+        <span id="releaseBannerText">Pocket Money for Android — latest release</span>
         <span class="go"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </a>
       <br>
@@ -824,6 +827,23 @@
       try { localStorage.setItem('pm-theme', next); } catch (e) {}
       paint();
     });
+  })();
+
+  // ---- Live release banner (hero) ----
+  // Ask GitHub which release is actually latest so the banner can never go
+  // stale. Unauthenticated + CORS-enabled; 60 req/h per visitor IP is plenty.
+  // On any failure the static fallback text simply stays.
+  (function () {
+    var el = document.getElementById('releaseBannerText');
+    if (!el || !window.fetch) return;
+    fetch('https://api.github.com/repos/srjn45/pocket-money/releases/latest')
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (rel) {
+        if (rel && rel.tag_name) {
+          el.textContent = 'Pocket Money ' + rel.tag_name + ' is out — get the latest APK';
+        }
+      })
+      .catch(function () {});
   })();
 
   // ---- Reveal on scroll ----
