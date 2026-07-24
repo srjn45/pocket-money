@@ -367,7 +367,7 @@ export default function GroupOverviewScreen() {
             <View style={styles.bannerCard} testID="statement-receive-banner">
               {myRow.closing_balance.value >= 0 ? (
                 <Text style={styles.bannerText}>
-                  You'll receive{' '}
+                  You&apos;ll receive{' '}
                   <AmountText minorUnits={myRow.closing_balance.value} currency={currency} variant="credit" size="lg" />
                   {' '}this month.
                 </Text>

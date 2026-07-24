@@ -15,10 +15,13 @@ name: Publish finished APK to Release
 # Setup: reuses the EXPO_TOKEN secret already configured for android-release.yml.
 # No new secrets. Publish lands within ~15 min of a build finishing.
 
+# DISABLED (2026-07-23): releases now build locally (app/scripts/build-apk.sh)
+# and the APK is attached to the GitHub Release by hand — see app/RELEASING.md.
+# The 15-min cron has been removed so this no longer runs on a schedule; it is
+# kept for reference and can still be triggered manually to backfill a cloud
+# build's APK onto its release tag.
 on:
-  schedule:
-    - cron: '*/15 * * * *'   # every 15 min; skips fast when nothing is pending
-  workflow_dispatch:          # manual "publish now" after a build finishes
+  workflow_dispatch:          # manual "publish now" after a cloud build finishes
 
 permissions:
   contents: write             # create releases + upload the APK asset
