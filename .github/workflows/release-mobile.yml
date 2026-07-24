@@ -66,9 +66,6 @@ jobs:
   release:
     needs: verify
     runs-on: ubuntu-latest
-    env:
-      # Server base URL Metro inlines into the JS bundle at Gradle bundle time.
-      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -93,9 +90,16 @@ jobs:
         run: npm ci
 
       - name: Check API URL is configured
+        # The repo variable must only reach the environment when it is
+        # non-empty: an empty EXPO_PUBLIC_API_URL still counts as "set", which
+        # blocks .env.production from loading and bakes the localhost fallback
+        # into the APK (this shipped broken in v1.1.0).
+        env:
+          API_URL_OVERRIDE: ${{ vars.EXPO_PUBLIC_API_URL }}
         run: |
-          if [ -n "$EXPO_PUBLIC_API_URL" ]; then
-            echo "Baking EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL (repo variable override)"
+          if [ -n "$API_URL_OVERRIDE" ]; then
+            echo "EXPO_PUBLIC_API_URL=$API_URL_OVERRIDE" >> "$GITHUB_ENV"
+            echo "Baking EXPO_PUBLIC_API_URL=$API_URL_OVERRIDE (repo variable override)"
           elif grep -q '^EXPO_PUBLIC_API_URL=..*' .env.production; then
             echo "Baking $(grep '^EXPO_PUBLIC_API_URL=' .env.production) (from app/.env.production)"
           else
