@@ -33,10 +33,13 @@ EAS free-tier queue sat for hours and repeatedly killed the release CD.
 
    CI takes it from there: verify (lint + API-types drift) → prebuild →
    Gradle `assembleRelease` + `bundleRelease` → signing-cert check → GitHub
-   Release with `pocket-money.apk` + `pocket-money.aab` attached.
+   Release with `pocket-money.apk` + `pocket-money.aab` attached, plus
+   versioned copies (`pocket-money-vX.Y.Z.apk` / `.aab`) of the same files
+   for humans browsing the release page.
 
-   > The APK asset MUST stay named `pocket-money.apk` — the website's
-   > `releases/latest/download/pocket-money.apk` redirect depends on it.
+   > One APK asset MUST stay named exactly `pocket-money.apk` — the website's
+   > `releases/latest/download/pocket-money.apk` redirect depends on it. The
+   > versioned names are additive, never a replacement.
 
 3. **Smoke-test the pipeline without releasing:** run the workflow manually
    (`gh workflow run release-mobile.yml`) — a non-tag run uploads the APK/AAB
