@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Text, StyleSheet, Pressable } from 'react-native';
+import { Text, StyleSheet, Pressable, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { useAuth } from '../../../src/auth-context';
+import { useBiometricLock } from '../../../src/biometric-lock';
 import { Card, Avatar, Button, Sheet, TextField, ScreenContainer, useToast } from '../../../src/components';
 import { useChangePassword } from '../../../src/hooks/useHygiene';
 import { theme } from '../../../src/theme';
@@ -14,6 +15,7 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets(); // native: status-bar/cutout inset; web: 0
   const { show: showToast } = useToast();
+  const biometric = useBiometricLock();
 
   const [sheetVisible, setSheetVisible] = useState(false);
   const [currentPw, setCurrentPw] = useState('');
@@ -99,6 +101,20 @@ export default function ProfileScreen() {
     // Root AuthGate in app/_layout.tsx reacts to token=null and redirects to login.
   };
 
+  async function handleToggleBiometric(on: boolean) {
+    const changed = await biometric.setEnabled(on);
+    if (changed) {
+      showToast({
+        tone: 'success',
+        message: on ? 'App lock enabled' : 'App lock disabled',
+      });
+    } else if (on) {
+      // Prompt failed or was cancelled — the Switch snaps back on re-render
+      // because `biometric.enabled` never changed.
+      showToast({ tone: 'danger', message: 'Biometric confirmation failed' });
+    }
+  }
+
   return (
     <ScreenContainer style={[styles.container, { paddingTop: insets.top + theme.spacing.lg }]} testID="profile-root">
       {/* In-body title — the one meaningful header now that the tab header is off. */}
@@ -116,6 +132,27 @@ export default function ProfileScreen() {
         style={styles.changePasswordButton}
         testID="profile-change-password"
       />
+      {/* Hidden on web (stub reports unsupported) and on devices without
+          enrolled biometrics — a toggle that can never turn on is noise. */}
+      {biometric.supported && (
+        <Card style={styles.biometricCard}>
+          <View style={styles.biometricRow}>
+            <View style={styles.biometricLabels}>
+              <Text style={styles.biometricTitle}>Biometric app lock</Text>
+              <Text style={styles.biometricHint}>
+                Require fingerprint or face unlock when opening the app
+              </Text>
+            </View>
+            <Switch
+              value={biometric.enabled}
+              onValueChange={handleToggleBiometric}
+              trackColor={{ true: theme.color.primary, false: theme.color.border }}
+              thumbColor={theme.color.surface}
+              testID="profile-biometric-toggle"
+            />
+          </View>
+        </Card>
+      )}
       <Button
         title="Logout"
         variant="danger"
@@ -241,6 +278,27 @@ const styles = StyleSheet.create({
   },
   changePasswordButton: {
     marginTop: theme.spacing.xl,
+  },
+  biometricCard: {
+    marginTop: theme.spacing.md,
+  },
+  biometricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  biometricLabels: {
+    flex: 1,
+  },
+  biometricTitle: {
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.color.text,
+  },
+  biometricHint: {
+    fontSize: theme.fontSize.sm,
+    color: theme.color.textSecondary,
+    marginTop: 2,
   },
   logoutButton: {
     marginTop: theme.spacing.md,

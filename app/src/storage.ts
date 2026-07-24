@@ -79,6 +79,31 @@ export async function clearPendingInviteToken(): Promise<void> {
   }
 }
 
+// Biometric app-lock preference (native only). A plain boolean preference —
+// the actual security comes from the OS biometric prompt, so AsyncStorage is
+// fine; putting it in SecureStore would add nothing.
+const BIOMETRIC_LOCK_KEY = 'biometric_lock_enabled';
+
+export async function getBiometricLockEnabled(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(BIOMETRIC_LOCK_KEY)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setBiometricLockEnabled(enabled: boolean): Promise<void> {
+  try {
+    if (enabled) {
+      await AsyncStorage.setItem(BIOMETRIC_LOCK_KEY, 'true');
+    } else {
+      await AsyncStorage.removeItem(BIOMETRIC_LOCK_KEY);
+    }
+  } catch (error) {
+    console.error('Failed to save biometric lock setting:', error);
+  }
+}
+
 // Dev-only API base URL override — not sensitive, plain AsyncStorage on every
 // platform (unlike the token, no need for SecureStore here).
 export async function getApiUrlOverride(): Promise<string | null> {
